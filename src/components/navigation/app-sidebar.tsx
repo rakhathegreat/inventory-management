@@ -87,10 +87,10 @@ const data = {
           isActive: false,
         },
         {
-          title: "Stok Barang",
-          url: "/stok-barang",
+          title: "Data Transaksi",
+          url: "/data-transaksi",
           icon: (
-            <Warehouse />
+            <Database />
           ),
           isActive: false,
         },

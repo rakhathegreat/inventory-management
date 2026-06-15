@@ -8,7 +8,7 @@ import BarangMasukPage from "./app/barang-masuk/page";
 import BarangKeluarPage from "./app/barang-keluar/page";
 import RiwayatPage from "./app/riwayat/page";
 import DataBarangPage from "./app/data-barang/page";
-import StokBarangPage from "./app/stok-barang/page";
+import StokBarangPage from "./app/data-transaksi/page";
 import LokasiBarangPage from "./app/lokasi-barang/page";
 import KategoriBarangPage from "./app/kategori-barang/page";
 import MerekBarangPage from "./app/merek-barang/page";
