@@ -30,9 +30,9 @@ export function SiteHeader() {
     } else if (path === "/data-barang") {
         parent = "Inventori"
         pageName = "Data Barang"
-    } else if (path === "/stok-barang") {
+    } else if (path === "/data-transaksi") {
         parent = "Inventori"
-        pageName = "Stok Barang"
+        pageName = "Data Transaksi"
     } else if (path === "/lokasi-barang") {
         parent = "Manajemen Data"
         pageName = "Lokasi Barang"

@@ -8,7 +8,7 @@ import BarangMasukPage from "./app/barang-masuk/page";
 import BarangKeluarPage from "./app/barang-keluar/page";
 import RiwayatPage from "./app/riwayat/page";
 import DataBarangPage from "./app/data-barang/page";
-import StokBarangPage from "./app/data-transaksi/page";
+import DataTransaksiPage from "./app/data-transaksi/page";
 import LokasiBarangPage from "./app/lokasi-barang/page";
 import KategoriBarangPage from "./app/kategori-barang/page";
 import MerekBarangPage from "./app/merek-barang/page";
@@ -26,7 +26,7 @@ function App() {
               <Route path="barang-keluar" element={<BarangKeluarPage />} />
               <Route path="riwayat" element={<RiwayatPage />} />
               <Route path="data-barang" element={<DataBarangPage />} />
-              <Route path="stok-barang" element={<StokBarangPage />} />
+              <Route path="data-transaksi" element={<DataTransaksiPage />} />
               <Route path="lokasi-barang" element={<LokasiBarangPage />} />
               <Route path="kategori-barang" element={<KategoriBarangPage />} />
               <Route path="merek-barang" element={<MerekBarangPage />} />

@@ -10,6 +10,7 @@ import { Outlet } from "react-router-dom"
 export default function Layout() {
     return (
         <SidebarProvider
+            defaultOpen={false}
             style={
                 {
                     "--sidebar-width": "calc(var(--spacing) * 72)",
