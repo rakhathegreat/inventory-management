@@ -8,8 +8,45 @@ import {
     BreadcrumbPage,
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
+import { useLocation } from "react-router-dom"
 
 export function SiteHeader() {
+    const location = useLocation()
+    const path = location.pathname
+
+    // Determine breadcrumbs based on route
+    let parent = "Menu Utama"
+    let pageName = "Dashboard"
+
+    if (path === "/barang-masuk") {
+        parent = "Operasional"
+        pageName = "Barang Masuk"
+    } else if (path === "/barang-keluar") {
+        parent = "Operasional"
+        pageName = "Barang Keluar"
+    } else if (path === "/riwayat") {
+        parent = "Operasional"
+        pageName = "Riwayat"
+    } else if (path === "/data-barang") {
+        parent = "Inventori"
+        pageName = "Data Barang"
+    } else if (path === "/stok-barang") {
+        parent = "Inventori"
+        pageName = "Stok Barang"
+    } else if (path === "/lokasi-barang") {
+        parent = "Manajemen Data"
+        pageName = "Lokasi Barang"
+    } else if (path === "/kategori-barang") {
+        parent = "Manajemen Data"
+        pageName = "Kategori Barang"
+    } else if (path === "/merek-barang") {
+        parent = "Manajemen Data"
+        pageName = "Merek Barang"
+    } else if (path === "/supplier") {
+        parent = "Manajemen Data"
+        pageName = "Supplier"
+    }
+
     return (
         <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
             <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
@@ -18,16 +55,16 @@ export function SiteHeader() {
                     orientation="vertical"
                     className="mx-2 data-[orientation=vertical]:h-4"
                 />
-                <Breadcrumb>
+                <Breadcrumb className="flex-1">
                     <BreadcrumbList>
                         <BreadcrumbItem className="hidden md:block">
                             <BreadcrumbLink href="#">
-                                Build Your Application
+                                {parent}
                             </BreadcrumbLink>
                         </BreadcrumbItem>
                         <BreadcrumbSeparator className="hidden md:block" />
                         <BreadcrumbItem>
-                            <BreadcrumbPage>Data Fetching</BreadcrumbPage>
+                            <BreadcrumbPage>{pageName}</BreadcrumbPage>
                         </BreadcrumbItem>
                     </BreadcrumbList>
                 </Breadcrumb>

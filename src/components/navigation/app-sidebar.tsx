@@ -11,7 +11,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { GalleryVerticalEndIcon, AudioLinesIcon, TerminalIcon, TerminalSquareIcon, BotIcon, BookOpenIcon, Settings2Icon } from "lucide-react"
+import { AudioLinesIcon, TerminalIcon, HistoryIcon, LayoutGrid, Database, Warehouse, MapPinHouse, Shapes, CircleStar, Package2, PackagePlus, PackageMinus, Zap } from "lucide-react"
 
 // This is sample data.
 const data = {
@@ -24,8 +24,7 @@ const data = {
     {
       name: "ICON Plus Tasikmalaya",
       logo: (
-        <GalleryVerticalEndIcon
-        />
+        <Zap className="text-yellow-300" fill="currentColor" />
       ),
       plan: "Enterprise",
     },
@@ -49,67 +48,88 @@ const data = {
   navMain: [
     {
       title: "Operasional",
-      url: "#",
-      icon: (
-        <BotIcon
-        />
-      ),
       items: [
         {
           title: "Barang Masuk",
-          url: "#",
+          url: "/barang-masuk",
+          icon: (
+            <PackagePlus />
+          ),
+          isActive: false,
         },
         {
           title: "Barang Keluar",
-          url: "#",
+          url: "/barang-keluar",
+          icon: (
+            <PackageMinus />
+          ),
+          isActive: false,
         },
         {
           title: "Riwayat",
-          url: "#",
+          url: "/riwayat",
+          icon: (
+            <HistoryIcon />
+          ),
+          isActive: false,
         },
       ],
     },
     {
       title: "Inventori",
-      url: "#",
-      icon: (
-        <BookOpenIcon
-        />
-      ),
       items: [
         {
           title: "Data Barang",
-          url: "#",
+          url: "/data-barang",
+          icon: (
+            <Database />
+          ),
+          isActive: false,
         },
         {
           title: "Stok Barang",
-          url: "#",
-        }
+          url: "/stok-barang",
+          icon: (
+            <Warehouse />
+          ),
+          isActive: false,
+        },
       ],
     },
     {
-      title: "Pengaturan",
-      url: "#",
-      icon: (
-        <Settings2Icon
-        />
-      ),
+      title: "Manajemen Data",
       items: [
         {
-          title: "Lokasi",
-          url: "#",
+          title: "Lokasi Barang",
+          url: "/lokasi-barang",
+          icon: (
+            <MapPinHouse />
+          ),
+          isActive: false,
         },
         {
-          title: "Kategori",
-          url: "#",
+          title: "Kategori Barang",
+          url: "/kategori-barang",
+          icon: (
+            <Shapes />
+          ),
+          isActive: false,
         },
         {
-          title: "Merek",
-          url: "#",
+          title: "Merek Barang",
+          url: "/merek-barang",
+          icon: (
+            <CircleStar />
+          ),
+          isActive: false,
         },
         {
           title: "Supplier",
-          url: "#",
+          url: "/supplier",
+          icon: (
+            <Package2 />
+          ),
+          isActive: false,
         },
       ],
     },
@@ -117,11 +137,12 @@ const data = {
   main: [
     {
       name: "Dashboard",
-      url: "#",
+      url: "/",
       icon: (
-        <TerminalSquareIcon
+        <LayoutGrid
         />
       ),
+      isActive: true,
     },
   ],
 }
