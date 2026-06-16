@@ -1,16 +1,28 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Plus, Edit, Trash2, Search, CircleStar, MoreVertical
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 type Merek = {
   id: string;
@@ -19,25 +31,33 @@ type Merek = {
   totalItems: number;
 };
 
-const MOCK_DATA: Merek[] = [
-  { id: "mrk-1", name: "Cisco", origin: "Amerika Serikat", totalItems: 340 },
-  { id: "mrk-2", name: "MikroTik", origin: "Latvia", totalItems: 512 },
-  { id: "mrk-3", name: "TP-Link", origin: "Tiongkok", totalItems: 1250 },
-  { id: "mrk-4", name: "ZTE", origin: "Tiongkok", totalItems: 840 },
-  { id: "mrk-5", name: "Ubiquiti", origin: "Amerika Serikat", totalItems: 120 },
-];
-
 export default function MerekBarangPage() {
-  const [brands, setBrands] = useState<Merek[]>(MOCK_DATA);
+  const [brands, setBrands] = useState<Merek[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Sheet state
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
 
+  // Alert state
+  const [deleteAlertData, setDeleteAlertData] = useState<{ isOpen: boolean; id: string; name: string }>({ isOpen: false, id: "", name: "" });
+
   // Form state
   const [name, setName] = useState("");
   const [origin, setOrigin] = useState("");
+
+  const loadBrands = async () => {
+    try {
+      const data = await invoke<Merek[]>("get_brands");
+      setBrands(data);
+    } catch (error) {
+      console.error("Failed to fetch brands:", error);
+    }
+  };
+
+  useEffect(() => {
+    loadBrands();
+  }, []);
 
   const filteredBrands = useMemo(() => {
     return brands.filter(brand =>
@@ -62,24 +82,54 @@ export default function MerekBarangPage() {
     setIsSheetOpen(true);
   };
 
-  const handleSave = () => {
-    if (editId) {
-      setBrands(brands.map(b => b.id === editId ? { ...b, name, origin } : b));
-    } else {
-      const newBrand: Merek = {
-        id: `mrk-${Date.now()}`,
-        name: name || "Merek Baru",
-        origin: origin || "-",
-        totalItems: 0
-      };
-      setBrands([...brands, newBrand]);
+  const handleSave = async () => {
+    try {
+      if (editId) {
+        const brand = brands.find(b => b.id === editId);
+        await invoke("update_brand", {
+          brand: {
+            id: editId,
+            name,
+            origin,
+            totalItems: brand?.totalItems || 0
+          }
+        });
+      } else {
+        await invoke("add_brand", {
+          brand: {
+            id: `mrk-${Date.now()}`,
+            name: name || "Merek Baru",
+            origin: origin || "-",
+            totalItems: 0
+          }
+        });
+      }
+      await loadBrands();
+      setIsSheetOpen(false);
+      toast.success(`Berhasil ${editId ? "menyimpan perubahan" : "menambahkan"} data merek`);
+    } catch (error) {
+      console.error("Failed to save brand:", error);
+      toast.error("Gagal menyimpan merek.");
     }
-    setIsSheetOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("Apakah Anda yakin ingin menghapus merek ini?")) {
-      setBrands(brands.filter(b => b.id !== id));
+  const requestDelete = (id: string, name: string) => {
+    setDeleteAlertData({ isOpen: true, id, name });
+  };
+
+  const confirmDelete = async () => {
+    const { id } = deleteAlertData;
+    if (!id) return;
+
+    try {
+      await invoke("delete_brand", { id });
+      await loadBrands();
+      toast.success("Berhasil menghapus merek");
+    } catch (error) {
+      console.error("Failed to delete brand:", error);
+      toast.error("Gagal menghapus merek.");
+    } finally {
+      setDeleteAlertData({ isOpen: false, id: "", name: "" });
     }
   };
 
@@ -104,7 +154,7 @@ export default function MerekBarangPage() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 pb-10">
         {filteredBrands.map(brand => (
-          <Card key={brand.id} className="border-neutral-800 bg-neutral-900/40 backdrop-blur-md overflow-hidden relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60">
+          <Card key={brand.id} className="overflow-hidden relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60">
             <CardContent className="px-5 flex flex-col gap-4">
               <div className="flex justify-between items-start">
                 <div className="p-2.5 bg-orange-500/10 rounded-xl shrink-0">
@@ -120,7 +170,7 @@ export default function MerekBarangPage() {
                     <DropdownMenuItem className="cursor-pointer focus:bg-neutral-800" onClick={() => handleOpenSheet(brand.id)}>
                       <Edit className="w-4 h-4 mr-2" /> Edit Merek
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => handleDelete(brand.id)}>
+                    <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDelete(brand.id, brand.name)}>
                       <Trash2 className="w-4 h-4 mr-2" /> Hapus Merek
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -177,6 +227,21 @@ export default function MerekBarangPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={deleteAlertData.isOpen} onOpenChange={(open) => !open && setDeleteAlertData({ ...deleteAlertData, isOpen: false })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apakah Anda yakin?</AlertDialogTitle>
+            <AlertDialogDescription className="text-neutral-400">
+              Tindakan ini tidak dapat dibatalkan dan semua data terkait akan dihapus.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Lanjutkan</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

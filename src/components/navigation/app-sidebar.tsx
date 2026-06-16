@@ -11,7 +11,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { AudioLinesIcon, TerminalIcon, HistoryIcon, LayoutGrid, Database, Warehouse, MapPinHouse, Shapes, CircleStar, Package2, PackagePlus, PackageMinus, Zap } from "lucide-react"
+import { AudioLinesIcon, TerminalIcon, HistoryIcon, LayoutGrid, Database, MapPinHouse, Shapes, CircleStar, PackagePlus, PackageMinus, Zap } from "lucide-react"
 
 // This is sample data.
 const data = {

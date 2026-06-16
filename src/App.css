@@ -121,7 +121,12 @@
   * {
     @apply border-border;
     outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
-    }
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
   body {
     @apply bg-background text-foreground;
     height: 100svh;

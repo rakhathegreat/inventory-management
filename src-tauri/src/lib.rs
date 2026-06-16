@@ -1,14 +1,55 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+pub mod db;
+pub mod commands;
+
+use db::{init_db, DbState};
+use std::sync::Mutex;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            let db_path = if cfg!(debug_assertions) {
+                // In development, save the DB to the project's root `database/database`
+                let current_dir = std::env::current_dir().unwrap();
+                let root_dir = if current_dir.ends_with("src-tauri") {
+                    current_dir.parent().unwrap().to_path_buf()
+                } else {
+                    current_dir
+                };
+                let dev_db_dir = root_dir.join("database");
+                std::fs::create_dir_all(&dev_db_dir).expect("Failed to create dev database directory");
+                dev_db_dir.join("database")
+            } else {
+                // In production, save the DB to the standard OS App Data directory
+                let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
+                std::fs::create_dir_all(&app_data_dir).expect("Failed to create app data dir");
+                app_data_dir.join("inventory.db")
+            };
+            
+            let conn = init_db(db_path).expect("Failed to initialize database");
+            app.manage(DbState(Mutex::new(conn)));
+            
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![
+            commands::get_categories,
+            commands::add_category,
+            commands::update_category,
+            commands::delete_category,
+            commands::get_brands,
+            commands::add_brand,
+            commands::update_brand,
+            commands::delete_brand,
+            commands::get_locations,
+            commands::save_location,
+            commands::delete_location,
+            commands::save_level,
+            commands::delete_level,
+            commands::toggle_location_active,
+            commands::toggle_level_active,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

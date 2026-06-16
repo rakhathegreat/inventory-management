@@ -1,16 +1,28 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Plus, Edit, Trash2, Search, Shapes, MoreVertical
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 type Kategori = {
   id: string;
@@ -19,24 +31,33 @@ type Kategori = {
   totalItems: number;
 };
 
-const MOCK_DATA: Kategori[] = [
-  { id: "kat-1", name: "Router & Switch", description: "Perangkat jaringan utama", totalItems: 145 },
-  { id: "kat-2", name: "Kabel & Konektor", description: "Infrastruktur fisik jaringan", totalItems: 2500 },
-  { id: "kat-3", name: "Perangkat Akses", description: "Access point, modem, dll", totalItems: 80 },
-  { id: "kat-4", name: "Aksesoris", description: "Rack, UPS, komponen pelengkap", totalItems: 45 },
-];
-
 export default function KategoriBarangPage() {
-  const [categories, setCategories] = useState<Kategori[]>(MOCK_DATA);
+  const [categories, setCategories] = useState<Kategori[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Sheet state
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
 
+  // Alert state
+  const [deleteAlertData, setDeleteAlertData] = useState<{ isOpen: boolean; id: string; name: string }>({ isOpen: false, id: "", name: "" });
+
   // Form state
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+
+  const loadCategories = async () => {
+    try {
+      const data = await invoke<Kategori[]>("get_categories");
+      setCategories(data);
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
+    }
+  };
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
 
   const filteredCategories = useMemo(() => {
     return categories.filter(cat =>
@@ -61,24 +82,54 @@ export default function KategoriBarangPage() {
     setIsSheetOpen(true);
   };
 
-  const handleSave = () => {
-    if (editId) {
-      setCategories(categories.map(c => c.id === editId ? { ...c, name, description } : c));
-    } else {
-      const newCategory: Kategori = {
-        id: `kat-${Date.now()}`,
-        name: name || "Kategori Baru",
-        description: description || "-",
-        totalItems: 0
-      };
-      setCategories([...categories, newCategory]);
+  const handleSave = async () => {
+    try {
+      if (editId) {
+        const cat = categories.find(c => c.id === editId);
+        await invoke("update_category", {
+          category: {
+            id: editId,
+            name,
+            description,
+            totalItems: cat?.totalItems || 0
+          }
+        });
+      } else {
+        await invoke("add_category", {
+          category: {
+            id: `kat-${Date.now()}`,
+            name: name || "Kategori Baru",
+            description: description || "-",
+            totalItems: 0
+          }
+        });
+      }
+      await loadCategories();
+      setIsSheetOpen(false);
+      toast.success(`Berhasil ${editId ? "menyimpan perubahan" : "menambahkan"} data kategori`);
+    } catch (error) {
+      console.error("Failed to save category:", error);
+      toast.error("Gagal menyimpan kategori.");
     }
-    setIsSheetOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("Apakah Anda yakin ingin menghapus kategori ini?")) {
-      setCategories(categories.filter(c => c.id !== id));
+  const requestDelete = (id: string, name: string) => {
+    setDeleteAlertData({ isOpen: true, id, name });
+  };
+
+  const confirmDelete = async () => {
+    const { id } = deleteAlertData;
+    if (!id) return;
+
+    try {
+      await invoke("delete_category", { id });
+      await loadCategories();
+      toast.success("Berhasil menghapus kategori");
+    } catch (error) {
+      console.error("Failed to delete category:", error);
+      toast.error("Gagal menghapus kategori.");
+    } finally {
+      setDeleteAlertData({ isOpen: false, id: "", name: "" });
     }
   };
 
@@ -103,8 +154,8 @@ export default function KategoriBarangPage() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 pb-10">
         {filteredCategories.map(cat => (
-          <Card key={cat.id} className="border-neutral-800 bg-neutral-900/40 backdrop-blur-md overflow-hidden relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60">
-            <CardContent className="p-5 flex flex-col gap-4">
+          <Card key={cat.id} className="overflow-hidden relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60">
+            <CardContent className="px-5 flex flex-col gap-4">
               <div className="flex justify-between items-start">
                 <div className="p-2.5 bg-blue-500/10 rounded-xl shrink-0">
                   <Shapes className="w-6 h-6 text-blue-400" />
@@ -119,7 +170,7 @@ export default function KategoriBarangPage() {
                     <DropdownMenuItem className="cursor-pointer focus:bg-neutral-800" onClick={() => handleOpenSheet(cat.id)}>
                       <Edit className="w-4 h-4 mr-2" /> Edit Kategori
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => handleDelete(cat.id)}>
+                    <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDelete(cat.id, cat.name)}>
                       <Trash2 className="w-4 h-4 mr-2" /> Hapus Kategori
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -176,6 +227,21 @@ export default function KategoriBarangPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={deleteAlertData.isOpen} onOpenChange={(open) => !open && setDeleteAlertData({ ...deleteAlertData, isOpen: false })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apakah Anda yakin?</AlertDialogTitle>
+            <AlertDialogDescription className="text-neutral-400">
+              Tindakan ini tidak dapat dibatalkan dan semua data terkait akan dihapus.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Lanjutkan</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

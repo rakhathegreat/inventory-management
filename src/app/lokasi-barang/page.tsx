@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Plus, Edit, Trash2, Power, Layers, Archive, MoreVertical,
   Search, Box, AlignJustify
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,17 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 // Types
 type BrandRule = string;
@@ -40,42 +52,10 @@ type StorageLocation = {
 
 type SheetMode = "closed" | "add-rak" | "add-kardus" | "edit-rak" | "edit-kardus" | "add-level" | "edit-level";
 
-const BRANDS = ["Campuran", "Samsung", "Apple", "Sony", "LG", "Xiaomi", "Asus"];
-
-const MOCK_DATA: StorageLocation[] = [
-  {
-    id: "rak-1",
-    name: "Rak A1 - Elektronik",
-    type: "Rak",
-    isActive: true,
-    levels: [
-      { id: "lvl-1", name: "Level 1", capacity: 100, usedCapacity: 45, brandRule: "Campuran", isActive: true },
-      { id: "lvl-2", name: "Level 2", capacity: 50, usedCapacity: 50, brandRule: "Samsung", isActive: true },
-      { id: "lvl-3", name: "Level 3", capacity: 50, usedCapacity: 0, brandRule: "Apple", isActive: false },
-    ]
-  },
-  {
-    id: "kar-1",
-    name: "Kardus K-01",
-    type: "Kardus",
-    isActive: true,
-    capacity: 20,
-    usedCapacity: 5,
-    brandRule: "Campuran"
-  },
-  {
-    id: "rak-2",
-    name: "Rak B2 - Aksesoris",
-    type: "Rak",
-    isActive: false,
-    levels: [
-      { id: "lvl-4", name: "Level 1", capacity: 200, usedCapacity: 120, brandRule: "Campuran", isActive: false },
-    ]
-  }
-];
 
 export default function LokasiBarangPage() {
-  const [locations, setLocations] = useState<StorageLocation[]>(MOCK_DATA);
+  const [locations, setLocations] = useState<StorageLocation[]>([]);
+  const [brands, setBrands] = useState<string[]>(["Campuran"]);
   const [sheetMode, setSheetMode] = useState<SheetMode>("closed");
   const [activeItem, setActiveItem] = useState<{ parentId?: string; levelId?: string } | null>(null);
   const [activeTab, setActiveTab] = useState("rak");
@@ -83,10 +63,45 @@ export default function LokasiBarangPage() {
 
   // Form States
   const [locName, setLocName] = useState("");
-  const [locCapacity, setLocCapacity] = useState("");
+  const [locCapacity, setLocCapacity] = useState("1");
   const [locBrand, setLocBrand] = useState("Campuran");
   const [locLevelsCount, setLocLevelsCount] = useState("3");
   const [levelName, setLevelName] = useState("");
+  const [useCalculator, setUseCalculator] = useState(true);
+  const [gridRows, setGridRows] = useState("1");
+  const [gridCols, setGridCols] = useState("1");
+  const [gridTiers, setGridTiers] = useState("1");
+  const [deleteAlertData, setDeleteAlertData] = useState<{
+    isOpen: boolean;
+    type: "location" | "level" | null;
+    id: string;
+    name: string;
+  }>({ isOpen: false, type: null, id: "", name: "" });
+
+  const loadLocations = async () => {
+    try {
+      const data = await invoke<StorageLocation[]>("get_locations");
+      setLocations(data);
+    } catch (error) {
+      console.error("Failed to load locations:", error);
+    }
+  };
+
+  const loadBrands = async () => {
+    try {
+      const data = await invoke<{ name: string }[]>("get_brands");
+      const brandNames = ["Campuran", ...data.map(b => b.name)];
+      setBrands(brandNames);
+    } catch (error) {
+      console.error("Failed to load brands:", error);
+      setBrands(["Campuran"]);
+    }
+  };
+
+  useEffect(() => {
+    loadLocations();
+    loadBrands();
+  }, []);
 
   const stats = useMemo(() => {
     let totalRak = 0;
@@ -121,10 +136,14 @@ export default function LokasiBarangPage() {
 
   const resetForm = () => {
     setLocName("");
-    setLocCapacity("");
+    setLocCapacity("1");
     setLocBrand("Campuran");
     setLocLevelsCount("1");
     setLevelName("");
+    setUseCalculator(true);
+    setGridRows("1");
+    setGridCols("1");
+    setGridTiers("1");
   };
 
   const handleOpenSheet = (mode: SheetMode, item?: { parentId?: string; levelId?: string }) => {
@@ -153,93 +172,239 @@ export default function LokasiBarangPage() {
     }
   };
 
-  const handleSave = () => {
-    if (sheetMode === "add-rak") {
-      const newRak: StorageLocation = {
-        id: `rak-${Date.now()}`,
-        name: locName || "Rak Baru",
-        type: "Rak",
-        isActive: true,
-        levels: Array.from({ length: parseInt(locLevelsCount) || 1 }).map((_, i) => ({
-          id: `lvl-${Date.now()}-${i}`,
-          name: `Level ${i + 1}`,
-          capacity: 0,
-          usedCapacity: 0,
-          brandRule: "Campuran",
-          isActive: true
-        }))
-      };
-      setLocations([...locations, newRak]);
-    } else if (sheetMode === "add-kardus") {
-      const newKardus: StorageLocation = {
-        id: `kar-${Date.now()}`,
-        name: locName || "Kardus Baru",
-        type: "Kardus",
-        isActive: true,
-        capacity: parseInt(locCapacity) || 0,
-        usedCapacity: 0,
-        brandRule: locBrand
-      };
-      setLocations([...locations, newKardus]);
-    } else if (sheetMode === "edit-rak" && activeItem?.parentId) {
-      setLocations(locations.map(l => l.id === activeItem.parentId ? { ...l, name: locName } : l));
-    } else if (sheetMode === "edit-kardus" && activeItem?.parentId) {
-      setLocations(locations.map(l => l.id === activeItem.parentId ? { ...l, name: locName, capacity: parseInt(locCapacity) || 0, brandRule: locBrand } : l));
-    } else if (sheetMode === "add-level" && activeItem?.parentId) {
-      const newLevel: Level = {
-        id: `lvl-${Date.now()}`,
-        name: levelName || "Level Baru",
-        capacity: parseInt(locCapacity) || 0,
-        usedCapacity: 0,
-        brandRule: locBrand,
-        isActive: true
-      };
-      setLocations(locations.map(l => l.id === activeItem.parentId ? { ...l, levels: [...(l.levels || []), newLevel] } : l));
-    } else if (sheetMode === "edit-level" && activeItem?.parentId && activeItem?.levelId) {
-      setLocations(locations.map(l => {
-        if (l.id === activeItem.parentId) {
-          return {
-            ...l,
-            levels: l.levels?.map(lvl => lvl.id === activeItem.levelId ? { ...lvl, name: levelName, capacity: parseInt(locCapacity) || 0, brandRule: locBrand } : lvl)
-          };
-        }
-        return l;
-      }));
-    }
-    setSheetMode("closed");
-  };
-
-  const handleToggleLocation = (id: string) => {
-    setLocations(locations.map(l => l.id === id ? { ...l, isActive: !l.isActive } : l));
-  };
-
-  const handleToggleLevel = (rakId: string, levelId: string) => {
-    setLocations(locations.map(l => {
-      if (l.id === rakId) {
-        return {
-          ...l,
-          levels: l.levels?.map(lvl => lvl.id === levelId ? { ...lvl, isActive: !lvl.isActive } : lvl)
+  const handleSave = async () => {
+    try {
+      if (sheetMode === "add-rak") {
+        const newRak: StorageLocation = {
+          id: `rak-${Date.now()}`,
+          name: locName || "Rak Baru",
+          type: "Rak",
+          isActive: true,
+          levels: Array.from({ length: parseInt(locLevelsCount) || 1 }).map((_, i) => ({
+            id: `lvl-${Date.now()}-${i}`,
+            name: `Level ${i + 1}`,
+            capacity: 0,
+            usedCapacity: 0,
+            brandRule: "Campuran",
+            isActive: true
+          }))
         };
-      }
-      return l;
-    }));
-  };
-
-  const handleDeleteLocation = (id: string) => {
-    if (confirm("Apakah Anda yakin ingin menghapus lokasi ini?")) {
-      setLocations(locations.filter(l => l.id !== id));
-    }
-  };
-
-  const handleDeleteLevel = (rakId: string, levelId: string) => {
-    if (confirm("Apakah Anda yakin ingin menghapus level ini?")) {
-      setLocations(locations.map(l => {
-        if (l.id === rakId) {
-          return { ...l, levels: l.levels?.filter(lvl => lvl.id !== levelId) };
+        await invoke("save_location", { location: newRak });
+      } else if (sheetMode === "add-kardus") {
+        const newKardus: StorageLocation = {
+          id: `kar-${Date.now()}`,
+          name: locName || "Kardus Baru",
+          type: "Kardus",
+          isActive: true,
+          capacity: parseInt(locCapacity) || 0,
+          usedCapacity: 0,
+          brandRule: locBrand
+        };
+        await invoke("save_location", { location: newKardus });
+      } else if (sheetMode === "edit-rak" && activeItem?.parentId) {
+        const loc = locations.find(l => l.id === activeItem.parentId);
+        if (loc) {
+          const updated = { ...loc, name: locName };
+          await invoke("save_location", { location: updated });
         }
-        return l;
-      }));
+      } else if (sheetMode === "edit-kardus" && activeItem?.parentId) {
+        const loc = locations.find(l => l.id === activeItem.parentId);
+        if (loc) {
+          const updated = { ...loc, name: locName, capacity: parseInt(locCapacity) || 0, brandRule: locBrand };
+          await invoke("save_location", { location: updated });
+        }
+      } else if (sheetMode === "add-level" && activeItem?.parentId) {
+        const newLevel: Level = {
+          id: `lvl-${Date.now()}`,
+          name: levelName || "Level Baru",
+          capacity: parseInt(locCapacity) || 0,
+          usedCapacity: 0,
+          brandRule: locBrand,
+          isActive: true
+        };
+        await invoke("save_level", { level: newLevel, locationId: activeItem.parentId });
+      } else if (sheetMode === "edit-level" && activeItem?.parentId && activeItem?.levelId) {
+        const loc = locations.find(l => l.id === activeItem.parentId);
+        const lvl = loc?.levels?.find(l => l.id === activeItem.levelId);
+        if (lvl) {
+          const updatedLevel = { ...lvl, name: levelName, capacity: parseInt(locCapacity) || 0, brandRule: locBrand };
+          await invoke("save_level", { level: updatedLevel, locationId: activeItem.parentId });
+        }
+      }
+      await loadLocations();
+
+      if (sheetMode?.startsWith("add-")) {
+        toast.success("Berhasil menambahkan data lokasi baru");
+      } else {
+        toast.success("Berhasil menyimpan perubahan data lokasi");
+      }
+
+      setSheetMode("closed");
+    } catch (error) {
+      console.error("Failed to save location data:", error);
+      toast.error("Gagal menyimpan data lokasi.");
     }
+  };
+
+  const handleToggleLocation = async (id: string) => {
+    try {
+      const loc = locations.find(l => l.id === id);
+      if (loc) {
+        await invoke("toggle_location_active", { id, isActive: !loc.isActive });
+        await loadLocations();
+        toast.success(`Berhasil ${!loc.isActive ? 'mengaktifkan' : 'menonaktifkan'} lokasi`);
+      }
+    } catch (error) {
+      console.error("Failed to toggle location:", error);
+      toast.error("Gagal mengubah status lokasi");
+    }
+  };
+
+  const handleToggleLevel = async (rakId: string, levelId: string) => {
+    try {
+      const loc = locations.find(l => l.id === rakId);
+      const lvl = loc?.levels?.find(l => l.id === levelId);
+      if (lvl) {
+        await invoke("toggle_level_active", { id: levelId, isActive: !lvl.isActive });
+        await loadLocations();
+        toast.success(`Berhasil ${!lvl.isActive ? 'mengaktifkan' : 'menonaktifkan'} level`);
+      }
+    } catch (error) {
+      console.error("Failed to toggle level:", error);
+      toast.error("Gagal mengubah status level");
+    }
+  };
+
+  const requestDeleteLocation = (id: string, name: string) => {
+    setDeleteAlertData({ isOpen: true, type: "location", id, name });
+  };
+
+  const requestDeleteLevel = (levelId: string, name: string) => {
+    setDeleteAlertData({ isOpen: true, type: "level", id: levelId, name });
+  };
+
+  const confirmDelete = async () => {
+    const { type, id } = deleteAlertData;
+    if (!type || !id) return;
+
+    try {
+      if (type === "location") {
+        await invoke("delete_location", { id });
+      } else if (type === "level") {
+        await invoke("delete_level", { id });
+      }
+      await loadLocations();
+      toast.success(`Berhasil menghapus ${type === "location" ? "lokasi" : "level"}`);
+    } catch (error) {
+      console.error("Failed to delete:", error);
+      toast.error(`Gagal menghapus data`);
+    } finally {
+      setDeleteAlertData({ isOpen: false, type: null, id: "", name: "" });
+    }
+  };
+
+  const handleGridChange = (r: string, c: string, t: string) => {
+    setGridRows(r);
+    setGridCols(c);
+    setGridTiers(t);
+    const rowsVal = parseInt(r) || 0;
+    const colsVal = parseInt(c) || 0;
+    const tiersVal = parseInt(t) || 0;
+    const total = rowsVal * colsVal * tiersVal;
+    setLocCapacity(total > 0 ? total.toString() : "");
+  };
+
+  const renderCapacityInput = () => {
+    return (
+      <div className="space-y-4 rounded-xl border border-neutral-800 bg-neutral-900/30 p-4 transition-all duration-300">
+        <Tabs
+          value={useCalculator ? "grid" : "manual"}
+          onValueChange={(val) => {
+            const isGrid = val === "grid";
+            setUseCalculator(isGrid);
+            if (isGrid) {
+              handleGridChange(gridRows, gridCols, gridTiers);
+            }
+          }}
+          className="w-full"
+        >
+          <TabsList className="grid w-full grid-cols-2 bg-neutral-950 border border-neutral-800 p-1 h-9">
+            <TabsTrigger value="grid" className="text-xs font-semibold flex items-center justify-center">
+              Kalkulator Grid
+            </TabsTrigger>
+            <TabsTrigger value="manual" className="text-xs font-semibold flex items-center justify-center">
+              Manual
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {useCalculator ? (
+          <div className="space-y-3.5">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 space-y-1">
+                <Label htmlFor="grid-rows" className="text-[11px] text-neutral-400">Baris</Label>
+                <Input
+                  id="grid-rows"
+                  type="number"
+                  min="1"
+                  value={gridRows}
+                  onChange={e => handleGridChange(e.target.value, gridCols, gridTiers)}
+                  className="bg-neutral-950 border-neutral-800 h-9 text-center text-sm font-medium [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+              <span className="self-end pb-2 text-neutral-600 text-xs font-bold">×</span>
+              <div className="flex-1 space-y-1">
+                <Label htmlFor="grid-cols" className="text-[11px] text-neutral-400">Kolom</Label>
+                <Input
+                  id="grid-cols"
+                  type="number"
+                  min="1"
+                  value={gridCols}
+                  onChange={e => handleGridChange(gridRows, e.target.value, gridTiers)}
+                  className="bg-neutral-950 border-neutral-800 h-9 text-center text-sm font-medium [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+              <span className="self-end pb-2 text-neutral-600 text-xs font-bold">×</span>
+              <div className="flex-1 space-y-1">
+                <Label htmlFor="grid-tiers" className="text-[11px] text-neutral-400">Tingkat</Label>
+                <Input
+                  id="grid-tiers"
+                  type="number"
+                  min="1"
+                  value={gridTiers}
+                  onChange={e => handleGridChange(gridRows, gridCols, e.target.value)}
+                  className="bg-neutral-950 border-neutral-800 h-9 text-center text-sm font-medium [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+            </div>
+            <div className="text-[11px] text-neutral-500 font-medium bg-neutral-950/40 p-2 rounded-lg border border-neutral-800/40 text-center">
+              Estimasi: <span className="text-neutral-300 font-bold">{gridRows || 0}</span> Baris × <span className="text-neutral-300 font-bold">{gridCols || 0}</span> Kolom × <span className="text-neutral-300 font-bold">{gridTiers || 0}</span> Tingkat = <span className="text-blue-400 font-extrabold">{locCapacity || 0}</span> Unit
+            </div>
+          </div>
+        ) : null}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="loc-capacity" className="text-xs font-medium text-neutral-300 flex justify-between items-center">
+            <span>Kapasitas Maksimal</span>
+            {useCalculator && <span className="text-[10px] text-neutral-500 font-normal italic">(Bisa diedit secara manual)</span>}
+          </Label>
+          <div className="relative">
+            <Input
+              id="loc-capacity"
+              type="number"
+              min="0"
+              value={locCapacity}
+              onChange={e => setLocCapacity(e.target.value)}
+              placeholder="Masukkan total kapasitas"
+              className="bg-neutral-950 border-neutral-800 pr-12 text-sm font-semibold text-blue-400 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-neutral-500 select-none">
+              Unit
+            </span>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const renderForm = () => {
@@ -267,18 +432,15 @@ export default function LokasiBarangPage() {
             <Label>Nama Kardus</Label>
             <Input value={locName} onChange={e => setLocName(e.target.value)} placeholder="Contoh: Kardus K-01" className="bg-neutral-900 border-neutral-800" />
           </div>
+          {renderCapacityInput()}
           <div className="space-y-2">
-            <Label>Kapasitas Maksimal</Label>
-            <Input type="number" min="0" value={locCapacity} onChange={e => setLocCapacity(e.target.value)} placeholder="0" className="bg-neutral-900 border-neutral-800" />
-          </div>
-          <div className="space-y-2">
-            <Label>Aturan Merek</Label>
+            <Label>Merek</Label>
             <Select value={locBrand} onValueChange={setLocBrand}>
-              <SelectTrigger className="bg-neutral-900 border-neutral-800">
+              <SelectTrigger className="justify-start bg-neutral-900 border-neutral-800">
                 <SelectValue placeholder="Pilih Aturan" />
               </SelectTrigger>
               <SelectContent>
-                {BRANDS.map(b => (
+                {brands.map(b => (
                   <SelectItem key={b} value={b}>{b}</SelectItem>
                 ))}
               </SelectContent>
@@ -295,10 +457,7 @@ export default function LokasiBarangPage() {
             <Label>Nama Level</Label>
             <Input value={levelName} onChange={e => setLevelName(e.target.value)} placeholder="Contoh: Level 1" className="bg-neutral-900 border-neutral-800" />
           </div>
-          <div className="space-y-2">
-            <Label>Kapasitas Maksimal</Label>
-            <Input type="number" min="0" value={locCapacity} onChange={e => setLocCapacity(e.target.value)} placeholder="0" className="bg-neutral-900 border-neutral-800" />
-          </div>
+          {renderCapacityInput()}
           <div className="space-y-2">
             <Label>Aturan Merek</Label>
             <Select value={locBrand} onValueChange={setLocBrand}>
@@ -306,7 +465,7 @@ export default function LokasiBarangPage() {
                 <SelectValue placeholder="Pilih Aturan" />
               </SelectTrigger>
               <SelectContent>
-                {BRANDS.map(b => (
+                {brands.map(b => (
                   <SelectItem key={b} value={b}>{b}</SelectItem>
                 ))}
               </SelectContent>
@@ -434,7 +593,7 @@ export default function LokasiBarangPage() {
         {filteredLocations.map(loc => {
           if (loc.type === "Rak") {
             return (
-              <Card key={loc.id} className={`border-neutral-800 bg-neutral-900/40 backdrop-blur-md overflow-hidden flex flex-col relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60 hover:shadow-xl hover:shadow-black/20 ${!loc.isActive ? 'opacity-50 grayscale' : ''}`}>
+              <Card key={loc.id} className={`border-neutral-800 bg-neutral-900/40 overflow-hidden flex flex-col relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60 hover:shadow-xl hover:shadow-black/20 ${!loc.isActive ? 'opacity-50 grayscale' : ''}`}>
                 <CardHeader className="pb-4 border-b border-neutral-800/50 bg-neutral-900/20">
                   <div className="flex justify-between items-start">
                     <div className="space-y-1.5">
@@ -466,7 +625,7 @@ export default function LokasiBarangPage() {
                           <DropdownMenuItem className="cursor-pointer focus:bg-neutral-800" onClick={() => handleToggleLocation(loc.id)}>
                             <Power className="w-4 h-4 mr-2" /> {loc.isActive ? "Nonaktifkan Rak" : "Aktifkan Rak"}
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => handleDeleteLocation(loc.id)}>
+                          <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDeleteLocation(loc.id, loc.name)}>
                             <Trash2 className="w-4 h-4 mr-2" /> Hapus Rak
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -499,7 +658,7 @@ export default function LokasiBarangPage() {
                                   <DropdownMenuItem disabled={!loc.isActive} className="cursor-pointer focus:bg-neutral-800" onClick={() => handleToggleLevel(loc.id, lvl.id)}>
                                     <Power className="w-4 h-4 mr-2" /> {lvl.isActive ? "Nonaktifkan Level" : "Aktifkan Level"}
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => handleDeleteLevel(loc.id, lvl.id)}>
+                                  <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDeleteLevel(lvl.id, lvl.name)}>
                                     <Trash2 className="w-4 h-4 mr-2" /> Hapus Level
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -536,7 +695,7 @@ export default function LokasiBarangPage() {
             );
           } else {
             return (
-              <Card key={loc.id} className={`border-neutral-800 bg-neutral-900/40 backdrop-blur-md overflow-hidden flex flex-col relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60 hover:shadow-md hover:shadow-black/20 ${!loc.isActive ? 'opacity-50 grayscale' : ''}`}>
+              <Card key={loc.id} className={`border-neutral-800 bg-neutral-900/40 overflow-hidden flex flex-col relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60 hover:shadow-md hover:shadow-black/20 ${!loc.isActive ? 'opacity-50 grayscale' : ''}`}>
                 <CardContent className="px-4 flex flex-col gap-4">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-3">
@@ -565,7 +724,7 @@ export default function LokasiBarangPage() {
                           <DropdownMenuItem className="cursor-pointer focus:bg-neutral-800" onClick={() => handleToggleLocation(loc.id)}>
                             <Power className="w-4 h-4 mr-2" /> {loc.isActive ? "Nonaktifkan Kardus" : "Aktifkan Kardus"}
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => handleDeleteLocation(loc.id)}>
+                          <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDeleteLocation(loc.id, loc.name)}>
                             <Trash2 className="w-4 h-4 mr-2" /> Hapus Kardus
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -614,12 +773,27 @@ export default function LokasiBarangPage() {
               {renderForm()}
             </div>
           </div>
-          <SheetFooter className="p-6 border-t border-neutral-800/60 bg-neutral-900/20 flex sm:justify-end gap-3 sm:gap-0">
-            <Button variant="ghost" onClick={() => setSheetMode("closed")} className="hover:bg-neutral-800 text-neutral-300">Batal</Button>
-            <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-900/20 border-none">Simpan Perubahan</Button>
+          <SheetFooter className="p-6 border-t border-neutral-800/60 bg-neutral-900/20 flex sm:justify-end gap-3 sm:gap-2">
+            <Button variant="outline" onClick={() => setSheetMode("closed")} className="hover:bg-neutral-800 text-neutral-300">Batal</Button>
+            <Button onClick={handleSave}>Simpan Perubahan</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={deleteAlertData.isOpen} onOpenChange={(open) => !open && setDeleteAlertData({ ...deleteAlertData, isOpen: false })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apakah Anda yakin?</AlertDialogTitle>
+            <AlertDialogDescription className="text-neutral-400">
+              Tindakan ini tidak dapat dibatalkan dan semua data terkait akan dihapus.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Lanjutkan</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

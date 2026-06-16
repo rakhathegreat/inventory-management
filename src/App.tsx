@@ -12,8 +12,23 @@ import DataTransaksiPage from "./app/data-transaksi/page";
 import LokasiBarangPage from "./app/lokasi-barang/page";
 import KategoriBarangPage from "./app/kategori-barang/page";
 import MerekBarangPage from "./app/merek-barang/page";
+import { useEffect } from "react";
+import { Toaster } from "@/components/ui/sonner";
 
 function App() {
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    // Disable right-click globally
+    document.addEventListener("contextmenu", handleContextMenu);
+
+    return () => {
+      document.removeEventListener("contextmenu", handleContextMenu);
+    };
+  }, []);
+
   return (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
       <TooltipProvider>
@@ -33,6 +48,7 @@ function App() {
           </Routes>
         </Router>
       </TooltipProvider>
+      <Toaster />
     </ThemeProvider>
   );
 }
