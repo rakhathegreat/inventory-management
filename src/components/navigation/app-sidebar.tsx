@@ -122,15 +122,7 @@ const data = {
             <CircleStar />
           ),
           isActive: false,
-        },
-        {
-          title: "Supplier",
-          url: "/supplier",
-          icon: (
-            <Package2 />
-          ),
-          isActive: false,
-        },
+        }
       ],
     },
   ],
