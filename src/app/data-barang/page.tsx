@@ -54,7 +54,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Toaster, toast } from "sonner"
-import { Link, redirect } from "react-router-dom"
+import { Link } from "react-router-dom"
 
 type StatusUnit = "Tersedia" | "Terpasang" | "Dipinjam" | "Rusak" | "Maintenance"
 
@@ -162,10 +162,6 @@ export default function DataBarangPage() {
     })
     setFormErrors({})
     setSelectedBarang(null)
-  }
-
-  const handleOpenAdd = () => {
-    redirect("/barang-masuk")
   }
 
   const handleOpenEdit = (barang: BarangUnit) => {
@@ -309,7 +305,7 @@ export default function DataBarangPage() {
       {/* Page Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-neutral-100 to-neutral-400 bg-clip-text text-transparent">
+          <h1 className="text-2xl font-bold tracking-tight bg-linear-to-r from-neutral-100 to-neutral-400 bg-clip-text text-transparent">
             Data Unit Barang
           </h1>
           <p className="text-sm text-muted-foreground">

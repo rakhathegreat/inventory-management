@@ -134,7 +134,7 @@ export default function MerekBarangPage() {
   };
 
   return (
-    <div className="p-6 h-full flex flex-col gap-6 text-neutral-100 max-w-[1400px] mx-auto w-full">
+    <div className="p-6 h-full flex flex-col gap-6 text-neutral-100 mx-auto w-full">
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="relative w-full sm:w-72">
