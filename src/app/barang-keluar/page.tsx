@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Archive, BadgeCheck, Boxes, PackageMinus, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -73,12 +73,22 @@ type BarangKeluarItem = {
   status: "Valid" | "Invalid";
 };
 
+type KodeBarangUpdate = string | ((current: string) => string);
+
 // Fungsi untuk mendeteksi merek dari awal input kode
 const detectBrandFromCode = (code: string): BrandOption => {
   if (!code) return "";
   const prefix = code.substring(0, 3).toUpperCase();
   return brandPrefixMap[prefix] || "";
 };
+
+const isTextInputTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return Boolean(target.closest("input, textarea, [contenteditable='true']"));
+};
+
+const normalizeKodeBarang = (code: string) => code.trim().toUpperCase();
 
 export default function BarangKeluarPage() {
   const [kodeBarang, setKodeBarang] = useState("");
@@ -87,11 +97,24 @@ export default function BarangKeluarPage() {
   const [barangKeluar, setBarangKeluar] = useState<BarangKeluarItem[]>([]);
   const [kuota, setKuota] = useState(defaultKuota);
   const inputRef = useRef<HTMLInputElement>(null);
+  const kodeBarangRef = useRef("");
 
   const detectedBrand = detectBrandFromCode(kodeBarang);
   const masterItems = masterData as MasterDataItem[];
   const totalKuotaTersedia = Object.values(kuota).reduce((total, value) => total + value, 0);
   const validItems = barangKeluar.filter((item) => item.status === "Valid").length;
+
+  const updateKodeBarang = useCallback((value: KodeBarangUpdate) => {
+    setKodeBarang((current) => {
+      const nextValue = typeof value === "function" ? value(current) : value;
+      kodeBarangRef.current = nextValue;
+      return nextValue;
+    });
+  }, []);
+
+  const focusKodeBarangInput = useCallback(() => {
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
 
   // Auto-focus pada input ketika component mount
   useEffect(() => {
@@ -107,9 +130,20 @@ export default function BarangKeluarPage() {
     }
   }, [detectedBrand]);
 
-  const handleSubmit = () => {
-    const trimmedKode = kodeBarang.trim();
+  const handleSubmit = useCallback((kodeOverride = kodeBarang) => {
+    const trimmedKode = kodeOverride.trim();
     if (!trimmedKode) return;
+
+    const isDuplicate = barangKeluar.some(
+      (item) => normalizeKodeBarang(item.nomor) === normalizeKodeBarang(trimmedKode)
+    );
+
+    if (isDuplicate) {
+      alert(`Nomor SN "${trimmedKode}" sudah ada dalam daftar! Tidak bisa duplikat.`);
+      updateKodeBarang("");
+      focusKodeBarangInput();
+      return;
+    }
 
     // Periksa apakah kode yang discan ada di data master (static JSON)
     const existsInMaster = masterItems.some((d) =>
@@ -118,9 +152,9 @@ export default function BarangKeluarPage() {
 
     if (!existsInMaster) {
       alert(`Data dengan kode "${trimmedKode}" tidak ditemukan!`);
-      setKodeBarang("");
+      updateKodeBarang("");
       setMerekFallback("");
-      setTimeout(() => inputRef.current?.focus(), 0);
+      focusKodeBarangInput();
       return;
     }
 
@@ -129,6 +163,7 @@ export default function BarangKeluarPage() {
     // Check if kuota tersedia
     if (kuota[defaultLokasi] <= 0) {
       alert(`Kuota lokasi "${defaultLokasi}" sudah penuh!`);
+      focusKodeBarangInput();
       return;
     }
 
@@ -148,13 +183,52 @@ export default function BarangKeluarPage() {
       [defaultLokasi]: current[defaultLokasi] - 1,
     }));
 
-    setKodeBarang("");
+    updateKodeBarang("");
     setMerekFallback("");
 
     // Auto-focus kembali ke input setelah submit
-    setTimeout(() => inputRef.current?.focus(), 0);
+    focusKodeBarangInput();
     // (No-op) previously recorded to temporary DB; reverted to original behavior.
-  };
+  }, [barangKeluar, focusKodeBarangInput, kategoriBarang, kodeBarang, kuota, masterItems, merekFallback, updateKodeBarang]);
+
+  // Arahkan input keyboard/scanner ke field Kode/SN walaupun fokus sedang di area lain.
+  useEffect(() => {
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) {
+        return;
+      }
+
+      const isSupportedKey = event.key.length === 1 || event.key === "Backspace" || event.key === "Enter";
+      if (!isSupportedKey || isTextInputTarget(event.target)) {
+        return;
+      }
+
+      if (document.querySelector("[data-slot='select-content']")) {
+        return;
+      }
+
+      event.preventDefault();
+      inputRef.current?.focus();
+
+      if (event.key === "Enter") {
+        handleSubmit(kodeBarangRef.current);
+        return;
+      }
+
+      if (event.key === "Backspace") {
+        updateKodeBarang((current) => current.slice(0, -1));
+        return;
+      }
+
+      updateKodeBarang((current) => `${current}${event.key}`);
+    };
+
+    window.addEventListener("keydown", handleWindowKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [handleSubmit, updateKodeBarang]);
 
   const handleDeleteItem = (id: number) => {
     const itemToDelete = barangKeluar.find((item) => item.id === id);
@@ -273,7 +347,13 @@ export default function BarangKeluarPage() {
                 ref={inputRef}
                 id="kode-barang"
                 value={kodeBarang}
-                onChange={(event) => setKodeBarang(event.target.value)}
+                onChange={(event) => updateKodeBarang(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleSubmit();
+                  }
+                }}
                 placeholder="Masukkan kode barang atau serial number"
               />
             </div>
@@ -289,7 +369,10 @@ export default function BarangKeluarPage() {
               </div>
               <Select
                 value={merekFallback}
-                onValueChange={(value) => setMerekFallback(value as BrandOption)}
+                onValueChange={(value) => {
+                  setMerekFallback(value as BrandOption);
+                  focusKodeBarangInput();
+                }}
               >
                 <SelectTrigger id="merek-fallback" className="w-full">
                   <SelectValue placeholder="Pilih merek" />
@@ -310,7 +393,10 @@ export default function BarangKeluarPage() {
               <Label htmlFor="kategori-barang">Kategori Barang</Label>
               <Select
                 value={kategoriBarang}
-                onValueChange={(value) => setKategoriBarang(value as KategoriOption)}
+                onValueChange={(value) => {
+                  setKategoriBarang(value as KategoriOption);
+                  focusKodeBarangInput();
+                }}
               >
                 <SelectTrigger id="kategori-barang" className="w-full">
                   <SelectValue placeholder="Pilih kategori" />
@@ -329,7 +415,7 @@ export default function BarangKeluarPage() {
           </CardContent>
 
           <CardFooter className="mt-auto justify-end gap-2">
-            <Button className="w-full gap-2 sm:w-auto" size="lg" onClick={handleSubmit}>
+            <Button className="w-full gap-2 sm:w-auto" size="lg" onClick={() => handleSubmit()}>
               <PackageMinus className="size-4" />
               Simpan barang keluar
             </Button>
