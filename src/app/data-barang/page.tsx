@@ -313,12 +313,12 @@ export default function DataBarangPage() {
   const getStatusBadgeProps = (status: StatusUnit) => {
     switch (status) {
       case "Masuk":
-        return { text: "Masuk", className: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" }
+        return { text: "Masuk", dotClass: "bg-emerald-500" }
       case "Keluar":
-        return { text: "Keluar", className: "bg-sky-500/10 text-sky-500 border-sky-500/20" }
+        return { text: "Keluar", dotClass: "bg-sky-500" }
       case "Rusak":
       default:
-        return { text: "Rusak", className: "bg-rose-500/10 text-rose-500 border-rose-500/20" }
+        return { text: "Rusak", dotClass: "bg-rose-500" }
     }
   }
 
@@ -467,7 +467,8 @@ export default function DataBarangPage() {
                       {item.kategori}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge className={`font-semibold px-2.5 py-0.5 ${badge.className}`}>
+                      <Badge variant="secondary" className="font-normal gap-1.5 px-2.5 py-0.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${badge.dotClass}`} />
                         {badge.text}
                       </Badge>
                     </TableCell>

@@ -387,7 +387,7 @@ export default function BarangMasukPage() {
                         <TableCell className="font-mono">{item.nomor}</TableCell>
                         <TableCell>{item.merek}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="px-1.5 text-muted-foreground">
+                          <Badge variant="secondary" className="font-normal px-2.5 py-0.5">
                             {item.kategori}
                           </Badge>
                         </TableCell>
@@ -421,8 +421,8 @@ export default function BarangMasukPage() {
                           </Select>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="gap-1.5 text-emerald-600 dark:text-emerald-400">
-                            <span className="size-1.5 rounded-full bg-emerald-500" />
+                          <Badge variant="secondary" className="font-normal gap-1.5 px-2.5 py-0.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             {item.status}
                           </Badge>
                         </TableCell>

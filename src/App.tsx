@@ -38,9 +38,8 @@ function App() {
               <Route index element={<DashboardPage />} />
               <Route path="barang-masuk" element={<BarangMasukPage />} />
               <Route path="barang-keluar" element={<BarangKeluarPage />} />
-              <Route path="riwayat" element={<RiwayatPage />} />
+              <Route path="riwayat" element={<DataTransaksiPage />} />
               <Route path="data-barang" element={<DataBarangPage />} />
-              <Route path="data-transaksi" element={<DataTransaksiPage />} />
               <Route path="lokasi-barang" element={<LokasiBarangPage />} />
               <Route path="kategori-barang" element={<KategoriBarangPage />} />
               <Route path="merek-barang" element={<MerekBarangPage />} />

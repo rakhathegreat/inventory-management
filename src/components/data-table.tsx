@@ -22,10 +22,13 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import {
   IconChevronDown,
+  IconChevronRight,
   IconDotsVertical,
   IconGripVertical,
   IconLayoutColumns,
   IconTrendingUp,
+  IconSearch,
+  IconFilter,
 } from "@tabler/icons-react"
 import {
   flexRender,
@@ -36,8 +39,10 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
+  getExpandedRowModel,
   type ColumnDef,
   type ColumnFiltersState,
+  type ExpandedState,
   type Row,
   type SortingState,
   type VisibilityState,
@@ -55,16 +60,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from "@/components/ui/drawer"
+
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -73,16 +69,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
 import {
   Table,
   TableBody,
@@ -95,17 +81,21 @@ import {
   Tabs,
   TabsContent,
 } from "@/components/ui/tabs"
-import { Eye } from "lucide-react"
 
 export const schema = z.object({
   id: z.number(),
   tanggal: z.string(),
   nomor: z.string(),
   kategori: z.string(),
-  sn: z.string(),
-  merek: z.string(),
-  asal: z.string(),
-  tujuan: z.string()
+  status: z.string().default("Selesai"),
+  items: z.array(z.object({
+    sn: z.string(),
+    nama: z.string().optional(),
+    kategori: z.string().optional(),
+    merek: z.string(),
+    asal: z.string(),
+    tujuan: z.string()
+  })).default([])
 })
 
 // Create a separate component for the drag handle
@@ -130,14 +120,10 @@ function DragHandle({ id }: { id: number }) {
 
 const columns: ColumnDef<z.infer<typeof schema>>[] = [
   {
-    id: "drag",
-    header: () => null,
-    cell: ({ row }) => <DragHandle id={row.original.id} />,
-  },
-  {
     id: "select",
     header: ({ table }) => (
-      <div className="flex items-center justify-center">
+      <div className="flex items-center gap-2 px-2">
+        <div className="w-6" /> {/* Placeholder untuk chevron expand */}
         <Checkbox
           checked={
             table.getIsAllPageRowsSelected() ||
@@ -149,11 +135,21 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
       </div>
     ),
     cell: ({ row }) => (
-      <div className="flex items-center justify-center">
+      <div className="flex items-center gap-2 pl-2 pr-4">
+        <div
+          className="cursor-pointer p-1 hover:bg-muted rounded text-muted-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            row.toggleExpanded();
+          }}
+        >
+          {row.getIsExpanded() ? <IconChevronDown className="size-4" /> : <IconChevronRight className="size-4" />}
+        </div>
         <Checkbox
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
           aria-label="Select row"
+          onClick={(e) => e.stopPropagation()}
         />
       </div>
     ),
@@ -164,63 +160,93 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
     accessorKey: "tanggal",
     header: "Tanggal",
     cell: ({ row }) => (
-      <div className="text-muted-foreground">
+      <div className="text-muted-foreground whitespace-nowrap">
         {row.original.tanggal}
       </div>
     ),
-    enableHiding: false,
   },
   {
     accessorKey: "nomor",
     header: "Nomor",
-    cell: ({ row }) => {
-      return <TableCellViewer item={row.original} />
-    },
+    cell: ({ row }) => (
+      <div className="font-medium text-primary">
+        {row.original.nomor}
+      </div>
+    ),
   },
   {
     accessorKey: "kategori",
     header: "Kategori",
-    cell: ({ row }) => (
-      <Badge variant="outline" className="px-1.5 text-muted-foreground">
-        {row.original.kategori}
-      </Badge>
-    ),
+    cell: ({ row }) => {
+      const kat = row.original.kategori;
+      let colorClass = "bg-muted-foreground";
+      if (kat === "Masuk") colorClass = "bg-emerald-500";
+      if (kat === "Keluar") colorClass = "bg-sky-500";
+      if (kat === "Rusak") colorClass = "bg-rose-500";
+
+      return (
+        <Badge variant="secondary" className="font-normal gap-1.5 px-2.5 py-0.5">
+          <div className={`w-1.5 h-1.5 rounded-full ${colorClass}`} />
+          {kat}
+        </Badge>
+      )
+    },
   },
   {
-    accessorKey: "sn",
-    header: () => <div className="">Serial Number</div>,
-    cell: ({ row }) => (
-      <div>
-        {row.original.sn}
-      </div>
-    ),
+    id: "ringkasan_barang",
+    header: "Ringkasan Barang",
+    cell: ({ row }) => {
+      const items = row.original.items || [];
+      const totalBarang = items.length;
+      return (
+        <div className="flex flex-col">
+          <span className="font-medium text-foreground">{totalBarang} barang</span>
+        </div>
+      );
+    },
   },
   {
-    accessorKey: "merek",
-    header: "Merek",
-    cell: ({ row }) => (
-      <div>
-        {row.original.merek}
-      </div>
-    ),
+    id: "lokasi_terlibat",
+    header: "Lokasi Terlibat",
+    cell: ({ row }) => {
+      const items = row.original.items || [];
+      const lokasiSet = new Set<string>();
+      items.forEach((i: any) => {
+        if (i.asal) lokasiSet.add(i.asal);
+        if (i.tujuan) lokasiSet.add(i.tujuan);
+      });
+      const lokasiList = Array.from(lokasiSet).filter(l => l !== "Keluar" && l !== "Masuk" && l !== "-" && !l.includes("Supplier"));
+
+      const totalLokasi = lokasiList.length;
+      let summaryStr = "";
+      if (totalLokasi === 0) summaryStr = "-";
+      else if (totalLokasi <= 2) summaryStr = lokasiList.join(", ");
+      else summaryStr = `${lokasiList[0]}, ${lokasiList[1]} +${totalLokasi - 2} lainnya`;
+
+      return (
+        <div className="flex flex-col">
+          <span className="font-medium text-foreground">{totalLokasi} lokasi</span>
+        </div>
+      );
+    },
   },
   {
-    accessorKey: "asal",
-    header: "Asal",
-    cell: ({ row }) => (
-      <div>
-        {row.original.asal}
-      </div>
-    ),
-  },
-  {
-    accessorKey: "tujuan",
-    header: "Tujuan",
-    cell: ({ row }) => (
-      <div>
-        {row.original.tujuan}
-      </div>
-    ),
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => {
+      const status = row.original.status || "Selesai";
+      let colorClass = "bg-muted-foreground";
+      if (status === "Selesai") colorClass = "bg-emerald-500";
+      if (status === "Draft") colorClass = "bg-amber-500";
+      if (status === "Dibatalkan") colorClass = "bg-rose-500";
+
+      return (
+        <Badge variant="secondary" className="font-normal gap-1.5 px-2.5 py-0.5">
+          <div className={`w-1.5 h-1.5 rounded-full ${colorClass}`} />
+          {status}
+        </Badge>
+      )
+    }
   },
   {
     id: "actions",
@@ -237,11 +263,11 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-32">
+          <DropdownMenuItem>Lihat Detail</DropdownMenuItem>
           <DropdownMenuItem>Edit</DropdownMenuItem>
-          <DropdownMenuItem>Make a copy</DropdownMenuItem>
-          <DropdownMenuItem>Favorite</DropdownMenuItem>
+          <DropdownMenuItem>Export PDF</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
+          <DropdownMenuItem variant="destructive">Batalkan</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     ),
@@ -254,23 +280,70 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof schema>> }) {
   })
 
   return (
-    <TableRow
-      data-state={row.getIsSelected() && "selected"}
-      data-dragging={isDragging}
-      ref={setNodeRef}
-      className="relative z-0 data-[dragging=true]:z-10 data-[dragging=true]:opacity-80"
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition: transition,
-        touchAction: "pan-y",
-      }}
-    >
-      {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id}>
-          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-        </TableCell>
-      ))}
-    </TableRow>
+    <>
+      <TableRow
+        data-state={row.getIsSelected() && "selected"}
+        data-dragging={isDragging}
+        ref={setNodeRef}
+        className={`relative z-0 data-[dragging=true]:z-10 data-[dragging=true]:opacity-80 cursor-pointer transition-colors ${row.getIsExpanded() ? 'bg-muted/30 hover:bg-muted/40' : ''}`}
+        style={{
+          transform: CSS.Transform.toString(transform),
+          transition: transition,
+          touchAction: "pan-y",
+        }}
+        onClick={() => row.toggleExpanded()}
+      >
+        {row.getVisibleCells().map((cell) => (
+          <TableCell key={cell.id} className="py-3">
+            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          </TableCell>
+        ))}
+      </TableRow>
+      {row.getIsExpanded() && row.original.items && row.original.items.length > 0 && (
+        <TableRow className="hover:bg-transparent bg-muted/5 border-b-0">
+          <TableCell colSpan={row.getVisibleCells().length} className="p-0 border-b-2 border-border/50">
+            <div className="px-6 py-4 w-full overflow-hidden">
+              <div className="py-2">
+                <div className="rounded-md border bg-card overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="h-9 py-2 text-xs font-medium">Serial Number</TableHead>
+                        <TableHead className="h-9 py-2 text-xs font-medium">Kategori</TableHead>
+                        <TableHead className="h-9 py-2 text-xs font-medium">Merek</TableHead>
+                        <TableHead className="h-9 py-2 text-xs font-medium">Lokasi Asal</TableHead>
+                        <TableHead className="h-9 py-2 text-xs font-medium">Lokasi Tujuan</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {row.original.items.map((item: any, idx: number) => (
+                        <TableRow key={idx} className="hover:bg-muted/30 cursor-default" onClick={(e) => e.stopPropagation()}>
+                          <TableCell className="py-2.5">
+                            <span className="text-foreground text-muted-foreground">{item.sn}</span>
+                          </TableCell>
+                          <TableCell className="py-2.5">
+                            <span className="text-sm text-foreground">{item.kategori || row.original.kategori || "Masuk"}</span>
+                          </TableCell>
+                          <TableCell className="py-2.5">
+                            <span className="text-sm text-foreground">{item.merek}</span>
+                          </TableCell>
+                          <TableCell className="py-2.5">
+                            <span className="text-sm text-foreground">{item.asal || "-"}</span>
+                          </TableCell>
+                          <TableCell className="py-2.5">
+                            <span className="text-sm text-foreground">{item.tujuan || "-"}</span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
   )
 }
 
@@ -320,6 +393,8 @@ export function DataTable({
     [data]
   )
 
+  const [expanded, setExpanded] = React.useState<ExpandedState>({})
+
   const table = useReactTable({
     data,
     columns,
@@ -329,6 +404,7 @@ export function DataTable({
       rowSelection,
       columnFilters,
       pagination,
+      expanded,
     },
     getRowId: (row) => row.id.toString(),
     enableRowSelection: true,
@@ -337,12 +413,14 @@ export function DataTable({
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
+    onExpandedChange: setExpanded,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
+    getExpandedRowModel: getExpandedRowModel(),
   })
 
   function handleDragEnd(event: DragEndEvent) {
@@ -359,37 +437,14 @@ export function DataTable({
   return (
     <Tabs
       defaultValue="outline"
-      className="w-full flex-col justify-start gap-6"
+      className="w-full flex-col justify-start"
     >
-      <div className="flex items-center justify-between px-4 lg:px-6">
-        <Label htmlFor="view-selector" className="sr-only">
-          View
-        </Label>
-        <Select defaultValue="outline">
-          <SelectTrigger
-            className="flex w-fit @4xl/main:hidden"
-            size="sm"
-            id="view-selector"
-          >
-            <SelectValue placeholder="Select a view" />
-          </SelectTrigger>
-          {showTitle && (
-            <div className="flex flex-col">
-              <h2 className="font-medium text-lg">Log Aktivitas Terbaru</h2>
-              <p className="text-sm text-muted-foreground">Rekaman aktivitas transaksi terbaru.</p>
-            </div>
-          )}
-        </Select>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 lg:px-6">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Filtering is now handled by the parent component */}
+        </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <IconLayoutColumns />
-                <span className="hidden lg:inline">Customize Columns</span>
-                <span className="lg:hidden">Columns</span>
-                <IconChevronDown />
-              </Button>
-            </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               {table
                 .getAllColumns()
@@ -414,17 +469,11 @@ export function DataTable({
                 })}
             </DropdownMenuContent>
           </DropdownMenu>
-          {showViewButton && (
-            <Button variant="outline" size="sm">
-              <Eye />
-              <span className="hidden lg:inline">Lihat Transaksi</span>
-            </Button>
-          )}
         </div>
       </div>
       <TabsContent
         value="outline"
-        className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6"
+        className="relative flex flex-col gap-4 overflow-auto"
       >
         <div className="overflow-hidden rounded-lg border">
           <DndContext
@@ -502,176 +551,3 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
-function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
-  const isMobile = useIsMobile()
-
-  return (
-    <Drawer direction={isMobile ? "bottom" : "right"}>
-      <DrawerTrigger asChild>
-        <Button variant="link" className="w-fit px-0 text-left text-foreground">
-          {item.nomor}
-        </Button>
-      </DrawerTrigger>
-      <DrawerContent>
-        <DrawerHeader className="gap-1">
-          <DrawerTitle>{item.nomor}</DrawerTitle>
-          <DrawerDescription>
-            Showing total visitors for the last 6 months
-          </DrawerDescription>
-        </DrawerHeader>
-        <div className="flex flex-col gap-4 overflow-y-auto px-4 text-sm">
-          {!isMobile && (
-            <>
-              <ChartContainer config={chartConfig}>
-                <AreaChart
-                  accessibilityLayer
-                  data={chartData}
-                  margin={{
-                    left: 0,
-                    right: 10,
-                  }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="month"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => value.slice(0, 3)}
-                    hide
-                  />
-                  <ChartTooltip
-                    cursor={false}
-                    content={<ChartTooltipContent indicator="dot" />}
-                  />
-                  <Area
-                    dataKey="mobile"
-                    type="natural"
-                    fill="var(--color-mobile)"
-                    fillOpacity={0.6}
-                    stroke="var(--color-mobile)"
-                    stackId="a"
-                  />
-                  <Area
-                    dataKey="desktop"
-                    type="natural"
-                    fill="var(--color-desktop)"
-                    fillOpacity={0.4}
-                    stroke="var(--color-desktop)"
-                    stackId="a"
-                  />
-                </AreaChart>
-              </ChartContainer>
-              <Separator />
-              <div className="grid gap-2">
-                <div className="flex gap-2 leading-none font-medium">
-                  Trending up by 5.2% this month{" "}
-                  <IconTrendingUp className="size-4" />
-                </div>
-                <div className="text-muted-foreground">
-                  Showing total visitors for the last 6 months. This is just
-                  some random text to test the layout. It spans multiple lines
-                  and should wrap around.
-                </div>
-              </div>
-              <Separator />
-            </>
-          )}
-          <form className="flex flex-col gap-4">
-            <div className="flex flex-col gap-3">
-              <Label htmlFor="tanggal">Tanggal</Label>
-              <Input id="tanggal" defaultValue={item.tanggal} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-3">
-                <Label htmlFor="nomor">Nomor</Label>
-                <Select defaultValue={item.nomor}>
-                  <SelectTrigger id="nomor" className="w-full">
-                    <SelectValue placeholder="Select a type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Table of Contents">
-                      Table of Contents
-                    </SelectItem>
-                    <SelectItem value="Executive Summary">
-                      Executive Summary
-                    </SelectItem>
-                    <SelectItem value="Technical Approach">
-                      Technical Approach
-                    </SelectItem>
-                    <SelectItem value="Design">Design</SelectItem>
-                    <SelectItem value="Capabilities">Capabilities</SelectItem>
-                    <SelectItem value="Focus Documents">
-                      Focus Documents
-                    </SelectItem>
-                    <SelectItem value="Narrative">Narrative</SelectItem>
-                    <SelectItem value="Cover Page">Cover Page</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-3">
-                <Label htmlFor="kategori">Kategori</Label>
-                <Select defaultValue={item.kategori}>
-                  <SelectTrigger id="kategori" className="w-full">
-                    <SelectValue placeholder="Select a status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Done">Done</SelectItem>
-                    <SelectItem value="In Progress">In Progress</SelectItem>
-                    <SelectItem value="Not Started">Not Started</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-3">
-                <Label htmlFor="sn">SN</Label>
-                <Input id="sn" defaultValue={item.sn} />
-              </div>
-              <div className="flex flex-col gap-3">
-                <Label htmlFor="merek">Merek</Label>
-                <Input id="merek" defaultValue={item.merek} />
-              </div>
-            </div>
-            <div className="flex flex-col gap-3">
-              <Label htmlFor="asal">Asal</Label>
-              <Select defaultValue={item.asal}>
-                <SelectTrigger id="asal" className="w-full">
-                  <SelectValue placeholder="Select a reviewer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Eddie Lake">Eddie Lake</SelectItem>
-                  <SelectItem value="Jamik Tashpulatov">
-                    Jamik Tashpulatov
-                  </SelectItem>
-                  <SelectItem value="Emily Whalen">Emily Whalen</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-3">
-              <Label htmlFor="tujuan">Tujuan</Label>
-              <Select defaultValue={item.tujuan}>
-                <SelectTrigger id="tujuan" className="w-full">
-                  <SelectValue placeholder="Select a reviewer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Eddie Lake">Eddie Lake</SelectItem>
-                  <SelectItem value="Jamik Tashpulatov">
-                    Jamik Tashpulatov
-                  </SelectItem>
-                  <SelectItem value="Emily Whalen">Emily Whalen</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </form>
-        </div>
-        <DrawerFooter>
-          <Button>Submit</Button>
-          <DrawerClose asChild>
-            <Button variant="outline">Done</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
-  )
-}

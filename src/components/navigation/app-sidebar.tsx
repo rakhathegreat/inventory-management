@@ -85,15 +85,7 @@ const data = {
             <Database />
           ),
           isActive: false,
-        },
-        {
-          title: "Data Transaksi",
-          url: "/data-transaksi",
-          icon: (
-            <Database />
-          ),
-          isActive: false,
-        },
+        }
       ],
     },
     {
