@@ -54,5 +54,20 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS items (
+            id TEXT PRIMARY KEY,
+            serial_number TEXT NOT NULL UNIQUE,
+            category TEXT NOT NULL,
+            brand TEXT NOT NULL,
+            status TEXT NOT NULL,
+            storage_location TEXT NOT NULL,
+            entry_date TEXT NOT NULL,
+            exit_date TEXT,
+            operator TEXT NOT NULL
+        )",
+        [],
+    )?;
+
     Ok(conn)
 }

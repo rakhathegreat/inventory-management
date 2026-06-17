@@ -49,6 +49,10 @@ pub fn run() {
             commands::delete_level,
             commands::toggle_location_active,
             commands::toggle_level_active,
+            commands::get_items,
+            commands::add_item,
+            commands::update_item,
+            commands::delete_item,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

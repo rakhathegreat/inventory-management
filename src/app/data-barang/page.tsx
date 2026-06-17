@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
+import { invoke } from "@tauri-apps/api/core"
 import {
   Plus,
   Search,
@@ -147,8 +148,22 @@ const KATEGORI_OPTIONS = [
 
 export default function DataBarangPage() {
   const isMobile = useIsMobile()
-  const [barangList, setBarangList] = useState<BarangUnit[]>(INITIAL_UNITS)
+  const [barangList, setBarangList] = useState<BarangUnit[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+
+  const loadBarang = async () => {
+    try {
+      const data = await invoke<BarangUnit[]>("get_items")
+      setBarangList(data)
+    } catch (error) {
+      console.error("Failed to fetch items:", error)
+      toast.error("Gagal memuat data barang.")
+    }
+  }
+
+  useEffect(() => {
+    loadBarang()
+  }, [])
   const [filterStatus, setFilterStatus] = useState("all")
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [formMode, setFormMode] = useState<"add" | "edit">("add")
@@ -205,15 +220,20 @@ export default function DataBarangPage() {
     setIsDetailOpen(true)
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const barang = barangList.find(b => b.id === id)
     if (!barang) return
-    setBarangList(prev => prev.filter(b => b.id !== id))
-    setSelectedIds(prev => prev.filter(selectedId => selectedId !== id))
-    toast.success(`Unit dengan SN ${barang.serialNumber} berhasil dihapus dari sistem.`)
+    try {
+      await invoke("delete_item", { id })
+      setBarangList(prev => prev.filter(b => b.id !== id))
+      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id))
+      toast.success(`Unit dengan SN ${barang.serialNumber} berhasil dihapus dari sistem.`)
+    } catch (error) {
+      toast.error("Gagal menghapus unit.")
+    }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const errors: Record<string, string> = {}
     if (!formData.serialNumber.trim()) errors.serialNumber = "Serial number wajib diisi"
@@ -247,27 +267,35 @@ export default function DataBarangPage() {
         tanggalKeluar: formData.tanggalKeluar || undefined,
         operatorInput: formData.operatorInput
       }
-      setBarangList(prev => [newBarang, ...prev])
-      toast.success(`Unit baru dengan SN ${newBarang.serialNumber} berhasil didaftarkan!`)
+      try {
+        await invoke("add_item", { item: newBarang })
+        setBarangList(prev => [newBarang, ...prev])
+        toast.success(`Unit baru dengan SN ${newBarang.serialNumber} berhasil didaftarkan!`)
+      } catch (error) {
+        toast.error("Gagal menyimpan unit.")
+        return
+      }
     } else {
       const originalBarang = selectedBarang!
-      setBarangList(prev => prev.map(b => {
-        if (b.id === originalBarang.id) {
-          return {
-            ...b,
-            serialNumber: formData.serialNumber.toUpperCase(),
-            kategori: formData.kategori,
-            merek: formData.merek,
-            status: formData.status,
-            lokasiPenyimpanan: formData.lokasiPenyimpanan,
-            tanggalMasuk: formData.tanggalMasuk,
-            tanggalKeluar: formData.tanggalKeluar || undefined,
-            operatorInput: formData.operatorInput
-          }
-        }
-        return b
-      }))
-      toast.success(`Unit dengan SN ${formData.serialNumber.toUpperCase()} berhasil diperbarui!`)
+      const updatedBarang = {
+        ...originalBarang,
+        serialNumber: formData.serialNumber.toUpperCase(),
+        kategori: formData.kategori,
+        merek: formData.merek,
+        status: formData.status,
+        lokasiPenyimpanan: formData.lokasiPenyimpanan,
+        tanggalMasuk: formData.tanggalMasuk,
+        tanggalKeluar: formData.tanggalKeluar || undefined,
+        operatorInput: formData.operatorInput
+      }
+      try {
+        await invoke("update_item", { item: updatedBarang })
+        setBarangList(prev => prev.map(b => b.id === originalBarang.id ? updatedBarang : b))
+        toast.success(`Unit dengan SN ${formData.serialNumber.toUpperCase()} berhasil diperbarui!`)
+      } catch (error) {
+        toast.error("Gagal memperbarui unit.")
+        return
+      }
     }
 
     setIsFormOpen(false)
@@ -303,11 +331,18 @@ export default function DataBarangPage() {
     }
   }
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return
-    setBarangList(prev => prev.filter(b => !selectedIds.includes(b.id)))
-    setSelectedIds([])
-    toast.success(`${selectedIds.length} unit berhasil dihapus dari sistem.`)
+    try {
+      for (const id of selectedIds) {
+        await invoke("delete_item", { id })
+      }
+      setBarangList(prev => prev.filter(b => !selectedIds.includes(b.id)))
+      setSelectedIds([])
+      toast.success(`${selectedIds.length} unit berhasil dihapus dari sistem.`)
+    } catch (error) {
+      toast.error("Gagal menghapus beberapa unit.")
+    }
   }
 
   const getStatusBadgeProps = (status: StatusUnit) => {

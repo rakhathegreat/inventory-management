@@ -366,3 +366,81 @@ pub fn toggle_level_active(state: State<DbState>, id: String, is_active: bool) -
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+// Item Commands
+#[derive(Serialize, Deserialize)]
+pub struct Item {
+    pub id: String,
+    #[serde(rename = "serialNumber")]
+    pub serial_number: String,
+    #[serde(rename = "kategori")]
+    pub category: String,
+    #[serde(rename = "merek")]
+    pub brand: String,
+    pub status: String,
+    #[serde(rename = "lokasiPenyimpanan")]
+    pub storage_location: String,
+    #[serde(rename = "tanggalMasuk")]
+    pub entry_date: String,
+    #[serde(rename = "tanggalKeluar")]
+    pub exit_date: Option<String>,
+    #[serde(rename = "operatorInput")]
+    pub operator: String,
+}
+
+#[tauri::command]
+pub fn get_items(state: State<DbState>) -> Result<Vec<Item>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut stmt = conn.prepare("SELECT id, serial_number, category, brand, status, storage_location, entry_date, exit_date, operator FROM items").map_err(|e| e.to_string())?;
+    
+    let items_iter = stmt.query_map([], |row| {
+        Ok(Item {
+            id: row.get(0)?,
+            serial_number: row.get(1)?,
+            category: row.get(2)?,
+            brand: row.get(3)?,
+            status: row.get(4)?,
+            storage_location: row.get(5)?,
+            entry_date: row.get(6)?,
+            exit_date: row.get(7)?,
+            operator: row.get(8)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut items = Vec::new();
+    for item in items_iter {
+        items.push(item.map_err(|e| e.to_string())?);
+    }
+
+    Ok(items)
+}
+
+#[tauri::command]
+pub fn add_item(state: State<DbState>, item: Item) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "INSERT INTO items (id, serial_number, category, brand, status, storage_location, entry_date, exit_date, operator) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![item.id, item.serial_number, item.category, item.brand, item.status, item.storage_location, item.entry_date, item.exit_date, item.operator],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_item(state: State<DbState>, item: Item) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "UPDATE items SET serial_number = ?1, category = ?2, brand = ?3, status = ?4, storage_location = ?5, entry_date = ?6, exit_date = ?7, operator = ?8 WHERE id = ?9",
+        params![item.serial_number, item.category, item.brand, item.status, item.storage_location, item.entry_date, item.exit_date, item.operator, item.id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_item(state: State<DbState>, id: String) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "DELETE FROM items WHERE id = ?1",
+        params![id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
