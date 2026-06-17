@@ -276,13 +276,21 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof schema>> }) {
 
 export function DataTable({
   data: initialData,
+  showTitle = true,
+  showViewButton = true,
+  showSelection = true,
 }: {
   data: z.infer<typeof schema>[]
+  showTitle?: boolean
+  showViewButton?: boolean
+  showSelection?: boolean
 }) {
   const [data, setData] = React.useState(() => initialData)
   const [rowSelection, setRowSelection] = React.useState({})
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({})
+    React.useState<VisibilityState>({
+      select: showSelection,
+    })
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
   )
@@ -365,10 +373,12 @@ export function DataTable({
           >
             <SelectValue placeholder="Select a view" />
           </SelectTrigger>
-          <div className="flex flex-col">
-            <h2 className="font-medium text-lg">Log Aktivitas Terbaru</h2>
-            <p className="text-sm text-muted-foreground">Rekaman aktivitas transaksi terbaru.</p>
-          </div>
+          {showTitle && (
+            <div className="flex flex-col">
+              <h2 className="font-medium text-lg">Log Aktivitas Terbaru</h2>
+              <p className="text-sm text-muted-foreground">Rekaman aktivitas transaksi terbaru.</p>
+            </div>
+          )}
         </Select>
         <div className="flex items-center gap-2">
           <DropdownMenu>
@@ -404,10 +414,12 @@ export function DataTable({
                 })}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm">
-            <Eye />
-            <span className="hidden lg:inline">Lihat Transaksi</span>
-          </Button>
+          {showViewButton && (
+            <Button variant="outline" size="sm">
+              <Eye />
+              <span className="hidden lg:inline">Lihat Transaksi</span>
+            </Button>
+          )}
         </div>
       </div>
       <TabsContent
