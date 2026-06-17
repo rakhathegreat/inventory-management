@@ -48,7 +48,7 @@ function App() {
           </Routes>
         </Router>
       </TooltipProvider>
-      <Toaster />
+      <Toaster position="top-right" />
     </ThemeProvider>
   );
 }

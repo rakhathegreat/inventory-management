@@ -17,11 +17,21 @@ import {
   History
 } from "lucide-react"
 
-import { Card } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle
+} from "@/components/ui/drawer"
+import { useIsMobile } from "@/hooks/use-mobile"
 import {
   Select,
   SelectContent,
@@ -30,14 +40,6 @@ import {
   SelectValue
 } from "@/components/ui/select"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle
-} from "@/components/ui/sheet"
-import {
   Table,
   TableBody,
   TableCell,
@@ -45,6 +47,7 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,19 +55,21 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
-import { ScrollArea } from "@/components/ui/scroll-area"
+
 import { Toaster, toast } from "sonner"
 import { Link } from "react-router-dom"
 
-type StatusUnit = "Tersedia" | "Terpasang" | "Dipinjam" | "Rusak" | "Maintenance"
+type StatusUnit = "Masuk" | "Keluar" | "Rusak"
 
 interface BarangUnit {
   id: string;
   serialNumber: string;
+  kategori: string;
   merek: string;
   status: StatusUnit;
   lokasiPenyimpanan: string;
   tanggalMasuk: string;
+  tanggalKeluar?: string;
   operatorInput: string;
 }
 
@@ -80,14 +85,14 @@ interface RiwayatUnit {
 }
 
 const INITIAL_UNITS: BarangUnit[] = [
-  { id: "1", serialNumber: "HW2026-00001", merek: "Huawei", status: "Tersedia", lokasiPenyimpanan: "Kardus K-01", tanggalMasuk: "2026-06-01", operatorInput: "Rakha Al-Hafiz" },
-  { id: "2", serialNumber: "HW2026-00002", merek: "Huawei", status: "Terpasang", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 2", tanggalMasuk: "2026-06-01", operatorInput: "Rakha Al-Hafiz" },
-  { id: "3", serialNumber: "HW2026-00010", merek: "Huawei", status: "Tersedia", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 1", tanggalMasuk: "2026-06-01", operatorInput: "Rakha Al-Hafiz" },
-  { id: "4", serialNumber: "HW2026-00011", merek: "Huawei", status: "Dipinjam", lokasiPenyimpanan: "Rak B2 - Aksesoris - Level 1", tanggalMasuk: "2026-05-15", operatorInput: "Putri Lestari" },
-  { id: "5", serialNumber: "HW2026-00020", merek: "Huawei", status: "Tersedia", lokasiPenyimpanan: "Kardus K-01", tanggalMasuk: "2026-06-01", operatorInput: "Rakha Al-Hafiz" },
-  { id: "6", serialNumber: "HW2026-00021", merek: "Huawei", status: "Terpasang", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 2", tanggalMasuk: "2026-06-02", operatorInput: "Putri Lestari" },
-  { id: "7", serialNumber: "HW2026-00022", merek: "Huawei", status: "Rusak", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 1", tanggalMasuk: "2026-05-20", operatorInput: "Rakha Al-Hafiz" },
-  { id: "8", serialNumber: "HW2026-00031", merek: "Huawei", status: "Dipinjam", lokasiPenyimpanan: "Rak B2 - Aksesoris - Level 1", tanggalMasuk: "2026-05-15", operatorInput: "Putri Lestari" },
+  { id: "1", serialNumber: "HW2026-00001", kategori: "Networking", merek: "Huawei", status: "Masuk", lokasiPenyimpanan: "Kardus K-01", tanggalMasuk: "2026-06-01", operatorInput: "Rakha Al-Hafiz" },
+  { id: "2", serialNumber: "HW2026-00002", kategori: "Networking", merek: "Huawei", status: "Keluar", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 2", tanggalMasuk: "2026-06-01", tanggalKeluar: "2026-06-13", operatorInput: "Rakha Al-Hafiz" },
+  { id: "3", serialNumber: "HW2026-00010", kategori: "Networking", merek: "Huawei", status: "Masuk", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 1", tanggalMasuk: "2026-06-01", operatorInput: "Rakha Al-Hafiz" },
+  { id: "4", serialNumber: "HW2026-00011", kategori: "Networking", merek: "Huawei", status: "Keluar", lokasiPenyimpanan: "Rak B2 - Aksesoris - Level 1", tanggalMasuk: "2026-05-15", tanggalKeluar: "2026-06-05", operatorInput: "Putri Lestari" },
+  { id: "5", serialNumber: "HW2026-00020", kategori: "Networking", merek: "Huawei", status: "Masuk", lokasiPenyimpanan: "Kardus K-01", tanggalMasuk: "2026-06-01", operatorInput: "Rakha Al-Hafiz" },
+  { id: "6", serialNumber: "HW2026-00021", kategori: "Networking", merek: "Huawei", status: "Keluar", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 2", tanggalMasuk: "2026-06-02", tanggalKeluar: "2026-06-10", operatorInput: "Putri Lestari" },
+  { id: "7", serialNumber: "HW2026-00022", kategori: "Networking", merek: "Huawei", status: "Rusak", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 1", tanggalMasuk: "2026-05-20", tanggalKeluar: "2026-06-08", operatorInput: "Rakha Al-Hafiz" },
+  { id: "8", serialNumber: "HW2026-00031", kategori: "Komputer", merek: "Huawei", status: "Keluar", lokasiPenyimpanan: "Rak B2 - Aksesoris - Level 1", tanggalMasuk: "2026-05-15", tanggalKeluar: "2026-06-01", operatorInput: "Putri Lestari" },
 ]
 
 const MOCK_RIWAYAT: Record<string, RiwayatUnit[]> = {
@@ -122,7 +127,7 @@ const MOCK_RIWAYAT: Record<string, RiwayatUnit[]> = {
   ]
 }
 
-const STATUS_OPTIONS: StatusUnit[] = ["Tersedia", "Terpasang", "Dipinjam", "Rusak", "Maintenance"]
+const STATUS_OPTIONS: StatusUnit[] = ["Masuk", "Keluar", "Rusak"]
 
 const LOKASI_OPTIONS = [
   "Rak A1 - Elektronik - Level 1",
@@ -132,7 +137,16 @@ const LOKASI_OPTIONS = [
   "Rak B2 - Aksesoris - Level 1"
 ]
 
+const KATEGORI_OPTIONS = [
+  "Networking",
+  "Komputer",
+  "Aksesoris",
+  "Elektronik",
+  "Perangkat Keras"
+]
+
 export default function DataBarangPage() {
+  const isMobile = useIsMobile()
   const [barangList, setBarangList] = useState<BarangUnit[]>(INITIAL_UNITS)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
@@ -141,23 +155,28 @@ export default function DataBarangPage() {
   const [selectedBarang, setSelectedBarang] = useState<BarangUnit | null>(null)
   const [formData, setFormData] = useState({
     serialNumber: "",
+    kategori: "",
     merek: "",
-    status: "Tersedia" as StatusUnit,
+    status: "Masuk" as StatusUnit,
     lokasiPenyimpanan: "",
     tanggalMasuk: "",
+    tanggalKeluar: "",
     operatorInput: ""
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [detailBarang, setDetailBarang] = useState<BarangUnit | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   const resetForm = () => {
     setFormData({
       serialNumber: "",
+      kategori: "",
       merek: "",
-      status: "Tersedia",
+      status: "Masuk",
       lokasiPenyimpanan: "",
       tanggalMasuk: new Date().toISOString().slice(0, 10),
+      tanggalKeluar: "",
       operatorInput: ""
     })
     setFormErrors({})
@@ -169,10 +188,12 @@ export default function DataBarangPage() {
     setSelectedBarang(barang)
     setFormData({
       serialNumber: barang.serialNumber,
+      kategori: barang.kategori,
       merek: barang.merek,
       status: barang.status,
       lokasiPenyimpanan: barang.lokasiPenyimpanan,
       tanggalMasuk: barang.tanggalMasuk,
+      tanggalKeluar: barang.tanggalKeluar || "",
       operatorInput: barang.operatorInput
     })
     setFormErrors({})
@@ -188,6 +209,7 @@ export default function DataBarangPage() {
     const barang = barangList.find(b => b.id === id)
     if (!barang) return
     setBarangList(prev => prev.filter(b => b.id !== id))
+    setSelectedIds(prev => prev.filter(selectedId => selectedId !== id))
     toast.success(`Unit dengan SN ${barang.serialNumber} berhasil dihapus dari sistem.`)
   }
 
@@ -195,6 +217,7 @@ export default function DataBarangPage() {
     e.preventDefault()
     const errors: Record<string, string> = {}
     if (!formData.serialNumber.trim()) errors.serialNumber = "Serial number wajib diisi"
+    if (!formData.kategori.trim()) errors.kategori = "Kategori wajib diisi"
     if (!formData.merek.trim()) errors.merek = "Merek barang wajib diisi"
     if (!formData.lokasiPenyimpanan.trim()) errors.lokasiPenyimpanan = "Lokasi penyimpanan wajib diisi"
     if (!formData.tanggalMasuk.trim()) errors.tanggalMasuk = "Tanggal masuk wajib diisi"
@@ -216,10 +239,12 @@ export default function DataBarangPage() {
       const newBarang: BarangUnit = {
         id: `UNIT-${Date.now()}`,
         serialNumber: formData.serialNumber.toUpperCase(),
+        kategori: formData.kategori,
         merek: formData.merek,
         status: formData.status,
         lokasiPenyimpanan: formData.lokasiPenyimpanan,
         tanggalMasuk: formData.tanggalMasuk,
+        tanggalKeluar: formData.tanggalKeluar || undefined,
         operatorInput: formData.operatorInput
       }
       setBarangList(prev => [newBarang, ...prev])
@@ -231,10 +256,12 @@ export default function DataBarangPage() {
           return {
             ...b,
             serialNumber: formData.serialNumber.toUpperCase(),
+            kategori: formData.kategori,
             merek: formData.merek,
             status: formData.status,
             lokasiPenyimpanan: formData.lokasiPenyimpanan,
             tanggalMasuk: formData.tanggalMasuk,
+            tanggalKeluar: formData.tanggalKeluar || undefined,
             operatorInput: formData.operatorInput
           }
         }
@@ -251,6 +278,7 @@ export default function DataBarangPage() {
     return barangList.filter(b => {
       const matchesSearch =
         b.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        b.kategori.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.merek.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.lokasiPenyimpanan.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.operatorInput.toLowerCase().includes(searchTerm.toLowerCase())
@@ -259,19 +287,38 @@ export default function DataBarangPage() {
     })
   }, [barangList, searchTerm, filterStatus])
 
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(filteredBarang.map(b => b.id))
+    } else {
+      setSelectedIds([])
+    }
+  }
+
+  const handleSelectRow = (checked: boolean, id: string) => {
+    if (checked) {
+      setSelectedIds(prev => [...prev, id])
+    } else {
+      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id))
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return
+    setBarangList(prev => prev.filter(b => !selectedIds.includes(b.id)))
+    setSelectedIds([])
+    toast.success(`${selectedIds.length} unit berhasil dihapus dari sistem.`)
+  }
+
   const getStatusBadgeProps = (status: StatusUnit) => {
     switch (status) {
-      case "Tersedia":
-        return { text: "Tersedia", className: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" }
-      case "Terpasang":
-        return { text: "Terpasang", className: "bg-sky-500/10 text-sky-500 border-sky-500/20" }
-      case "Dipinjam":
-        return { text: "Dipinjam", className: "bg-amber-500/10 text-amber-500 border-amber-500/20" }
+      case "Masuk":
+        return { text: "Masuk", className: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" }
+      case "Keluar":
+        return { text: "Keluar", className: "bg-sky-500/10 text-sky-500 border-sky-500/20" }
       case "Rusak":
-        return { text: "Rusak", className: "bg-rose-500/10 text-rose-500 border-rose-500/20" }
-      case "Maintenance":
       default:
-        return { text: "Maintenance", className: "bg-slate-500/10 text-slate-400 border-slate-500/20" }
+        return { text: "Rusak", className: "bg-rose-500/10 text-rose-500 border-rose-500/20" }
     }
   }
 
@@ -300,76 +347,68 @@ export default function DataBarangPage() {
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 animate-fade-in">
-      <Toaster richColors position="top-right" />
-
-      {/* Page Header */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight bg-linear-to-r from-neutral-100 to-neutral-400 bg-clip-text text-transparent">
-            Data Unit Barang
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Pantau setiap unit barang berdasarkan serial number, status fisik, lokasi penyimpanan, dan riwayat aktivitasnya.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 self-start md:self-auto">
-          <Button variant="outline" size="sm" onClick={() => handleExport("Excel")}>
-            <Download className="size-4" />
-            <span>Export Data</span>
-          </Button>
-          <Button
-            size="sm"
-            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-md transition-all active:scale-[0.98]"
-          >
-            <Link to="/barang-masuk" className="flex flex-row items-center">
-              <Plus className="size-4" />
-              <span>Tambah Unit Baru</span>
-            </Link>
-          </Button>
-        </div>
-      </div>
-
       {/* Filter and Search Section */}
-      <Card className="border bg-card/30 backdrop-blur-sm p-4">
+      <Card className="p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute top-2.5 left-3 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Cari serial number, merek, lokasi..."
-              className="pl-9 h-9"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-              <Filter className="size-3.5" />
-              <span>Filter:</span>
+          <div className="flex gap-2">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute top-2 left-3 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Cari serial number, merek, lokasi..."
+                className="pl-9"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[150px] h-9">
-                <SelectValue placeholder="Status Unit" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                {STATUS_OPTIONS.map((status) => (
-                  <SelectItem key={status} value={status}>{status}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {(searchTerm || filterStatus !== "all") && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 px-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setSearchTerm("")
-                  setFilterStatus("all")
-                }}
-              >
-                Reset Filter
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-[150px] py-0">
+                  <SelectValue placeholder="Status Unit" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Status</SelectItem>
+                  {STATUS_OPTIONS.map((status) => (
+                    <SelectItem key={status} value={status}>{status}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {(searchTerm || filterStatus !== "all") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="px-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setSearchTerm("")
+                    setFilterStatus("all")
+                  }}
+                >
+                  Reset Filter
+                </Button>
+              )}
+            </div>
+
+          </div>
+
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            {selectedIds.length > 0 && (
+              <Button variant="outline" onClick={handleBulkDelete}>
+                <Trash2 className="size-4 mr-2" />
+                Hapus ({selectedIds.length})
               </Button>
             )}
+            <Button variant="outline" onClick={() => handleExport("Excel")}>
+              <Download className="size-4" />
+              <span>Export Data</span>
+            </Button>
+            <Button
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-md transition-all active:scale-[0.98]"
+            >
+              <Link to="/barang-masuk" className="flex flex-row items-center">
+                <Plus className="size-4" />
+                <span>Tambah Unit Baru</span>
+              </Link>
+            </Button>
           </div>
         </div>
       </Card>
@@ -379,57 +418,67 @@ export default function DataBarangPage() {
         <Table>
           <TableHeader className="bg-muted/40">
             <TableRow>
+              <TableHead className="w-[50px] text-center">No.</TableHead>
+              <TableHead className="w-[50px] text-center">
+                <Checkbox
+                  checked={filteredBarang.length > 0 && selectedIds.length === filteredBarang.length}
+                  onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
+                  aria-label="Pilih semua"
+                />
+              </TableHead>
               <TableHead className="w-[170px]">Serial Number (SN)</TableHead>
               <TableHead className="w-[140px]">Merek</TableHead>
+              <TableHead className="w-[140px]">Kategori</TableHead>
               <TableHead className="text-center w-[120px]">Status</TableHead>
               <TableHead>Lokasi Penyimpanan</TableHead>
               <TableHead className="hidden md:table-cell w-[130px]">Tanggal Masuk</TableHead>
-              <TableHead className="hidden lg:table-cell w-[150px]">Operator Input</TableHead>
+              <TableHead className="hidden lg:table-cell w-[130px]">Tanggal Keluar</TableHead>
               <TableHead className="w-[60px] text-right"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredBarang.length > 0 ? (
-              filteredBarang.map((item) => {
+              filteredBarang.map((item, index) => {
                 const badge = getStatusBadgeProps(item.status)
                 return (
                   <TableRow
                     key={item.id}
                     className="hover:bg-muted/30 transition-colors cursor-pointer"
                     onClick={() => handleOpenDetail(item)}
+                    data-state={selectedIds.includes(item.id) ? "selected" : undefined}
                   >
-                    <TableCell>
-                      <span className="font-mono text-xs font-bold text-primary">
-                        {item.serialNumber}
-                      </span>
+                    <TableCell className="text-center font-medium">
+                      {index + 1}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()} className="text-center">
+                      <Checkbox
+                        checked={selectedIds.includes(item.id)}
+                        onCheckedChange={(checked) => handleSelectRow(checked as boolean, item.id)}
+                        aria-label={`Pilih ${item.serialNumber}`}
+                      />
                     </TableCell>
                     <TableCell>
-                      <span className="font-semibold text-sm leading-tight">
-                        {item.merek}
-                      </span>
+                      {item.serialNumber}
+                    </TableCell>
+                    <TableCell>
+                      {item.merek}
+                    </TableCell>
+                    <TableCell>
+                      {item.kategori}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge className={`text-[10.5px] font-semibold border px-2 py-0.5 rounded-full ${badge.className}`}>
+                      <Badge className={`font-semibold px-2.5 py-0.5 ${badge.className}`}>
                         {badge.text}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <MapPin className="size-3.5" />
-                        <span>{item.lokasiPenyimpanan}</span>
-                      </div>
+                      {item.lokasiPenyimpanan}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Calendar className="size-3.5" />
-                        <span>{formatTanggal(item.tanggalMasuk)}</span>
-                      </div>
+                      {formatTanggal(item.tanggalMasuk)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <User className="size-3.5" />
-                        <span>{item.operatorInput}</span>
-                      </div>
+                      {formatTanggal(item.tanggalKeluar || "")}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -460,7 +509,7 @@ export default function DataBarangPage() {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="h-28 text-center text-muted-foreground">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Info className="size-6 text-muted-foreground/50" />
                     <p className="text-sm font-medium">Data unit kosong atau pencarian tidak ditemukan.</p>
@@ -473,24 +522,24 @@ export default function DataBarangPage() {
         </Table>
       </div>
 
-      {/* Add / Edit Sheet Form */}
-      <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <SheetContent className="sm:max-w-md flex flex-col h-full bg-card">
-          <SheetHeader className="pb-4 border-b">
-            <SheetTitle>
+      {/* Add / Edit Drawer Form */}
+      <Drawer open={isFormOpen} onOpenChange={setIsFormOpen} direction={isMobile ? "bottom" : "right"}>
+        <DrawerContent>
+          <DrawerHeader className="gap-1">
+            <DrawerTitle>
               {formMode === "add" ? "Registrasi Unit Baru" : "Edit Informasi Unit"}
-            </SheetTitle>
-            <SheetDescription>
+            </DrawerTitle>
+            <DrawerDescription>
               Isi data detail berikut untuk mendaftarkan atau memutakhirkan unit barang berdasarkan serial number di sistem gudang.
-            </SheetDescription>
-          </SheetHeader>
+            </DrawerDescription>
+          </DrawerHeader>
 
-          <ScrollArea className="flex-1 pr-1 -mr-1">
-            <form onSubmit={handleSubmit} className="space-y-4 py-4 px-1">
+          <div className="flex flex-col gap-4 overflow-y-auto px-4 text-sm">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
               {/* Serial Number */}
-              <div className="space-y-2">
-                <Label htmlFor="serialNumber" className="text-xs font-semibold">Serial Number (SN)</Label>
+              <div className="flex flex-col gap-3">
+                <Label htmlFor="serialNumber">Serial Number (SN)</Label>
                 <div className="relative">
                   <ScanLine className="absolute top-2.5 left-3 size-4 text-muted-foreground" />
                   <Input
@@ -503,17 +552,43 @@ export default function DataBarangPage() {
                         setFormErrors(prev => { const next = { ...prev }; delete next.serialNumber; return next })
                       }
                     }}
-                    className={`h-9 pl-9 font-mono text-xs ${formErrors.serialNumber ? "border-destructive" : ""}`}
+                    className={`pl-9 ${formErrors.serialNumber ? "border-destructive" : ""}`}
                   />
                 </div>
                 {formErrors.serialNumber && (
-                  <p className="text-[11px] text-destructive font-medium mt-0.5">{formErrors.serialNumber}</p>
+                  <p className="text-[11px] text-destructive font-medium">{formErrors.serialNumber}</p>
+                )}
+              </div>
+
+              {/* Kategori */}
+              <div className="flex flex-col gap-3">
+                <Label htmlFor="kategori">Kategori</Label>
+                <Select
+                  value={formData.kategori}
+                  onValueChange={(val) => {
+                    setFormData(prev => ({ ...prev, kategori: val }))
+                    if (formErrors.kategori) {
+                      setFormErrors(prev => { const next = { ...prev }; delete next.kategori; return next })
+                    }
+                  }}
+                >
+                  <SelectTrigger id="kategori" className={formErrors.kategori ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Pilih kategori..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {KATEGORI_OPTIONS.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {formErrors.kategori && (
+                  <p className="text-[11px] text-destructive font-medium">{formErrors.kategori}</p>
                 )}
               </div>
 
               {/* Merek */}
-              <div className="space-y-2">
-                <Label htmlFor="merek" className="text-xs font-semibold">Merek</Label>
+              <div className="flex flex-col gap-3">
+                <Label htmlFor="merek">Merek</Label>
                 <Input
                   id="merek"
                   placeholder="MikroTik, Dell, Cisco..."
@@ -524,22 +599,22 @@ export default function DataBarangPage() {
                       setFormErrors(prev => { const next = { ...prev }; delete next.merek; return next })
                     }
                   }}
-                  className={`h-9 ${formErrors.merek ? "border-destructive" : ""}`}
+                  className={formErrors.merek ? "border-destructive" : ""}
                 />
                 {formErrors.merek && (
-                  <p className="text-[11px] text-destructive font-medium mt-0.5">{formErrors.merek}</p>
+                  <p className="text-[11px] text-destructive font-medium">{formErrors.merek}</p>
                 )}
               </div>
 
               {/* Status & Tanggal Masuk */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="status" className="text-xs font-semibold">Status Unit</Label>
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="status">Status Unit</Label>
                   <Select
                     value={formData.status}
                     onValueChange={(val) => setFormData(prev => ({ ...prev, status: val as StatusUnit }))}
                   >
-                    <SelectTrigger id="status" className="h-9">
+                    <SelectTrigger id="status">
                       <SelectValue placeholder="Pilih status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -550,8 +625,8 @@ export default function DataBarangPage() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="tanggalMasuk" className="text-xs font-semibold">Tanggal Masuk</Label>
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="tanggalMasuk">Tanggal Masuk</Label>
                   <Input
                     id="tanggalMasuk"
                     type="date"
@@ -562,43 +637,55 @@ export default function DataBarangPage() {
                         setFormErrors(prev => { const next = { ...prev }; delete next.tanggalMasuk; return next })
                       }
                     }}
-                    className={`h-9 ${formErrors.tanggalMasuk ? "border-destructive" : ""}`}
+                    className={formErrors.tanggalMasuk ? "border-destructive" : ""}
                   />
                   {formErrors.tanggalMasuk && (
-                    <p className="text-[11px] text-destructive font-medium mt-0.5">{formErrors.tanggalMasuk}</p>
+                    <p className="text-[11px] text-destructive font-medium">{formErrors.tanggalMasuk}</p>
                   )}
                 </div>
               </div>
 
-              {/* Lokasi Penyimpanan */}
-              <div className="space-y-2">
-                <Label htmlFor="lokasiPenyimpanan" className="text-xs font-semibold">Lokasi Penyimpanan</Label>
-                <Select
-                  value={formData.lokasiPenyimpanan}
-                  onValueChange={(val) => {
-                    setFormData(prev => ({ ...prev, lokasiPenyimpanan: val }))
-                    if (formErrors.lokasiPenyimpanan) {
-                      setFormErrors(prev => { const next = { ...prev }; delete next.lokasiPenyimpanan; return next })
-                    }
-                  }}
-                >
-                  <SelectTrigger id="lokasiPenyimpanan" className="h-9">
-                    <SelectValue placeholder="Pilih lokasi penyimpanan..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LOKASI_OPTIONS.map((loc) => (
-                      <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {formErrors.lokasiPenyimpanan && (
-                  <p className="text-[11px] text-destructive font-medium mt-0.5">{formErrors.lokasiPenyimpanan}</p>
-                )}
+              {/* Lokasi Penyimpanan & Tanggal Keluar */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="lokasiPenyimpanan">Lokasi Penyimpanan</Label>
+                  <Select
+                    value={formData.lokasiPenyimpanan}
+                    onValueChange={(val) => {
+                      setFormData(prev => ({ ...prev, lokasiPenyimpanan: val }))
+                      if (formErrors.lokasiPenyimpanan) {
+                        setFormErrors(prev => { const next = { ...prev }; delete next.lokasiPenyimpanan; return next })
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="lokasiPenyimpanan">
+                      <SelectValue placeholder="Pilih lokasi penyimpanan..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LOKASI_OPTIONS.map((loc) => (
+                        <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formErrors.lokasiPenyimpanan && (
+                    <p className="text-[11px] text-destructive font-medium">{formErrors.lokasiPenyimpanan}</p>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="tanggalKeluar">Tanggal Keluar</Label>
+                  <Input
+                    id="tanggalKeluar"
+                    type="date"
+                    value={formData.tanggalKeluar || ""}
+                    onChange={(e) => setFormData(prev => ({ ...prev, tanggalKeluar: e.target.value }))}
+                  />
+                </div>
               </div>
 
               {/* Operator Input */}
-              <div className="space-y-2">
-                <Label htmlFor="operatorInput" className="text-xs font-semibold">Operator Input</Label>
+              <div className="flex flex-col gap-3">
+                <Label htmlFor="operatorInput">Operator Input</Label>
                 <Input
                   id="operatorInput"
                   placeholder="Nama petugas yang menginput data..."
@@ -609,158 +696,148 @@ export default function DataBarangPage() {
                       setFormErrors(prev => { const next = { ...prev }; delete next.operatorInput; return next })
                     }
                   }}
-                  className={`h-9 ${formErrors.operatorInput ? "border-destructive" : ""}`}
+                  className={formErrors.operatorInput ? "border-destructive" : ""}
                 />
                 {formErrors.operatorInput && (
-                  <p className="text-[11px] text-destructive font-medium mt-0.5">{formErrors.operatorInput}</p>
+                  <p className="text-[11px] text-destructive font-medium">{formErrors.operatorInput}</p>
                 )}
               </div>
 
-              <SheetFooter className="pt-4 border-t flex flex-row gap-2 justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsFormOpen(false)}
-                  className="w-full sm:w-auto"
-                >
-                  Batal
-                </Button>
+              <DrawerFooter>
                 <Button
                   type="submit"
-                  className="w-full sm:w-auto bg-primary text-primary-foreground font-semibold shadow-md transition-all active:scale-[0.98]"
+                  className="w-full bg-primary text-primary-foreground font-semibold"
                 >
                   Simpan Unit
                 </Button>
-              </SheetFooter>
+                <DrawerClose asChild>
+                  <Button variant="outline" className="w-full">
+                    Batal
+                  </Button>
+                </DrawerClose>
+              </DrawerFooter>
             </form>
-          </ScrollArea>
-        </SheetContent>
-      </Sheet>
+          </div>
+        </DrawerContent>
+      </Drawer>
 
       {/* Detail Drawer */}
-      <Sheet open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <SheetContent side="right" className="sm:max-w-md flex flex-col h-full bg-card border-l border-slate-200/80 dark:border-slate-800/80 p-6 shadow-xl">
+      <Drawer open={isDetailOpen} onOpenChange={setIsDetailOpen} direction={isMobile ? "bottom" : "right"}>
+        <DrawerContent>
           {detailBarang && (
             <>
-              <div className="flex flex-col gap-1 pb-4 border-b border-slate-100 dark:border-slate-800 pr-8">
-                <span className="text-[11px] font-bold text-sky-600 dark:text-sky-400 tracking-wider uppercase">
-                  DETAIL IDENTITAS UNIT
-                </span>
-                <SheetTitle className="text-2xl font-bold font-mono text-slate-900 dark:text-neutral-50 tracking-tight leading-none">
-                  {detailBarang.serialNumber}
-                </SheetTitle>
-              </div>
+              <DrawerHeader className="gap-1">
+                <DrawerTitle>{detailBarang.serialNumber}</DrawerTitle>
+                <DrawerDescription>
+                  Detail identitas unit dan rantai histori pergerakan
+                </DrawerDescription>
+              </DrawerHeader>
 
-              <ScrollArea className="flex-1 pr-1 -mr-1 mt-4">
-                <div className="space-y-6 pb-2 px-1">
-
-                  {/* Metadata Card */}
-                  <div className="grid grid-cols-2 gap-y-4 gap-x-6 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-5 bg-slate-50/50 dark:bg-slate-900/50 text-xs">
-                    <div>
-                      <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">Merek</span>
-                      <strong className="text-slate-800 dark:text-slate-200 text-sm font-bold block">{detailBarang.merek}</strong>
+              <div className="flex flex-col gap-4 overflow-y-auto px-4 text-sm">
+                {/* Metadata */}
+                <form className="flex flex-col gap-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-3">
+                      <Label>Merek</Label>
+                      <Input readOnly defaultValue={detailBarang.merek} />
                     </div>
-                    <div>
-                      <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-1">Status Gudang</span>
-                      <div>
-                        {(() => {
-                          const badge = getStatusBadgeProps(detailBarang.status)
-                          return (
-                            <Badge className={`text-[10px] font-semibold border px-2.5 py-0.5 rounded-full ${badge.className}`}>
-                              {badge.text}
-                            </Badge>
-                          )
-                        })()}
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">Lokasi Aktif</span>
-                      <strong className="text-slate-800 dark:text-slate-200 text-sm font-bold flex items-center gap-1">
-                        <MapPin className="size-3.5 text-sky-500" />
-                        {detailBarang.lokasiPenyimpanan}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">Lokasi Terakhir</span>
-                      <strong className="text-slate-800 dark:text-slate-200 text-sm font-bold block">
-                        {recentRiwayat.length > 1 ? recentRiwayat[1].lokasi : "-"}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">Tanggal Masuk</span>
-                      <strong className="text-slate-800 dark:text-slate-200 text-sm font-bold block">{detailBarang.tanggalMasuk}</strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">Tanggal Keluar</span>
-                      <strong className="text-slate-800 dark:text-slate-200 text-sm font-bold block">
-                        {(() => {
-                          const exitAction = recentRiwayat.find(r => r.tipe !== "Masuk")
-                          return exitAction ? exitAction.tanggal : "-"
-                        })()}
-                      </strong>
-                    </div>
-
-                    <div className="col-span-2">
-                      <span className="text-slate-400 dark:text-slate-500 font-semibold block mb-0.5">Petugas Terdaftar</span>
-                      <strong className="text-slate-800 dark:text-slate-200 text-sm font-bold block">{detailBarang.operatorInput}</strong>
+                    <div className="flex flex-col gap-3">
+                      <Label>Kategori</Label>
+                      <Input readOnly defaultValue={detailBarang.kategori} />
                     </div>
                   </div>
 
-                  {/* Ledger Timeline */}
-                  <div className="space-y-4">
-                    <h3 className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                      <History className="size-4 text-slate-400 dark:text-slate-500" />
-                      RANTAI HISTORI PERGERAKAN (LEDGER)
-                    </h3>
-                    <div className="pl-1">
-                      {recentRiwayat.length > 0 ? (
-                        recentRiwayat.map((riw, idx) => (
-                          <div key={idx} className="relative pl-7 pb-6 last:pb-1">
-                            {idx < recentRiwayat.length - 1 && (
-                              <div className="absolute left-[7px] top-[22px] bottom-0 w-[2px] bg-slate-100 dark:bg-slate-800/80" />
-                            )}
-                            <div className="absolute left-0 top-[6px] w-4 h-4 rounded-full border border-sky-300 dark:border-sky-500/50 flex items-center justify-center bg-white dark:bg-slate-900 shadow-xs">
-                              <div className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+                  <div className="flex flex-col gap-3">
+                    <Label>Status Gudang</Label>
+                    <Input readOnly defaultValue={getStatusBadgeProps(detailBarang.status).text} />
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <Label>Lokasi Aktif</Label>
+                    <Input readOnly defaultValue={detailBarang.lokasiPenyimpanan} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-3">
+                      <Label>Tanggal Masuk</Label>
+                      <Input readOnly defaultValue={detailBarang.tanggalMasuk} />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <Label>Tanggal Keluar</Label>
+                      <Input readOnly defaultValue={(() => {
+                        const exitAction = recentRiwayat.find(r => r.tipe !== "Masuk")
+                        return exitAction ? exitAction.tanggal : "-"
+                      })()} />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <Label>Petugas Terdaftar</Label>
+                    <Input readOnly defaultValue={detailBarang.operatorInput} />
+                  </div>
+                </form>
+
+                {/* Ledger Timeline */}
+                <div className="flex flex-col gap-4 pt-2">
+                  <div className="flex gap-2 leading-none font-medium">
+                    Rantai Histori Pergerakan
+                  </div>
+                  <div>
+                    {recentRiwayat.length > 0 ? (
+                      <div className="space-y-0">
+                        {recentRiwayat.map((riw, idx) => (
+                          <div key={idx} className="flex gap-4">
+                            <div className="flex flex-col items-center">
+                              <div className="w-2.5 h-2.5 shrink-0 rounded-full bg-border border-2 border-muted-foreground mt-1.5" />
+                              {idx < recentRiwayat.length - 1 && (
+                                <div className="w-px h-full bg-border my-1" />
+                              )}
                             </div>
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between">
-                                <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{riw.tipe}</span>
-                                <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">{riw.tanggal}</span>
+                            <div className="flex-1 pb-6 last:pb-1">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+                                <span className="font-medium text-foreground">{riw.tipe}</span>
+                                <span className="text-xs text-muted-foreground">{riw.tanggal}</span>
                               </div>
-                              <div className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">
-                                {riw.nomorSurat} ({riw.oleh})
+                              <div className="text-muted-foreground mb-2.5">
+                                {riw.nomorSurat}
                               </div>
-                              <div className="mt-1.5 px-3 py-2 rounded-lg border border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/40 text-xs font-mono flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                                <span className="text-slate-400 dark:text-slate-500">{riw.dariStatus}</span>
-                                <span className="text-slate-300 dark:text-slate-700">→</span>
-                                <span className="font-semibold text-emerald-600 dark:text-emerald-400">{riw.keStatus}</span>
-                                <span className="text-slate-300 dark:text-slate-700">|</span>
-                                <span>Loc: <span className="text-slate-700 dark:text-slate-300 font-medium">{riw.lokasi}</span></span>
+                              <div className="bg-muted/40 rounded-lg p-3 text-xs border border-border/50">
+                                <div className="flex items-center gap-2 mb-1.5 text-muted-foreground">
+                                  <span>{riw.dariStatus}</span>
+                                  <span>&rarr;</span>
+                                  <span className="font-medium text-foreground">{riw.keStatus}</span>
+                                </div>
+                                <div className="text-muted-foreground">
+                                  Loc: <span className="font-medium text-foreground">{riw.lokasi}</span>
+                                </div>
                               </div>
                               {riw.catatan && (
-                                <p className="text-xs italic text-slate-500 dark:text-slate-400 mt-1.5 px-1 leading-snug">
+                                <p className="text-xs italic text-muted-foreground mt-2.5">
                                   {riw.catatan}
                                 </p>
                               )}
                             </div>
                           </div>
-                        ))
-                      ) : (
-                        <div className="border border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-6 bg-slate-50/20 dark:bg-slate-900/10 text-center text-xs text-slate-400 dark:text-slate-500 italic">
-                          Belum ada riwayat aktivitas tercatat untuk unit ini.
-                        </div>
-                      )}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-xs text-muted-foreground border-2 border-dashed border-border rounded-xl">
+                        Belum ada riwayat aktivitas tercatat.
+                      </div>
+                    )}
                   </div>
-
                 </div>
-              </ScrollArea>
+              </div>
+
+              <DrawerFooter>
+                <DrawerClose asChild>
+                  <Button variant="outline" className="w-full">Tutup</Button>
+                </DrawerClose>
+              </DrawerFooter>
             </>
           )}
-        </SheetContent>
-      </Sheet>
+        </DrawerContent>
+      </Drawer>
 
     </div>
   )
