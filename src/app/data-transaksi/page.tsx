@@ -14,6 +14,16 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 const KATEGORI_OPTIONS = ["Masuk", "Keluar", "Rusak"]
 
@@ -30,11 +40,23 @@ type Transaction = {
   operator: string;
 };
 
+type DeleteDialogState =
+  | {
+    type: "single"
+    ids: string[]
+    transactionNumber: string
+  }
+  | {
+    type: "bulk"
+    ids: string[]
+  }
+
 export default function DataTransaksiPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterKategori, setFilterKategori] = useState("all")
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null)
 
   const fetchTransactions = async () => {
     try {
@@ -51,29 +73,40 @@ export default function DataTransaksiPage() {
   }, [])
 
   const handleBulkDelete = async () => {
-    try {
-      for (const id of selectedIds) {
-        await invoke("delete_transaction", { id });
-      }
-      toast.success(`${selectedIds.length} transaksi berhasil dihapus.`)
-      setSelectedIds([])
-      fetchTransactions();
-    } catch (error) {
-      console.error("Gagal menghapus transaksi:", error);
-      toast.error("Gagal menghapus transaksi.");
-    }
+    if (selectedIds.length === 0) return
+    setDeleteDialog({
+      type: "bulk",
+      ids: selectedIds,
+    })
   }
 
   const handleDeleteRow = async (id: string) => {
+    const transaction = transactions.find((item) => item.id === id);
+    if (!transaction) return;
+    setDeleteDialog({
+      type: "single",
+      ids: [id],
+      transactionNumber: transaction.nomor,
+    })
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteDialog) return
+    const idsToDelete = deleteDialog.ids
+
     try {
-      await invoke("delete_transaction", { id });
-      toast.success("Transaksi berhasil dihapus.");
-      fetchTransactions();
+      for (const id of idsToDelete) {
+        await invoke("delete_transaction", { id });
+      }
+      toast.success(deleteDialog.type === "single" ? "Transaksi berhasil dihapus." : `${idsToDelete.length} transaksi berhasil dihapus.`)
+      setSelectedIds((current) => current.filter((id) => !idsToDelete.includes(id)))
+      setDeleteDialog(null)
+      await fetchTransactions();
     } catch (error) {
       console.error("Gagal menghapus transaksi:", error);
-      toast.error("Gagal menghapus transaksi.");
+      toast.error(deleteDialog.type === "single" ? "Gagal menghapus transaksi." : "Gagal menghapus beberapa transaksi.");
     }
-  };
+  }
 
   const handleExport = (format: string) => {
     toast.success(`Data transaksi berhasil diekspor sebagai ${format}.`)
@@ -171,6 +204,27 @@ export default function DataTransaksiPage() {
         onSelectionChange={setSelectedIds}
         onDeleteRow={handleDeleteRow}
       />
+
+      <AlertDialog open={deleteDialog !== null} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteDialog?.type === "bulk" ? "Hapus beberapa transaksi?" : "Hapus transaksi ini?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteDialog?.type === "bulk"
+                ? `${deleteDialog.ids.length} transaksi akan dihapus permanen dari riwayat.`
+                : `Transaksi ${deleteDialog?.transactionNumber} akan dihapus permanen dari riwayat.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

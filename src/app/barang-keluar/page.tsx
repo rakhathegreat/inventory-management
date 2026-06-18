@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Archive, BadgeCheck, Boxes, PackageMinus, X } from "lucide-react";
+import { Archive, BadgeCheck, Boxes, PackageMinus, ScanLine, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -63,6 +65,7 @@ function EmptyScanTableState() {
 
 export default function BarangKeluarPage() {
   const [kodeBarang, setKodeBarang] = useState("");
+  const [inputMode, setInputMode] = useState<"auto" | "manual">("auto");
   const [barangKeluar, setBarangKeluar] = useState<BarangKeluarItem[]>([]);
   const [kuota, setKuota] = useState<Record<string, number>>({});
   const inputRef = useRef<HTMLInputElement>(null);
@@ -77,7 +80,7 @@ export default function BarangKeluarPage() {
 
         const locationsData = await invoke<any[]>("get_locations");
         const newKuota: Record<string, number> = {};
-        
+
         locationsData.forEach(loc => {
           if (loc.type === "Rak" && loc.levels) {
             loc.levels.forEach((lvl: any) => {
@@ -91,6 +94,7 @@ export default function BarangKeluarPage() {
         setKuota(newKuota);
       } catch (error) {
         console.error("Gagal mengambil data dari SQLite:", error);
+        toast.error("Gagal memuat data barang keluar.");
       }
     };
     fetchItemsAndLocations();
@@ -124,7 +128,9 @@ export default function BarangKeluarPage() {
     );
 
     if (isDuplicate) {
-      alert(`Nomor SN "${trimmedKode}" sudah ada dalam daftar! Tidak bisa duplikat.`);
+      toast.error("Serial number sudah ada di sesi ini.", {
+        description: trimmedKode,
+      });
       updateKodeBarang("");
       focusKodeBarangInput();
       return;
@@ -136,7 +142,9 @@ export default function BarangKeluarPage() {
     );
 
     if (!matchedItem) {
-      alert(`Data dengan kode "${trimmedKode}" tidak ditemukan!`);
+      toast.error("Data serial number tidak ditemukan.", {
+        description: trimmedKode,
+      });
       updateKodeBarang("");
       focusKodeBarangInput();
       return;
@@ -276,7 +284,7 @@ export default function BarangKeluarPage() {
         };
         await invoke("add_transaction", { transaction: newTransaction });
       }
-      alert(`Validasi & Simpan ${barangKeluar.length} Barang Keluar - Berhasil!`);
+      toast.success(`${barangKeluar.length} barang keluar berhasil disimpan.`);
       setBarangKeluar([]); // Clear local state after saving
 
       // Refresh DB Items after update
@@ -284,12 +292,12 @@ export default function BarangKeluarPage() {
       setDbItems(items as any[]);
     } catch (error) {
       console.error("Gagal menyimpan ke database:", error);
-      alert("Terjadi kesalahan saat menyimpan barang keluar ke database!");
+      toast.error("Gagal menyimpan barang keluar ke database.");
     }
   };
 
   return (
-    <div className="@container/main flex flex-col h-full gap-4 py-4 md:gap-6 md:py-6">
+    <div className="@container/main flex h-full select-none flex-col gap-4 py-4 md:gap-6 md:py-6">
       <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card">
         <Card className="@container/card relative">
           <div className="flex flex-row items-center">
@@ -358,52 +366,85 @@ export default function BarangKeluarPage() {
 
       <div className="grid h-full gap-4 px-4 lg:px-6 @5xl/main:grid-cols-[minmax(320px,380px)_1fr]">
         <Card className="@container/card flex flex-col @5xl/main:min-h-[calc(100svh-var(--header-height)-15rem)]">
-          <CardHeader className="flex flex-row items-start gap-3 pb-2">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <PackageMinus className="size-5" />
-            </div>
-            <div className="space-y-1">
-              <CardTitle>Barang Keluar</CardTitle>
-              <CardDescription>
-                Pindai kode atau keluarkan SN, lalu pilih merek fallback bila perlu.
-              </CardDescription>
-            </div>
-          </CardHeader>
+          <Tabs
+            value={inputMode}
+            onValueChange={(value) => {
+              setInputMode(value as "auto" | "manual");
+              focusKodeBarangInput();
+            }}
+            className="flex flex-1 flex-col gap-4"
+          >
+            <CardHeader className="flex flex-col gap-4 pb-2">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="auto">Auto</TabsTrigger>
+                <TabsTrigger value="manual">Manual</TabsTrigger>
+              </TabsList>
+            </CardHeader>
 
-          <CardContent className="flex flex-1 flex-col gap-4">
-            <div className="flex flex-col gap-3">
-              <Label htmlFor="kode-barang">Kode / SN</Label>
-              <Input
-                ref={inputRef}
-                id="kode-barang"
-                value={kodeBarang}
-                onChange={(event) => updateKodeBarang(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                placeholder="Masukkan kode barang atau serial number"
-              />
-            </div>
-          </CardContent>
+            <CardContent className="flex flex-1 flex-col gap-4">
+              <TabsContent value="auto" className="mt-0 flex flex-1 flex-col">
+                <Input
+                  ref={inputRef}
+                  id="kode-barang-auto"
+                  value={kodeBarang}
+                  onChange={(event) => updateKodeBarang(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
+                  placeholder="Masukkan kode barang atau serial number"
+                  className="hidden"
+                />
+                <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border border-dashed bg-muted/20 px-6 py-10 text-center">
+                  <div className="flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <ScanLine className="size-8 animate-pulse" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-base font-semibold text-foreground">
+                      Silakan scan menggunakan scanner
+                    </p>
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      Sistem akan menangkap kode secara otomatis dan menambahkannya ke daftar barang keluar.
+                    </p>
+                  </div>
+                </div>
+              </TabsContent>
 
-          <CardFooter className="mt-auto justify-end gap-2">
-            <Button className="w-full gap-2 sm:w-auto" size="lg" onClick={() => handleSubmit()}>
-              <PackageMinus className="size-4" />
-              Simpan barang keluar
-            </Button>
-          </CardFooter>
+              <TabsContent value="manual" className="mt-0 flex flex-col gap-3">
+                <Label htmlFor="kode-barang-manual">Kode / SN</Label>
+                <Input
+                  ref={inputRef}
+                  id="kode-barang-manual"
+                  value={kodeBarang}
+                  onChange={(event) => updateKodeBarang(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
+                  placeholder="Masukkan kode barang atau serial number"
+                />
+              </TabsContent>
+            </CardContent>
+          </Tabs>
+
+          {inputMode === "manual" ? (
+            <CardFooter className="mt-auto justify-end gap-2">
+              <Button className="w-full gap-2 sm:w-auto" size="lg" onClick={() => handleSubmit()}>
+                <PackageMinus className="size-4" />
+                Simpan barang keluar
+              </Button>
+            </CardFooter>
+          ) : null}
         </Card>
 
         <Card className="@container/card flex flex-col @5xl/main:min-h-[calc(100svh-var(--header-height)-15rem)]">
           <CardHeader className="flex flex-col gap-3 border-b pb-4 @lg/card:flex-row @lg/card:items-center @lg/card:justify-between">
             <div className="space-y-1">
-              <CardTitle>Daftar Sementara Sesi Scan</CardTitle>
-              <CardDescription>
-                {barangKeluar.length} item barang keluar sebelum diverifikasi dan disimpan permanen.
-              </CardDescription>
+              <CardTitle>Daftar Barang Keluar</CardTitle>
             </div>
             <Badge variant="outline" className="w-fit">
               {barangKeluar.length} Item
@@ -475,8 +516,7 @@ export default function BarangKeluarPage() {
               onClick={handleValidateAll}
               disabled={barangKeluar.length === 0}
             >
-              <BadgeCheck className="size-4" />
-              Validasi & Simpan Semua
+              Simpan
             </Button>
           </CardFooter>
         </Card>

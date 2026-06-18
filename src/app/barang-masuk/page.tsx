@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { BadgeCheck, Boxes, PackagePlus, ScanLine, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -32,6 +34,10 @@ import {
 } from "@/components/ui/table";
 
 type BrandOption = string;
+type BrandDefinition = {
+  name: string;
+  identifier: string;
+};
 type KategoriOption = string;
 type LokasiOption = string;
 
@@ -46,11 +52,19 @@ type BarangMasukItem = {
 
 type KodeBarangUpdate = string | ((current: string) => string);
 
-const detectBrandFromCode = (code: string, brands: string[]): BrandOption => {
+const detectBrandFromCode = (code: string, brands: BrandDefinition[]): BrandOption => {
   if (!code) return "";
-  const prefix = code.substring(0, 3).toUpperCase();
-  const matched = brands.find(b => b.toUpperCase().startsWith(prefix));
-  return matched || "";
+  const normalizedCode = code.trim().toUpperCase();
+  const matchedByIdentifier = brands.find((brand) => {
+    const normalizedIdentifier = brand.identifier.trim().toUpperCase();
+    return normalizedIdentifier && normalizedCode.startsWith(normalizedIdentifier);
+  });
+
+  if (matchedByIdentifier) return matchedByIdentifier.name;
+
+  const prefix = normalizedCode.substring(0, 3);
+  const matchedByName = brands.find((brand) => brand.name.toUpperCase().startsWith(prefix));
+  return matchedByName?.name || "";
 };
 
 const isTextInputTarget = (target: EventTarget | null) => {
@@ -81,13 +95,14 @@ function EmptyScanTableState() {
 
 export default function BarangMasukPage() {
   const [kodeBarang, setKodeBarang] = useState("");
+  const [inputMode, setInputMode] = useState<"auto" | "manual">("auto");
   const [merekFallback, setMerekFallback] = useState<BrandOption>("");
   const [kategoriBarang, setKategoriBarang] = useState<KategoriOption>("");
   const [barangMasuk, setBarangMasuk] = useState<BarangMasukItem[]>([]);
   const [kuota, setKuota] = useState<Record<string, number>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const kodeBarangRef = useRef("");
-  const [dbBrands, setDbBrands] = useState<string[]>([]);
+  const [dbBrands, setDbBrands] = useState<BrandDefinition[]>([]);
   const [dbCategories, setDbCategories] = useState<string[]>([]);
   const [dbLocations, setDbLocations] = useState<string[]>([]);
 
@@ -96,8 +111,11 @@ export default function BarangMasukPage() {
     const fetchData = async () => {
       try {
         const brands = await invoke<any[]>("get_brands");
-        const brandNames = brands.map((b: any) => b.name);
-        setDbBrands(brandNames);
+        const brandDefinitions = brands.map((brand: any) => ({
+          name: brand.name,
+          identifier: brand.identifier || "",
+        }));
+        setDbBrands(brandDefinitions);
 
         const categories = await invoke<any[]>("get_categories");
         const categoryNames = categories.map((c: any) => c.name);
@@ -110,7 +128,7 @@ export default function BarangMasukPage() {
         const locationsData = await invoke<any[]>("get_locations");
         const locs: string[] = [];
         const newKuota: Record<string, number> = {};
-        
+
         locationsData.forEach(loc => {
           if (loc.type === "Rak" && loc.levels) {
             loc.levels.forEach((lvl: any) => {
@@ -128,6 +146,7 @@ export default function BarangMasukPage() {
 
       } catch (error) {
         console.error("Gagal mengambil data dari database:", error);
+        toast.error("Gagal memuat data barang masuk.");
       }
     };
     fetchData();
@@ -172,7 +191,9 @@ export default function BarangMasukPage() {
     );
 
     if (isDuplicate) {
-      alert(`Nomor SN "${trimmedKode}" sudah ada dalam daftar! Tidak bisa duplikat.`);
+      toast.error("Serial number sudah ada di sesi ini.", {
+        description: trimmedKode,
+      });
       updateKodeBarang("");
       focusKodeBarangInput();
       return;
@@ -181,13 +202,15 @@ export default function BarangMasukPage() {
     const defaultLokasi = dbLocations.length > 0 ? dbLocations[0] : "";
 
     if (!defaultLokasi) {
-      alert("Tidak ada lokasi penyimpanan yang tersedia di database!");
+      toast.error("Tidak ada lokasi penyimpanan yang tersedia.");
       return;
     }
 
     // Check if kuota tersedia
     if (kuota[defaultLokasi] <= 0) {
-      alert(`Kuota lokasi "${defaultLokasi}" sudah penuh!`);
+      toast.error("Kuota lokasi sudah penuh.", {
+        description: defaultLokasi,
+      });
       focusKodeBarangInput();
       return;
     }
@@ -276,7 +299,9 @@ export default function BarangMasukPage() {
 
     // Check if kuota lokasi baru tersedia
     if (newLokasi !== oldLokasi && kuota[newLokasi] <= 0) {
-      alert(`Kuota lokasi "${newLokasi}" sudah penuh!`);
+      toast.error("Kuota lokasi sudah penuh.", {
+        description: newLokasi,
+      });
       return;
     }
 
@@ -341,16 +366,16 @@ export default function BarangMasukPage() {
         };
         await invoke("add_transaction", { transaction: newTransaction });
       }
-      alert(`Validasi & Simpan ${barangMasuk.length} Barang Masuk - Berhasil!`);
+      toast.success(`${barangMasuk.length} barang masuk berhasil disimpan.`);
       setBarangMasuk([]); // Clear local state after saving
     } catch (error) {
       console.error("Gagal menyimpan ke database:", error);
-      alert("Terjadi kesalahan saat menyimpan barang masuk ke database!");
+      toast.error("Gagal menyimpan barang masuk ke database.");
     }
   };
 
   return (
-    <div className="@container/main flex flex-col h-full gap-4 py-4 md:gap-6 md:py-6">
+    <div className="@container/main flex h-full select-none flex-col gap-4 py-4 md:gap-6 md:py-6">
       <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card">
         <Card className="@container/card relative">
           <div className="flex flex-row items-center">
@@ -419,107 +444,140 @@ export default function BarangMasukPage() {
 
       <div className="grid h-full gap-4 px-4 lg:px-6 @5xl/main:grid-cols-[minmax(320px,380px)_1fr]">
         <Card className="@container/card flex flex-col @5xl/main:min-h-[calc(107svh-var(--header-height)-15rem)]">
-          <CardHeader className="flex flex-row items-start gap-3 pb-2">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <PackagePlus className="size-5" />
-            </div>
-            <div className="space-y-1">
-              <CardTitle>Barang Masuk</CardTitle>
-              <CardDescription>
-                Pindai kode atau masukkan SN, lalu pilih merek fallback bila perlu.
-              </CardDescription>
-            </div>
-          </CardHeader>
+          <Tabs
+            value={inputMode}
+            onValueChange={(value) => {
+              setInputMode(value as "auto" | "manual");
+              focusKodeBarangInput();
+            }}
+            className="flex flex-1 flex-col gap-4"
+          >
+            <CardHeader className="flex flex-col gap-4 pb-2">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="auto">Auto</TabsTrigger>
+                <TabsTrigger value="manual">Manual</TabsTrigger>
+              </TabsList>
+            </CardHeader>
 
-          <CardContent className="flex flex-1 flex-col gap-4">
-            <div className="flex flex-col gap-3">
-              <Label htmlFor="kode-barang">Kode / SN</Label>
-              <Input
-                ref={inputRef}
-                id="kode-barang"
-                value={kodeBarang}
-                onChange={(event) => updateKodeBarang(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                placeholder="Masukkan kode barang atau serial number"
-              />
-            </div>
+            <CardContent className="flex flex-1 flex-col gap-4">
+              <TabsContent value="auto" className="mt-0 flex flex-1 flex-col">
+                <Input
+                  ref={inputRef}
+                  id="kode-barang-auto"
+                  value={kodeBarang}
+                  onChange={(event) => updateKodeBarang(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
+                  placeholder="Masukkan kode barang atau serial number"
+                  className="hidden"
+                />
+                <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border border-dashed bg-muted/20 px-6 py-10 text-center">
+                  <div className="flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <ScanLine className="size-8 animate-pulse" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-base font-semibold text-foreground">
+                      Silakan scan menggunakan scanner
+                    </p>
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      Sistem akan menangkap kode secara otomatis dan menambahkannya ke daftar barang masuk.
+                    </p>
+                  </div>
+                </div>
+              </TabsContent>
 
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-4">
-                <Label htmlFor="merek-fallback">Merek fallback</Label>
-                <span className="text-xs text-muted-foreground">
-                  {merekFallback && detectedBrand === merekFallback
-                    ? "Terdeteksi otomatis"
-                    : "Jika pola SN tidak dikenali"}
-                </span>
-              </div>
-              <Select
-                value={merekFallback}
-                onValueChange={(value) => {
-                  setMerekFallback(value as BrandOption);
-                  focusKodeBarangInput();
-                }}
-              >
-                <SelectTrigger id="merek-fallback" className="w-full">
-                  <SelectValue placeholder="Pilih merek" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {dbBrands.map((brand) => (
-                      <SelectItem key={brand} value={brand}>
-                        {brand}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
+              <TabsContent value="manual" className="mt-0 flex flex-col gap-3">
+                <Label htmlFor="kode-barang-manual">Kode / SN</Label>
+                <Input
+                  ref={inputRef}
+                  id="kode-barang-manual"
+                  value={kodeBarang}
+                  onChange={(event) => updateKodeBarang(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
+                  placeholder="Masukkan kode barang atau serial number"
+                />
 
-            <div className="flex flex-col gap-3">
-              <Label htmlFor="kategori-barang">Kategori Barang</Label>
-              <Select
-                value={kategoriBarang}
-                onValueChange={(value) => {
-                  setKategoriBarang(value as KategoriOption);
-                  focusKodeBarangInput();
-                }}
-              >
-                <SelectTrigger id="kategori-barang" className="w-full">
-                  <SelectValue placeholder="Pilih kategori" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {dbCategories.map((kategori) => (
-                      <SelectItem key={kategori} value={kategori}>
-                        {kategori}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <Label htmlFor="merek-fallback">Merek fallback</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {merekFallback && detectedBrand === merekFallback
+                        ? "Terdeteksi otomatis"
+                        : "Jika pola SN tidak dikenali"}
+                    </span>
+                  </div>
+                  <Select
+                    value={merekFallback}
+                    onValueChange={(value) => {
+                      setMerekFallback(value as BrandOption);
+                      focusKodeBarangInput();
+                    }}
+                  >
+                    <SelectTrigger id="merek-fallback" className="w-full">
+                      <SelectValue placeholder="Pilih merek" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {dbBrands.map((brand) => (
+                          <SelectItem key={brand.name} value={brand.name}>
+                            {brand.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-          <CardFooter className="mt-auto justify-end gap-2">
-            <Button className="w-full gap-2 sm:w-auto" size="lg" onClick={() => handleSubmit()}>
-              <PackagePlus className="size-4" />
-              Simpan barang masuk
-            </Button>
-          </CardFooter>
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="kategori-barang">Kategori Barang</Label>
+                  <Select
+                    value={kategoriBarang}
+                    onValueChange={(value) => {
+                      setKategoriBarang(value as KategoriOption);
+                      focusKodeBarangInput();
+                    }}
+                  >
+                    <SelectTrigger id="kategori-barang" className="w-full">
+                      <SelectValue placeholder="Pilih kategori" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {dbCategories.map((kategori) => (
+                          <SelectItem key={kategori} value={kategori}>
+                            {kategori}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </TabsContent>
+            </CardContent>
+          </Tabs>
+
+          {inputMode === "manual" ? (
+            <CardFooter className="mt-auto justify-end gap-2">
+              <Button className="w-full gap-2 sm:w-auto" size="lg" onClick={() => handleSubmit()}>
+                <PackagePlus className="size-4" />
+                Simpan barang masuk
+              </Button>
+            </CardFooter>
+          ) : null}
         </Card>
 
         <Card className="@container/card flex flex-col @5xl/main:min-h-[calc(100svh-var(--header-height)-15rem)]">
           <CardHeader className="flex flex-col gap-3 border-b pb-4 @lg/card:flex-row @lg/card:items-center @lg/card:justify-between">
             <div className="space-y-1">
-              <CardTitle>Daftar Sementara Sesi Scan</CardTitle>
-              <CardDescription>
-                {barangMasuk.length} item barang masuk sebelum diverifikasi dan disimpan permanen.
-              </CardDescription>
+              <CardTitle>Daftar Barang Masuk</CardTitle>
             </div>
             <Badge variant="outline" className="w-fit">
               {barangMasuk.length} Item
@@ -564,7 +622,9 @@ export default function BarangMasukPage() {
                             onValueChange={(value) => {
                               const selectedLokasi = value as LokasiOption;
                               if (kuota[selectedLokasi] <= 0) {
-                                alert(`Kuota lokasi "${selectedLokasi}" sudah penuh dan tidak dapat dipilih.`);
+                                toast.error("Kuota lokasi sudah penuh dan tidak dapat dipilih.", {
+                                  description: selectedLokasi,
+                                });
                                 focusKodeBarangInput();
                                 return;
                               }
@@ -621,8 +681,7 @@ export default function BarangMasukPage() {
               onClick={handleValidateAll}
               disabled={barangMasuk.length === 0}
             >
-              <BadgeCheck className="size-4" />
-              Validasi & Simpan Semua
+              Simpan Semua
             </Button>
           </CardFooter>
         </Card>

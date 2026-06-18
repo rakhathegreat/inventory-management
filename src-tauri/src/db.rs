@@ -21,9 +21,39 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
         "CREATE TABLE IF NOT EXISTS brands (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
+            identifier TEXT NOT NULL DEFAULT '',
             origin TEXT NOT NULL,
             total_items INTEGER DEFAULT 0
         )",
+        [],
+    )?;
+
+    let has_brand_identifier = {
+        let mut stmt = conn.prepare("PRAGMA table_info(brands)")?;
+        let columns = stmt.query_map([], |row| row.get::<_, String>(1))?;
+        let mut has_column = false;
+
+        for column in columns {
+            if column? == "identifier" {
+                has_column = true;
+                break;
+            }
+        }
+
+        has_column
+    };
+
+    if !has_brand_identifier {
+        conn.execute(
+            "ALTER TABLE brands ADD COLUMN identifier TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
+
+    conn.execute(
+        "UPDATE brands
+         SET identifier = UPPER(SUBSTR(TRIM(name), 1, 3))
+         WHERE identifier IS NULL OR TRIM(identifier) = ''",
         [],
     )?;
 

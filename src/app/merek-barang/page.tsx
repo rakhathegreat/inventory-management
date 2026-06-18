@@ -27,6 +27,7 @@ import { toast } from "sonner";
 type Merek = {
   id: string;
   name: string;
+  identifier: string;
   origin: string;
   totalItems: number;
 };
@@ -44,6 +45,7 @@ export default function MerekBarangPage() {
 
   // Form state
   const [name, setName] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [origin, setOrigin] = useState("");
 
   const loadBrands = async () => {
@@ -62,6 +64,7 @@ export default function MerekBarangPage() {
   const filteredBrands = useMemo(() => {
     return brands.filter(brand =>
       brand.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      brand.identifier.toLowerCase().includes(searchQuery.toLowerCase()) ||
       brand.origin.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [brands, searchQuery]);
@@ -71,11 +74,13 @@ export default function MerekBarangPage() {
       const brand = brands.find(b => b.id === id);
       if (brand) {
         setName(brand.name);
+        setIdentifier(brand.identifier);
         setOrigin(brand.origin);
         setEditId(id);
       }
     } else {
       setName("");
+      setIdentifier("");
       setOrigin("");
       setEditId(null);
     }
@@ -84,21 +89,26 @@ export default function MerekBarangPage() {
 
   const handleSave = async () => {
     try {
+      const normalizedIdentifier = identifier.trim().toUpperCase();
+
       if (editId) {
         const brand = brands.find(b => b.id === editId);
         await invoke("update_brand", {
           brand: {
             id: editId,
             name,
+            identifier: normalizedIdentifier,
             origin,
             totalItems: brand?.totalItems || 0
           }
         });
       } else {
+        const trimmedName = name.trim();
         await invoke("add_brand", {
           brand: {
             id: `mrk-${Date.now()}`,
-            name: name || "Merek Baru",
+            name: trimmedName || "Merek Baru",
+            identifier: normalizedIdentifier || (trimmedName || "MRK").slice(0, 3).toUpperCase(),
             origin: origin || "-",
             totalItems: 0
           }
@@ -141,7 +151,7 @@ export default function MerekBarangPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
           <Input
             type="search"
-            placeholder="Cari merek..."
+            placeholder="Cari merek atau identifier..."
             className="w-full pl-9 bg-neutral-900 border-neutral-800 focus-visible:ring-1 focus-visible:ring-neutral-700"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -179,7 +189,7 @@ export default function MerekBarangPage() {
 
               <div>
                 <h3 className="font-semibold text-lg text-neutral-100 mb-1">{brand.name}</h3>
-                <p className="text-sm text-neutral-500 line-clamp-1">{brand.origin}</p>
+                <p className="text-sm text-neutral-500 line-clamp-1">{brand.identifier}</p>
               </div>
 
               <div className="mt-auto pt-4 border-t border-neutral-800/60 flex justify-between items-center">
@@ -214,6 +224,15 @@ export default function MerekBarangPage() {
               <div className="space-y-2">
                 <Label>Nama Merek</Label>
                 <Input value={name} onChange={e => setName(e.target.value)} placeholder="Contoh: Cisco" className="bg-neutral-900 border-neutral-800" />
+              </div>
+              <div className="space-y-2">
+                <Label>Identifier</Label>
+                <Input
+                  value={identifier}
+                  onChange={e => setIdentifier(e.target.value.toUpperCase())}
+                  placeholder="Contoh: CIS"
+                  className="bg-neutral-900 border-neutral-800 font-mono uppercase"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Asal / Deskripsi</Label>

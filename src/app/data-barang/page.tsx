@@ -51,6 +51,16 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 import { toast } from "sonner"
 import { Link } from "react-router-dom"
@@ -79,6 +89,17 @@ interface RiwayatUnit {
   oleh: string;
   catatan?: string;
 }
+
+type DeleteDialogState =
+  | {
+    type: "single"
+    ids: string[]
+    serialNumber: string
+  }
+  | {
+    type: "bulk"
+    ids: string[]
+  }
 
 const STATUS_OPTIONS: StatusUnit[] = ["Masuk", "Keluar", "Rusak"]
 
@@ -164,6 +185,7 @@ export default function DataBarangPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [detailBarang, setDetailBarang] = useState<BarangUnit | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null)
 
   const resetForm = () => {
     setFormData({
@@ -205,13 +227,33 @@ export default function DataBarangPage() {
   const handleDelete = async (id: string) => {
     const barang = barangList.find(b => b.id === id)
     if (!barang) return
+    setDeleteDialog({
+      type: "single",
+      ids: [id],
+      serialNumber: barang.serialNumber,
+    })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteDialog) return
+    const idsToDelete = deleteDialog.ids
+
     try {
-      await invoke("delete_item", { id })
-      setBarangList(prev => prev.filter(b => b.id !== id))
-      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id))
-      toast.success(`Unit dengan SN ${barang.serialNumber} berhasil dihapus dari sistem.`)
+      for (const id of idsToDelete) {
+        await invoke("delete_item", { id })
+      }
+
+      setBarangList(prev => prev.filter(b => !idsToDelete.includes(b.id)))
+      setSelectedIds(prev => prev.filter(selectedId => !idsToDelete.includes(selectedId)))
+      setDeleteDialog(null)
+
+      if (deleteDialog.type === "single") {
+        toast.success(`Unit dengan SN ${deleteDialog.serialNumber} berhasil dihapus dari sistem.`)
+      } else {
+        toast.success(`${idsToDelete.length} unit berhasil dihapus dari sistem.`)
+      }
     } catch (error) {
-      toast.error("Gagal menghapus unit.")
+      toast.error(deleteDialog.type === "single" ? "Gagal menghapus unit." : "Gagal menghapus beberapa unit.")
     }
   }
 
@@ -316,16 +358,10 @@ export default function DataBarangPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return
-    try {
-      for (const id of selectedIds) {
-        await invoke("delete_item", { id })
-      }
-      setBarangList(prev => prev.filter(b => !selectedIds.includes(b.id)))
-      setSelectedIds([])
-      toast.success(`${selectedIds.length} unit berhasil dihapus dari sistem.`)
-    } catch (error) {
-      toast.error("Gagal menghapus beberapa unit.")
-    }
+    setDeleteDialog({
+      type: "bulk",
+      ids: selectedIds,
+    })
   }
 
   const getStatusBadgeProps = (status: StatusUnit) => {
@@ -853,6 +889,27 @@ export default function DataBarangPage() {
           )}
         </DrawerContent>
       </Drawer>
+
+      <AlertDialog open={deleteDialog !== null} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteDialog?.type === "bulk" ? "Hapus beberapa unit?" : "Hapus unit ini?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteDialog?.type === "bulk"
+                ? `${deleteDialog.ids.length} unit akan dihapus dari sistem. Semua transaksi yang terkait dengan serial number unit tersebut juga akan ikut dihapus.`
+                : `Unit dengan SN ${deleteDialog?.serialNumber} akan dihapus dari sistem. Semua transaksi terkait serial number ini juga akan ikut dihapus.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   )
