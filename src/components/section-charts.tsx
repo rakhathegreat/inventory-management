@@ -40,62 +40,34 @@ const chartConfig = {
     },
 } satisfies ChartConfig
 
-const notifications = [
-    {
-        id: 1,
-        title: "Stok Barang Menipis",
-        description: "Stok Kabel UTP Cat6 sisa 5 roll. Segera restock.",
-        time: "2 jam yang lalu",
-        icon: AlertTriangle,
-        read: false,
-        color: "text-red-500",
-        bg: "bg-red-500/10",
-    },
-    {
-        id: 2,
-        title: "Barang Masuk Berhasil",
-        description: "100 unit Router Mikrotik RB750Gr3 telah ditambahkan.",
-        time: "5 jam yang lalu",
-        icon: Check,
-        read: false,
-        color: "text-emerald-500",
-        bg: "bg-emerald-500/10",
-    },
-    {
-        id: 3,
-        title: "Pembaruan Sistem",
-        description: "Sistem akan maintenance pada pukul 00:00 WIB.",
-        time: "1 hari yang lalu",
-        icon: Info,
-        read: true,
-        color: "text-blue-500",
-        bg: "bg-blue-500/10",
-    },
-    {
-        id: 4,
-        title: "Barang Keluar",
-        description: "50 unit ONT ZTE F609 telah dikeluarkan untuk teknisi Budi.",
-        time: "1 hari yang lalu",
-        icon: Check,
-        read: true,
-        color: "text-emerald-500",
-        bg: "bg-emerald-500/10",
-    },
-    {
-        id: 5,
-        title: "Laporan Mingguan Siap",
-        description: "Laporan mutasi barang minggu ke-2 telah di-generate.",
-        time: "2 hari yang lalu",
-        icon: Info,
-        read: true,
-        color: "text-blue-500",
-        bg: "bg-blue-500/10",
-    },
-]
+type NotificationItem = {
+    id: string
+    title: string
+    message: string
+    type: string
+    date: string
+    isRead: boolean
+}
 
 export function SectionCharts() {
-    const [items, setItems] = React.useState(notifications)
-    const unreadCount = items.filter((n) => !n.read).length
+    const [items, setItems] = React.useState<NotificationItem[]>([])
+
+    const fetchNotifications = React.useCallback(async () => {
+        try {
+            const data = await invoke<NotificationItem[]>("get_notifications")
+            setItems(data)
+        } catch (error) {
+            console.error("Failed to fetch notifications:", error)
+        }
+    }, [])
+
+    React.useEffect(() => {
+        fetchNotifications()
+        const interval = setInterval(fetchNotifications, 10000)
+        return () => clearInterval(interval)
+    }, [fetchNotifications])
+
+    const unreadCount = items.filter((n) => !n.isRead).length
 
     // Storage capacity from DB
     const [totalCapacity, setTotalCapacity] = React.useState(0)
@@ -133,18 +105,57 @@ export function SectionCharts() {
         fetchCapacity()
     }, [])
 
-    const markAsRead = (id: number) => {
-        setItems(items.map((item) => (item.id === id ? { ...item, read: true } : item)))
+    const markAsRead = async (id: string) => {
+        try {
+            await invoke("mark_notification_read", { id })
+            fetchNotifications()
+        } catch (error) {
+            console.error("Failed to mark as read:", error)
+        }
     }
 
-    const markAllAsRead = (e: React.MouseEvent) => {
+    const markAllAsRead = async (e: React.MouseEvent) => {
         e.preventDefault()
-        setItems(items.map((item) => ({ ...item, read: true })))
+        try {
+            await invoke("mark_all_notifications_read")
+            fetchNotifications()
+        } catch (error) {
+            console.error("Failed to mark all as read:", error)
+        }
     }
 
-    const deleteNotification = (e: React.MouseEvent, id: number) => {
+    const deleteNotification = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation()
-        setItems(items.filter((item) => item.id !== id))
+        try {
+            await invoke("delete_notification", { id })
+            fetchNotifications()
+        } catch (error) {
+            console.error("Failed to delete notification:", error)
+        }
+    }
+
+    const getIconProps = (type: string) => {
+        switch (type) {
+            case "warning":
+                return { icon: AlertTriangle, color: "text-red-500", bg: "bg-red-500/10" }
+            case "success":
+                return { icon: Check, color: "text-emerald-500", bg: "bg-emerald-500/10" }
+            case "error":
+                return { icon: X, color: "text-red-600", bg: "bg-red-600/10" }
+            case "info":
+            default:
+                return { icon: Info, color: "text-blue-500", bg: "bg-blue-500/10" }
+        }
+    }
+
+    const formatTime = (dateStr: string) => {
+        const date = new Date(dateStr)
+        return date.toLocaleString('id-ID', {
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+        })
     }
 
     return (
@@ -250,56 +261,59 @@ export function SectionCharts() {
                                     <BadgeCheck strokeWidth={1.5} className="text-muted-foreground/40 h-10 w-10 mx-auto" />
                                     <p className="text-muted-foreground/60 text-sm">Tidak ada notifikasi baru.</p>
                                 </div>
-                            ) : items.map((notification) => (
-                                <button
-                                    key={notification.id}
-                                    onClick={() => markAsRead(notification.id)}
-                                    className={cn(
-                                        "group flex items-start gap-3 rounded-lg p-3 text-left transition-all hover:bg-accent focus:bg-accent outline-none relative",
-                                        !notification.read && "bg-muted/40"
-                                    )}
-                                >
-                                    <div
+                            ) : items.map((notification) => {
+                                const { icon: Icon, color, bg } = getIconProps(notification.type)
+                                return (
+                                    <button
+                                        key={notification.id}
+                                        onClick={() => markAsRead(notification.id)}
                                         className={cn(
-                                            "flex size-9 shrink-0 items-center justify-center rounded-full mt-0.5",
-                                            notification.bg,
-                                            notification.color
+                                            "group flex items-start gap-3 rounded-lg p-3 text-left transition-all hover:bg-accent focus:bg-accent outline-none relative",
+                                            !notification.isRead && "bg-muted/40"
                                         )}
                                     >
-                                        <notification.icon className="size-4" />
-                                    </div>
-                                    <div className="flex flex-col gap-1 pr-6">
-                                        <p
+                                        <div
                                             className={cn(
-                                                "text-sm leading-tight text-foreground",
-                                                !notification.read ? "font-semibold" : "font-medium"
+                                                "flex size-9 shrink-0 items-center justify-center rounded-full mt-0.5",
+                                                bg,
+                                                color
                                             )}
                                         >
-                                            {notification.title}
-                                        </p>
-                                        <p className="line-clamp-2 text-xs text-muted-foreground leading-relaxed">
-                                            {notification.description}
-                                        </p>
-                                        <p className="text-[10px] font-medium text-muted-foreground/60 mt-0.5">
-                                            {notification.time}
-                                        </p>
-                                    </div>
-                                    <div className="absolute right-3 top-3 flex flex-col items-end gap-2 h-full justify-between pb-4">
-                                        {!notification.read ? (
-                                            <div className="flex size-2 shrink-0 rounded-full bg-primary" />
-                                        ) : (
-                                            <div className="flex size-2 shrink-0 opacity-0" />
-                                        )}
-                                        <div
-                                            onClick={(e) => deleteNotification(e, notification.id)}
-                                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-muted-foreground/20 rounded-md text-muted-foreground hover:text-foreground cursor-pointer -mr-1"
-                                            title="Hapus notifikasi"
-                                        >
-                                            <X className="size-3.5" />
+                                            <Icon className="size-4" />
                                         </div>
-                                    </div>
-                                </button>
-                            ))}
+                                        <div className="flex flex-col gap-1 pr-6">
+                                            <p
+                                                className={cn(
+                                                    "text-sm leading-tight text-foreground",
+                                                    !notification.isRead ? "font-semibold" : "font-medium"
+                                                )}
+                                            >
+                                                {notification.title}
+                                            </p>
+                                            <p className="line-clamp-2 text-xs text-muted-foreground leading-relaxed">
+                                                {notification.message}
+                                            </p>
+                                            <p className="text-[10px] font-medium text-muted-foreground/60 mt-0.5">
+                                                {formatTime(notification.date)}
+                                            </p>
+                                        </div>
+                                        <div className="absolute right-3 top-3 flex flex-col items-end gap-2 h-full justify-between pb-4">
+                                            {!notification.isRead ? (
+                                                <div className="flex size-2 shrink-0 rounded-full bg-primary" />
+                                            ) : (
+                                                <div className="flex size-2 shrink-0 opacity-0" />
+                                            )}
+                                            <div
+                                                onClick={(e) => deleteNotification(e, notification.id)}
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-muted-foreground/20 rounded-md text-muted-foreground hover:text-foreground cursor-pointer -mr-1"
+                                                title="Hapus notifikasi"
+                                            >
+                                                <X className="size-3.5" />
+                                            </div>
+                                        </div>
+                                    </button>
+                                )
+                            })}
                         </div>
                     </ScrollArea>
                 </CardContent>

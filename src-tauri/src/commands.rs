@@ -506,3 +506,77 @@ pub fn delete_transaction(state: State<DbState>, id: String) -> Result<(), Strin
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+// Notification Commands
+#[derive(Serialize, Deserialize)]
+pub struct Notification {
+    pub id: String,
+    pub title: String,
+    pub message: String,
+    #[serde(rename = "type")]
+    pub notif_type: String,
+    pub date: String,
+    #[serde(rename = "isRead")]
+    pub is_read: bool,
+}
+
+#[tauri::command]
+pub fn get_notifications(state: State<DbState>) -> Result<Vec<Notification>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut stmt = conn.prepare("SELECT id, title, message, type, date, is_read FROM notifications ORDER BY date DESC").map_err(|e| e.to_string())?;
+    
+    let iter = stmt.query_map([], |row| {
+        let is_read_val: i32 = row.get(5)?;
+        Ok(Notification {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            message: row.get(2)?,
+            notif_type: row.get(3)?,
+            date: row.get(4)?,
+            is_read: is_read_val != 0,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut notifications = Vec::new();
+    for n in iter {
+        notifications.push(n.map_err(|e| e.to_string())?);
+    }
+    Ok(notifications)
+}
+
+#[tauri::command]
+pub fn add_notification(state: State<DbState>, notification: Notification) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "INSERT INTO notifications (id, title, message, type, date, is_read) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![notification.id, notification.title, notification.message, notification.notif_type, notification.date, if notification.is_read { 1 } else { 0 }],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn mark_notification_read(state: State<DbState>, id: String) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "UPDATE notifications SET is_read = 1 WHERE id = ?1",
+        params![id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn mark_all_notifications_read(state: State<DbState>) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute("UPDATE notifications SET is_read = 1", []).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_notification(state: State<DbState>, id: String) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "DELETE FROM notifications WHERE id = ?1",
+        params![id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}

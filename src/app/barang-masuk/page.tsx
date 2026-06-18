@@ -31,32 +31,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const brandOptions = ["Ransom", "Fiberhome", "Huawei"] as const;
-const kategoriOptions = ["Kabel Fiber", "ONT", "Splitter", "Adaptor", "PDU", "Lainnya"] as const;
-const lokasiOptions = ["Kardus 01 (Huawei)", "Kardus 02 (Ransom)", "Kardus 03 (Fiberhome)", "Gudang Utama", "Rak A - Level 1", "Rak A - Level 2", "Rak B - Level 1", "Rak B - Level 2"] as const;
-
-// Kuota default untuk setiap lokasi
-const defaultKuota: Record<(typeof lokasiOptions)[number], number> = {
-  "Rak A - Level 1": 3,
-  "Rak A - Level 2": 50,
-  "Rak B - Level 1": 50,
-  "Rak B - Level 2": 50,
-  "Kardus 01 (Huawei)": 50,
-  "Kardus 02 (Ransom)": 50,
-  "Kardus 03 (Fiberhome)": 50,
-  "Gudang Utama": 100,
-};
-
 type BrandOption = string;
 type KategoriOption = string;
-type LokasiOption = (typeof lokasiOptions)[number];
-
-// Mapping dari prefix kode ke merek
-const brandPrefixMap: Record<string, BrandOption> = {
-  FHT: "Ransom",
-  ABC: "Fiberhome",
-  HUA: "Huawei",
-};
+type LokasiOption = string;
 
 type BarangMasukItem = {
   id: number;
@@ -69,11 +46,11 @@ type BarangMasukItem = {
 
 type KodeBarangUpdate = string | ((current: string) => string);
 
-// Fungsi untuk mendeteksi merek dari awal input kode
-const detectBrandFromCode = (code: string): BrandOption => {
+const detectBrandFromCode = (code: string, brands: string[]): BrandOption => {
   if (!code) return "";
   const prefix = code.substring(0, 3).toUpperCase();
-  return brandPrefixMap[prefix] || "";
+  const matched = brands.find(b => b.toUpperCase().startsWith(prefix));
+  return matched || "";
 };
 
 const isTextInputTarget = (target: EventTarget | null) => {
@@ -107,41 +84,56 @@ export default function BarangMasukPage() {
   const [merekFallback, setMerekFallback] = useState<BrandOption>("");
   const [kategoriBarang, setKategoriBarang] = useState<KategoriOption>("");
   const [barangMasuk, setBarangMasuk] = useState<BarangMasukItem[]>([]);
-  const [kuota, setKuota] = useState(defaultKuota);
+  const [kuota, setKuota] = useState<Record<string, number>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const kodeBarangRef = useRef("");
   const [dbBrands, setDbBrands] = useState<string[]>([]);
   const [dbCategories, setDbCategories] = useState<string[]>([]);
+  const [dbLocations, setDbLocations] = useState<string[]>([]);
 
-  // Fetch brands and categories from database
+  // Fetch brands, categories, and locations from database
   useEffect(() => {
-    const fetchBrandsAndCategories = async () => {
+    const fetchData = async () => {
       try {
         const brands = await invoke<any[]>("get_brands");
         const brandNames = brands.map((b: any) => b.name);
-        setDbBrands(brandNames.length > 0 ? brandNames : [...brandOptions]);
+        setDbBrands(brandNames);
 
         const categories = await invoke<any[]>("get_categories");
         const categoryNames = categories.map((c: any) => c.name);
-        setDbCategories(categoryNames.length > 0 ? categoryNames : [...kategoriOptions]);
+        setDbCategories(categoryNames);
 
-        // Set default kategori if available
         if (categoryNames.length > 0) {
           setKategoriBarang(categoryNames[0]);
-        } else {
-          setKategoriBarang(kategoriOptions[0]);
         }
+
+        const locationsData = await invoke<any[]>("get_locations");
+        const locs: string[] = [];
+        const newKuota: Record<string, number> = {};
+        
+        locationsData.forEach(loc => {
+          if (loc.type === "Rak" && loc.levels) {
+            loc.levels.forEach((lvl: any) => {
+              const name = `${loc.name} - ${lvl.name}`;
+              locs.push(name);
+              newKuota[name] = lvl.capacity - (lvl.usedCapacity || 0);
+            });
+          } else {
+            locs.push(loc.name);
+            newKuota[loc.name] = (loc.capacity || 0) - (loc.usedCapacity || 0);
+          }
+        });
+        setDbLocations(locs);
+        setKuota(newKuota);
+
       } catch (error) {
-        console.error("Gagal mengambil data merek/kategori:", error);
-        setDbBrands([...brandOptions]);
-        setDbCategories([...kategoriOptions]);
-        setKategoriBarang(kategoriOptions[0]);
+        console.error("Gagal mengambil data dari database:", error);
       }
     };
-    fetchBrandsAndCategories();
+    fetchData();
   }, []);
 
-  const detectedBrand = detectBrandFromCode(kodeBarang);
+  const detectedBrand = detectBrandFromCode(kodeBarang, dbBrands);
   const totalKuotaTersedia = Object.values(kuota).reduce((total, value) => total + value, 0);
   const validItems = barangMasuk.filter((item) => item.status === "Valid").length;
 
@@ -186,7 +178,12 @@ export default function BarangMasukPage() {
       return;
     }
 
-    const defaultLokasi = lokasiOptions[0];
+    const defaultLokasi = dbLocations.length > 0 ? dbLocations[0] : "";
+
+    if (!defaultLokasi) {
+      alert("Tidak ada lokasi penyimpanan yang tersedia di database!");
+      return;
+    }
 
     // Check if kuota tersedia
     if (kuota[defaultLokasi] <= 0) {
@@ -580,7 +577,7 @@ export default function BarangMasukPage() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectGroup>
-                                {lokasiOptions.map((lokasi) => {
+                                {dbLocations.map((lokasi) => {
                                   const isDisabled = kuota[lokasi] <= 0;
                                   return (
                                     <SelectItem key={lokasi} value={lokasi} disabled={isDisabled}>

@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Bell, Check, Info, AlertTriangle } from "lucide-react"
+import { Bell, Check, Info, AlertTriangle, XCircle } from "lucide-react"
+import { invoke } from "@tauri-apps/api/core"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -12,70 +13,77 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
-const notifications = [
-  {
-    id: 1,
-    title: "Stok Barang Menipis",
-    description: "Stok Kabel UTP Cat6 sisa 5 roll. Segera restock.",
-    time: "2 jam yang lalu",
-    icon: AlertTriangle,
-    read: false,
-    color: "text-red-500",
-    bg: "bg-red-500/10",
-  },
-  {
-    id: 2,
-    title: "Barang Masuk Berhasil",
-    description: "100 unit Router Mikrotik RB750Gr3 telah ditambahkan.",
-    time: "5 jam yang lalu",
-    icon: Check,
-    read: false,
-    color: "text-emerald-500",
-    bg: "bg-emerald-500/10",
-  },
-  {
-    id: 3,
-    title: "Pembaruan Sistem",
-    description: "Sistem akan maintenance pada pukul 00:00 WIB.",
-    time: "1 hari yang lalu",
-    icon: Info,
-    read: true,
-    color: "text-blue-500",
-    bg: "bg-blue-500/10",
-  },
-  {
-    id: 4,
-    title: "Barang Keluar",
-    description: "50 unit ONT ZTE F609 telah dikeluarkan untuk teknisi Budi.",
-    time: "1 hari yang lalu",
-    icon: Check,
-    read: true,
-    color: "text-emerald-500",
-    bg: "bg-emerald-500/10",
-  },
-  {
-    id: 5,
-    title: "Laporan Mingguan Siap",
-    description: "Laporan mutasi barang minggu ke-2 telah di-generate.",
-    time: "2 hari yang lalu",
-    icon: Info,
-    read: true,
-    color: "text-blue-500",
-    bg: "bg-blue-500/10",
-  },
-]
+type NotificationItem = {
+  id: string
+  title: string
+  message: string
+  type: string
+  date: string
+  isRead: boolean
+}
 
 export function Notifications() {
   const [open, setOpen] = React.useState(false)
-  const [items, setItems] = React.useState(notifications)
-  const unreadCount = items.filter((n) => !n.read).length
+  const [items, setItems] = React.useState<NotificationItem[]>([])
+  
+  const fetchNotifications = React.useCallback(async () => {
+    try {
+      const data = await invoke<NotificationItem[]>("get_notifications")
+      setItems(data)
+    } catch (error) {
+      console.error("Failed to fetch notifications:", error)
+    }
+  }, [])
 
-  const markAllAsRead = () => {
-    setItems(items.map((item) => ({ ...item, read: true })))
+  React.useEffect(() => {
+    fetchNotifications()
+    // Optional: setup a polling interval if you want real-time updates
+    const interval = setInterval(fetchNotifications, 10000)
+    return () => clearInterval(interval)
+  }, [fetchNotifications])
+
+  const unreadCount = items.filter((n) => !n.isRead).length
+
+  const markAllAsRead = async () => {
+    try {
+      await invoke("mark_all_notifications_read")
+      fetchNotifications()
+    } catch (error) {
+      console.error("Failed to mark all as read:", error)
+    }
   }
 
-  const markAsRead = (id: number) => {
-    setItems(items.map((item) => (item.id === id ? { ...item, read: true } : item)))
+  const markAsRead = async (id: string) => {
+    try {
+      await invoke("mark_notification_read", { id })
+      fetchNotifications()
+    } catch (error) {
+      console.error("Failed to mark as read:", error)
+    }
+  }
+
+  const getIconProps = (type: string) => {
+    switch (type) {
+      case "warning":
+        return { icon: AlertTriangle, color: "text-red-500", bg: "bg-red-500/10" }
+      case "success":
+        return { icon: Check, color: "text-emerald-500", bg: "bg-emerald-500/10" }
+      case "error":
+        return { icon: XCircle, color: "text-red-600", bg: "bg-red-600/10" }
+      case "info":
+      default:
+        return { icon: Info, color: "text-blue-500", bg: "bg-blue-500/10" }
+    }
+  }
+
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return date.toLocaleString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
   }
 
   return (
@@ -103,45 +111,54 @@ export function Notifications() {
         </div>
         <ScrollArea className="h-[400px]">
           <div className="flex flex-col gap-1 p-2">
-            {items.map((notification) => (
-              <button
-                key={notification.id}
-                onClick={() => markAsRead(notification.id)}
-                className={cn(
-                  "flex items-start gap-3 rounded-lg p-3 text-left transition-all hover:bg-accent focus:bg-accent outline-none",
-                  !notification.read && "bg-muted/40"
-                )}
-              >
-                <div
-                  className={cn(
-                    "flex size-9 shrink-0 items-center justify-center rounded-full mt-0.5",
-                    notification.bg,
-                    notification.color
-                  )}
-                >
-                  <notification.icon className="size-4.5" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <p
+            {items.length === 0 ? (
+              <div className="text-center p-4 text-sm text-muted-foreground">
+                Tidak ada notifikasi
+              </div>
+            ) : (
+              items.map((notification) => {
+                const { icon: Icon, color, bg } = getIconProps(notification.type)
+                return (
+                  <button
+                    key={notification.id}
+                    onClick={() => markAsRead(notification.id)}
                     className={cn(
-                      "text-sm leading-tight text-foreground",
-                      !notification.read ? "font-semibold" : "font-medium"
+                      "flex items-start gap-3 rounded-lg p-3 text-left transition-all hover:bg-accent focus:bg-accent outline-none",
+                      !notification.isRead && "bg-muted/40"
                     )}
                   >
-                    {notification.title}
-                  </p>
-                  <p className="line-clamp-2 text-xs text-muted-foreground leading-relaxed">
-                    {notification.description}
-                  </p>
-                  <p className="text-[10px] font-medium text-muted-foreground/60 mt-1">
-                    {notification.time}
-                  </p>
-                </div>
-                {!notification.read && (
-                  <div className="ml-auto mt-1 flex size-2 shrink-0 rounded-full bg-primary" />
-                )}
-              </button>
-            ))}
+                    <div
+                      className={cn(
+                        "flex size-9 shrink-0 items-center justify-center rounded-full mt-0.5",
+                        bg,
+                        color
+                      )}
+                    >
+                      <Icon className="size-4.5" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <p
+                        className={cn(
+                          "text-sm leading-tight text-foreground",
+                          !notification.isRead ? "font-semibold" : "font-medium"
+                        )}
+                      >
+                        {notification.title}
+                      </p>
+                      <p className="line-clamp-2 text-xs text-muted-foreground leading-relaxed">
+                        {notification.message}
+                      </p>
+                      <p className="text-[10px] font-medium text-muted-foreground/60 mt-1">
+                        {formatTime(notification.date)}
+                      </p>
+                    </div>
+                    {!notification.isRead && (
+                      <div className="ml-auto mt-1 flex size-2 shrink-0 rounded-full bg-primary" />
+                    )}
+                  </button>
+                )
+              })
+            )}
           </div>
         </ScrollArea>
         {unreadCount > 0 && (

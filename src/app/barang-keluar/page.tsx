@@ -22,21 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-const lokasiOptions = ["Kardus 01 (Huawei)", "Kardus 02 (Ransom)", "Kardus 03 (Fiberhome)", "Gudang Utama", "Rak A - Level 1", "Rak A - Level 2", "Rak B - Level 1", "Rak B - Level 2"] as const;
-
-// Kuota default untuk setiap lokasi
-const defaultKuota: Record<(typeof lokasiOptions)[number], number> = {
-  "Rak A - Level 1": 3,
-  "Rak A - Level 2": 50,
-  "Rak B - Level 1": 50,
-  "Rak B - Level 2": 50,
-  "Kardus 01 (Huawei)": 50,
-  "Kardus 02 (Ransom)": 50,
-  "Kardus 03 (Fiberhome)": 50,
-  "Gudang Utama": 100,
-};
-
-type LokasiOption = (typeof lokasiOptions)[number];
+type LokasiOption = string;
 
 type BarangKeluarItem = {
   id: number;
@@ -78,21 +64,36 @@ function EmptyScanTableState() {
 export default function BarangKeluarPage() {
   const [kodeBarang, setKodeBarang] = useState("");
   const [barangKeluar, setBarangKeluar] = useState<BarangKeluarItem[]>([]);
-  const [kuota, setKuota] = useState(defaultKuota);
+  const [kuota, setKuota] = useState<Record<string, number>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const kodeBarangRef = useRef("");
   const [dbItems, setDbItems] = useState<any[]>([]);
 
   useEffect(() => {
-    const fetchItems = async () => {
+    const fetchItemsAndLocations = async () => {
       try {
         const items = await invoke("get_items");
         setDbItems(items as any[]);
+
+        const locationsData = await invoke<any[]>("get_locations");
+        const newKuota: Record<string, number> = {};
+        
+        locationsData.forEach(loc => {
+          if (loc.type === "Rak" && loc.levels) {
+            loc.levels.forEach((lvl: any) => {
+              const name = `${loc.name} - ${lvl.name}`;
+              newKuota[name] = lvl.capacity - (lvl.usedCapacity || 0);
+            });
+          } else {
+            newKuota[loc.name] = (loc.capacity || 0) - (loc.usedCapacity || 0);
+          }
+        });
+        setKuota(newKuota);
       } catch (error) {
-        console.error("Gagal mengambil data master dari SQLite:", error);
+        console.error("Gagal mengambil data dari SQLite:", error);
       }
     };
-    fetchItems();
+    fetchItemsAndLocations();
   }, []);
   const totalKuotaTersedia = Object.values(kuota).reduce((total, value) => total + value, 0);
   const validItems = barangKeluar.filter((item) => item.status === "Valid").length;

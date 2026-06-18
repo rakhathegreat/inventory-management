@@ -85,5 +85,17 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS notifications (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            type TEXT NOT NULL,
+            date TEXT NOT NULL,
+            is_read INTEGER NOT NULL DEFAULT 0
+        )",
+        [],
+    )?;
+
     Ok(conn)
 }

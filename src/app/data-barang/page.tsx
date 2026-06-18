@@ -80,55 +80,7 @@ interface RiwayatUnit {
   catatan?: string;
 }
 
-const MOCK_RIWAYAT: Record<string, RiwayatUnit[]> = {
-  "1": [
-    { tanggal: "2026-06-01", tipe: "Masuk", nomorSurat: "IN-20260601-001", dariStatus: "Keluar", keStatus: "Tersedia", lokasi: "Kardus K-01", oleh: "Rakha Al-Hafiz", catatan: '"Batch awal bulan dari logistik pusat"' }
-  ],
-  "2": [
-    { tanggal: "2026-06-13", tipe: "Terpasang", nomorSurat: "OUT-20260613-001", dariStatus: "Tersedia", keStatus: "Terpasang", lokasi: "Rak A1 - Elektronik - Level 2", oleh: "Erdin Saputra", catatan: '"Pemasangan access point cadangan"' },
-    { tanggal: "2026-06-01", tipe: "Masuk", nomorSurat: "IN-20260601-001", dariStatus: "Keluar", keStatus: "Tersedia", lokasi: "Kardus K-01", oleh: "Rakha Al-Hafiz", catatan: '"Batch awal bulan dari logistik pusat"' }
-  ],
-  "3": [
-    { tanggal: "2026-06-01", tipe: "Masuk", nomorSurat: "IN-20260601-001", dariStatus: "Keluar", keStatus: "Tersedia", lokasi: "Rak A1 - Elektronik - Level 1", oleh: "Rakha Al-Hafiz", catatan: '"Batch awal bulan dari logistik pusat"' }
-  ],
-  "4": [
-    { tanggal: "2026-06-05", tipe: "Dipinjam", nomorSurat: "OUT-20260605-001", dariStatus: "Tersedia", keStatus: "Dipinjam", lokasi: "Rak B2 - Aksesoris - Level 1", oleh: "Putri Lestari", catatan: '"Peminjaman untuk keperluan deployment onsite"' },
-    { tanggal: "2026-05-15", tipe: "Masuk", nomorSurat: "IN-20260515-002", dariStatus: "Keluar", keStatus: "Tersedia", lokasi: "Rak B2 - Aksesoris - Level 1", oleh: "Rakha Al-Hafiz", catatan: '"Pengadaan unit baru"' }
-  ],
-  "5": [
-    { tanggal: "2026-06-01", tipe: "Masuk", nomorSurat: "IN-20260601-001", dariStatus: "Keluar", keStatus: "Tersedia", lokasi: "Kardus K-01", oleh: "Rakha Al-Hafiz", catatan: '"Batch awal bulan dari logistik pusat"' }
-  ],
-  "6": [
-    { tanggal: "2026-06-10", tipe: "Terpasang", nomorSurat: "OUT-20260610-001", dariStatus: "Tersedia", keStatus: "Terpasang", lokasi: "Rak A1 - Elektronik - Level 2", oleh: "Putri Lestari", catatan: '"Instalasi access point lobby utama"' },
-    { tanggal: "2026-06-02", tipe: "Masuk", nomorSurat: "IN-20260602-001", dariStatus: "Keluar", keStatus: "Tersedia", lokasi: "Kardus K-01", oleh: "Rakha Al-Hafiz", catatan: '"Unit cadangan baru"' }
-  ],
-  "7": [
-    { tanggal: "2026-06-08", tipe: "Rusak", nomorSurat: "ERR-20260608-001", dariStatus: "Tersedia", keStatus: "Rusak", lokasi: "Rak A1 - Elektronik - Level 1", oleh: "Erdin Saputra", catatan: '"Gagal fungsi ethernet port setelah kena lonjakan listrik"' },
-    { tanggal: "2026-05-20", tipe: "Masuk", nomorSurat: "IN-20260520-001", dariStatus: "Keluar", keStatus: "Tersedia", lokasi: "Kardus K-01", oleh: "Rakha Al-Hafiz", catatan: '"Pengadaan unit baru"' }
-  ],
-  "8": [
-    { tanggal: "2026-06-01", tipe: "Dipinjam", nomorSurat: "OUT-20260601-001", dariStatus: "Tersedia", keStatus: "Dipinjam", lokasi: "Rak B2 - Aksesoris - Level 1", oleh: "Putri Lestari", catatan: '"Laptop kerja sementara staff finance"' },
-    { tanggal: "2026-05-15", tipe: "Masuk", nomorSurat: "IN-20260515-001", dariStatus: "Keluar", keStatus: "Tersedia", lokasi: "Kardus K-01", oleh: "Rakha Al-Hafiz", catatan: '"Pengadaan laptop baru"' }
-  ]
-}
-
 const STATUS_OPTIONS: StatusUnit[] = ["Masuk", "Keluar", "Rusak"]
-
-const LOKASI_OPTIONS = [
-  "Rak A1 - Elektronik - Level 1",
-  "Rak A1 - Elektronik - Level 2",
-  "Rak A1 - Elektronik - Level 3",
-  "Kardus K-01",
-  "Rak B2 - Aksesoris - Level 1"
-]
-
-const KATEGORI_OPTIONS = [
-  "Networking",
-  "Komputer",
-  "Aksesoris",
-  "Elektronik",
-  "Perangkat Keras"
-]
 
 function EmptyBarangTableState({
   isFiltered,
@@ -164,19 +116,35 @@ export default function DataBarangPage() {
   const isMobile = useIsMobile()
   const [barangList, setBarangList] = useState<BarangUnit[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [dbCategories, setDbCategories] = useState<string[]>([])
+  const [dbLocations, setDbLocations] = useState<string[]>([])
 
-  const loadBarang = async () => {
+  const loadData = async () => {
     try {
       const data = await invoke<BarangUnit[]>("get_items")
       setBarangList(data)
+
+      const categories = await invoke<any[]>("get_categories")
+      setDbCategories(categories.map(c => c.name))
+
+      const locationsData = await invoke<any[]>("get_locations")
+      const locs: string[] = []
+      locationsData.forEach(loc => {
+        if (loc.type === "Rak" && loc.levels) {
+          loc.levels.forEach((lvl: any) => locs.push(`${loc.name} - ${lvl.name}`))
+        } else {
+          locs.push(loc.name)
+        }
+      })
+      setDbLocations(locs)
     } catch (error) {
-      console.error("Failed to fetch items:", error)
-      toast.error("Gagal memuat data barang.")
+      console.error("Failed to fetch data:", error)
+      toast.error("Gagal memuat data dari server.")
     }
   }
 
   useEffect(() => {
-    loadBarang()
+    loadData()
   }, [])
   const [filterStatus, setFilterStatus] = useState("all")
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -391,8 +359,8 @@ export default function DataBarangPage() {
   }
 
   const recentRiwayat = useMemo(() => {
-    if (!detailBarang) return []
-    return MOCK_RIWAYAT[detailBarang.id] || []
+    // History is currently not persisted in DB for data-barang
+    return [] as RiwayatUnit[]
   }, [detailBarang])
 
   return (
@@ -623,7 +591,7 @@ export default function DataBarangPage() {
                     <SelectValue placeholder="Pilih kategori..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {KATEGORI_OPTIONS.map((cat) => (
+                    {dbCategories.map((cat) => (
                       <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                     ))}
                   </SelectContent>
@@ -709,7 +677,7 @@ export default function DataBarangPage() {
                       <SelectValue placeholder="Pilih lokasi penyimpanan..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {LOKASI_OPTIONS.map((loc) => (
+                      {dbLocations.map((loc) => (
                         <SelectItem key={loc} value={loc}>{loc}</SelectItem>
                       ))}
                     </SelectContent>
