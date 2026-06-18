@@ -3,22 +3,17 @@
 import { useState, useMemo, useEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import {
+  Boxes,
   Plus,
   Search,
-  Filter,
-  User,
   MoreVertical,
   Trash2,
   Edit,
   Download,
-  Info,
-  MapPin,
-  Calendar,
   ScanLine,
-  History
 } from "lucide-react"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -57,7 +52,7 @@ import {
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
 
-import { Toaster, toast } from "sonner"
+import { toast } from "sonner"
 import { Link } from "react-router-dom"
 
 type StatusUnit = "Masuk" | "Keluar" | "Rusak"
@@ -84,17 +79,6 @@ interface RiwayatUnit {
   oleh: string;
   catatan?: string;
 }
-
-const INITIAL_UNITS: BarangUnit[] = [
-  { id: "1", serialNumber: "HW2026-00001", kategori: "Networking", merek: "Huawei", status: "Masuk", lokasiPenyimpanan: "Kardus K-01", tanggalMasuk: "2026-06-01", operatorInput: "Rakha Al-Hafiz" },
-  { id: "2", serialNumber: "HW2026-00002", kategori: "Networking", merek: "Huawei", status: "Keluar", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 2", tanggalMasuk: "2026-06-01", tanggalKeluar: "2026-06-13", operatorInput: "Rakha Al-Hafiz" },
-  { id: "3", serialNumber: "HW2026-00010", kategori: "Networking", merek: "Huawei", status: "Masuk", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 1", tanggalMasuk: "2026-06-01", operatorInput: "Rakha Al-Hafiz" },
-  { id: "4", serialNumber: "HW2026-00011", kategori: "Networking", merek: "Huawei", status: "Keluar", lokasiPenyimpanan: "Rak B2 - Aksesoris - Level 1", tanggalMasuk: "2026-05-15", tanggalKeluar: "2026-06-05", operatorInput: "Putri Lestari" },
-  { id: "5", serialNumber: "HW2026-00020", kategori: "Networking", merek: "Huawei", status: "Masuk", lokasiPenyimpanan: "Kardus K-01", tanggalMasuk: "2026-06-01", operatorInput: "Rakha Al-Hafiz" },
-  { id: "6", serialNumber: "HW2026-00021", kategori: "Networking", merek: "Huawei", status: "Keluar", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 2", tanggalMasuk: "2026-06-02", tanggalKeluar: "2026-06-10", operatorInput: "Putri Lestari" },
-  { id: "7", serialNumber: "HW2026-00022", kategori: "Networking", merek: "Huawei", status: "Rusak", lokasiPenyimpanan: "Rak A1 - Elektronik - Level 1", tanggalMasuk: "2026-05-20", tanggalKeluar: "2026-06-08", operatorInput: "Rakha Al-Hafiz" },
-  { id: "8", serialNumber: "HW2026-00031", kategori: "Komputer", merek: "Huawei", status: "Keluar", lokasiPenyimpanan: "Rak B2 - Aksesoris - Level 1", tanggalMasuk: "2026-05-15", tanggalKeluar: "2026-06-01", operatorInput: "Putri Lestari" },
-]
 
 const MOCK_RIWAYAT: Record<string, RiwayatUnit[]> = {
   "1": [
@@ -145,6 +129,36 @@ const KATEGORI_OPTIONS = [
   "Elektronik",
   "Perangkat Keras"
 ]
+
+function EmptyBarangTableState({
+  isFiltered,
+}: {
+  isFiltered: boolean
+}) {
+  return (
+    <div className="flex min-h-[300px] items-center justify-center px-6 py-12">
+      <div className="flex max-w-md flex-col items-center gap-4 text-center">
+        <div className="flex size-14 items-center justify-center rounded-full border bg-muted/40 text-muted-foreground">
+          {isFiltered ? (
+            <Search className="size-7" strokeWidth={1.8} />
+          ) : (
+            <Boxes className="size-7" strokeWidth={1.8} />
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-base font-semibold text-foreground">
+            {isFiltered ? "Tidak ada unit yang cocok" : "Belum ada data barang"}
+          </p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {isFiltered
+              ? "Coba ubah kata kunci pencarian atau status filter yang sedang aktif."
+              : "Data unit akan tampil di sini setelah barang masuk didaftarkan ke sistem."}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function DataBarangPage() {
   const isMobile = useIsMobile()
@@ -314,6 +328,7 @@ export default function DataBarangPage() {
       return matchesSearch && matchesStatus
     })
   }, [barangList, searchTerm, filterStatus])
+  const hasActiveFilter = searchTerm.trim().length > 0 || filterStatus !== "all"
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -381,9 +396,9 @@ export default function DataBarangPage() {
   }, [detailBarang])
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 animate-fade-in">
+    <div className="flex min-h-0 flex-col gap-6 overflow-hidden p-4 md:p-6 lg:p-8 animate-fade-in">
       {/* Filter and Search Section */}
-      <Card className="p-4">
+      <Card className="shrink-0 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex gap-2">
             <div className="relative flex-1 max-w-sm">
@@ -449,9 +464,9 @@ export default function DataBarangPage() {
       </Card>
 
       {/* Data Table */}
-      <div className="rounded-lg border bg-card/20 overflow-hidden">
+      <div className="min-h-0 flex-1 rounded-lg border bg-card/20 overflow-auto">
         <Table>
-          <TableHeader className="bg-muted/40">
+          <TableHeader className="sticky top-0 z-10 bg-muted">
             <TableRow>
               <TableHead className="w-[50px] text-center">No.</TableHead>
               <TableHead className="w-[50px] text-center">
@@ -545,12 +560,8 @@ export default function DataBarangPage() {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={10} className="h-28 text-center text-muted-foreground">
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <Info className="size-6 text-muted-foreground/50" />
-                    <p className="text-sm font-medium">Data unit kosong atau pencarian tidak ditemukan.</p>
-                    <p className="text-xs">Ubah kata kunci atau reset filter Anda.</p>
-                  </div>
+                <TableCell colSpan={10} className="p-0">
+                  <EmptyBarangTableState isFiltered={hasActiveFilter} />
                 </TableCell>
               </TableRow>
             )}

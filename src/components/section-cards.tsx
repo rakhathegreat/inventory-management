@@ -1,15 +1,35 @@
-import { TrendingDown, TrendingUp, Boxes, ArrowsUpFromLine, Archive, ArchiveX } from "lucide-react"
+import { useEffect, useState } from "react"
+import { invoke } from "@tauri-apps/api/core"
+import { Boxes, ArrowsUpFromLine, Archive, ArchiveX } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import {
     Card,
-    CardAction,
     CardDescription,
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
 
 export function SectionCards() {
+    const [totalItems, setTotalItems] = useState(0)
+    const [tersedia, setTersedia] = useState(0)
+    const [keluar, setKeluar] = useState(0)
+    const [rusak, setRusak] = useState(0)
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const items = await invoke<any[]>("get_items")
+                setTotalItems(items.length)
+                setTersedia(items.filter((i) => i.status === "Masuk").length)
+                setKeluar(items.filter((i) => i.status === "Keluar").length)
+                setRusak(items.filter((i) => i.status === "Rusak").length)
+            } catch (error) {
+                console.error("Gagal mengambil data items:", error)
+            }
+        }
+        fetchStats()
+    }, [])
+
     return (
         <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card">
             <Card className="@container/card relative">
@@ -21,14 +41,8 @@ export function SectionCards() {
                         <CardHeader className="flex flex-col">
                             <CardDescription>Total</CardDescription>
                             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                145 <span className="text-sm font-normal text-muted-foreground">Unit</span>
+                                {totalItems} <span className="text-sm font-normal text-muted-foreground">Unit</span>
                             </CardTitle>
-                            <CardAction className="absolute top-4 right-4">
-                                <Badge variant="outline">
-                                    <TrendingUp />
-                                    +12.5%
-                                </Badge>
-                            </CardAction>
                         </CardHeader>
                     </div>
                 </div>
@@ -42,14 +56,8 @@ export function SectionCards() {
                         <CardHeader className="flex flex-col">
                             <CardDescription>Tersedia</CardDescription>
                             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                100 <span className="text-sm font-normal text-muted-foreground">Unit</span>
+                                {tersedia} <span className="text-sm font-normal text-muted-foreground">Unit</span>
                             </CardTitle>
-                            <CardAction className="absolute top-4 right-4">
-                                <Badge variant="outline">
-                                    <TrendingDown />
-                                    -20%
-                                </Badge>
-                            </CardAction>
                         </CardHeader>
                     </div>
                 </div>
@@ -63,14 +71,8 @@ export function SectionCards() {
                         <CardHeader className="flex flex-col">
                             <CardDescription>Keluar</CardDescription>
                             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                25 <span className="text-sm font-normal text-muted-foreground">Unit</span>
+                                {keluar} <span className="text-sm font-normal text-muted-foreground">Unit</span>
                             </CardTitle>
-                            <CardAction className="absolute top-4 right-4">
-                                <Badge variant="outline">
-                                    <TrendingUp />
-                                    +12.5%
-                                </Badge>
-                            </CardAction>
                         </CardHeader>
                     </div>
                 </div>
@@ -84,14 +86,8 @@ export function SectionCards() {
                         <CardHeader className="flex flex-col">
                             <CardDescription>Rusak</CardDescription>
                             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                4 <span className="text-sm font-normal text-muted-foreground">Unit</span>
+                                {rusak} <span className="text-sm font-normal text-muted-foreground">Unit</span>
                             </CardTitle>
-                            <CardAction className="absolute top-4 right-4">
-                                <Badge variant="outline">
-                                    <TrendingUp />
-                                    +4.5%
-                                </Badge>
-                            </CardAction>
                         </CardHeader>
                     </div>
                 </div>

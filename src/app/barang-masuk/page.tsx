@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { BadgeCheck, Boxes, PackagePlus, ScanLine, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -47,8 +47,8 @@ const defaultKuota: Record<(typeof lokasiOptions)[number], number> = {
   "Gudang Utama": 100,
 };
 
-type BrandOption = (typeof brandOptions)[number] | "";
-type KategoriOption = (typeof kategoriOptions)[number];
+type BrandOption = string;
+type KategoriOption = string;
 type LokasiOption = (typeof lokasiOptions)[number];
 
 // Mapping dari prefix kode ke merek
@@ -84,14 +84,62 @@ const isTextInputTarget = (target: EventTarget | null) => {
 
 const normalizeKodeBarang = (code: string) => code.trim().toUpperCase();
 
+function EmptyScanTableState() {
+  return (
+    <div className="flex items-center justify-center px-6 py-12">
+      <div className="flex max-w-md flex-col items-center gap-4 text-center">
+        <div className="flex size-14 items-center justify-center rounded-full border bg-muted/40 text-muted-foreground">
+          <PackagePlus className="size-7" strokeWidth={1.8} />
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-base font-semibold text-foreground">Belum ada barang masuk</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Scan atau masukkan serial number dari form di sebelah kiri untuk menambahkan item ke sesi ini.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BarangMasukPage() {
   const [kodeBarang, setKodeBarang] = useState("");
   const [merekFallback, setMerekFallback] = useState<BrandOption>("");
-  const [kategoriBarang, setKategoriBarang] = useState<KategoriOption>("Kabel Fiber");
+  const [kategoriBarang, setKategoriBarang] = useState<KategoriOption>("");
   const [barangMasuk, setBarangMasuk] = useState<BarangMasukItem[]>([]);
   const [kuota, setKuota] = useState(defaultKuota);
   const inputRef = useRef<HTMLInputElement>(null);
   const kodeBarangRef = useRef("");
+  const [dbBrands, setDbBrands] = useState<string[]>([]);
+  const [dbCategories, setDbCategories] = useState<string[]>([]);
+
+  // Fetch brands and categories from database
+  useEffect(() => {
+    const fetchBrandsAndCategories = async () => {
+      try {
+        const brands = await invoke<any[]>("get_brands");
+        const brandNames = brands.map((b: any) => b.name);
+        setDbBrands(brandNames.length > 0 ? brandNames : [...brandOptions]);
+
+        const categories = await invoke<any[]>("get_categories");
+        const categoryNames = categories.map((c: any) => c.name);
+        setDbCategories(categoryNames.length > 0 ? categoryNames : [...kategoriOptions]);
+
+        // Set default kategori if available
+        if (categoryNames.length > 0) {
+          setKategoriBarang(categoryNames[0]);
+        } else {
+          setKategoriBarang(kategoriOptions[0]);
+        }
+      } catch (error) {
+        console.error("Gagal mengambil data merek/kategori:", error);
+        setDbBrands([...brandOptions]);
+        setDbCategories([...kategoriOptions]);
+        setKategoriBarang(kategoriOptions[0]);
+      }
+    };
+    fetchBrandsAndCategories();
+  }, []);
 
   const detectedBrand = detectBrandFromCode(kodeBarang);
   const totalKuotaTersedia = Object.values(kuota).reduce((total, value) => total + value, 0);
@@ -252,8 +300,56 @@ export default function BarangMasukPage() {
     }
   };
 
-  const handleValidateAll = () => {
-    alert(`Validasi & Simpan ${barangMasuk.length} Barang Masuk - Berhasil!`);
+  const handleValidateAll = async () => {
+    try {
+      const sessionDate = new Date().toISOString().slice(0, 10);
+      const dateStr = sessionDate.replace(/-/g, "");
+
+      const txs = await invoke<any[]>("get_transactions");
+      const prefix = `IN-${dateStr}-`;
+      let maxNum = 0;
+      txs.forEach(t => {
+        if (t.nomor && t.nomor.startsWith(prefix)) {
+          const numStr = t.nomor.slice(prefix.length);
+          const num = parseInt(numStr, 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      });
+      const sessionNomor = `${prefix}${(maxNum + 1).toString().padStart(4, '0')}`;
+
+      for (const item of barangMasuk) {
+        const newItem = {
+          id: `UNIT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          serialNumber: item.nomor,
+          kategori: item.kategori,
+          merek: item.merek,
+          status: "Masuk",
+          lokasiPenyimpanan: item.lokasi,
+          tanggalMasuk: sessionDate,
+          operatorInput: "Sistem",
+        };
+        await invoke("add_item", { item: newItem });
+
+        const newTransaction = {
+          id: `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          tanggal: sessionDate,
+          nomor: sessionNomor,
+          kategori: "Masuk",
+          status: "Selesai",
+          sn: item.nomor,
+          merek: item.merek,
+          asal: "Keluar",
+          tujuan: item.lokasi,
+          operator: "Sistem"
+        };
+        await invoke("add_transaction", { transaction: newTransaction });
+      }
+      alert(`Validasi & Simpan ${barangMasuk.length} Barang Masuk - Berhasil!`);
+      setBarangMasuk([]); // Clear local state after saving
+    } catch (error) {
+      console.error("Gagal menyimpan ke database:", error);
+      alert("Terjadi kesalahan saat menyimpan barang masuk ke database!");
+    }
   };
 
   return (
@@ -270,9 +366,6 @@ export default function BarangMasukPage() {
                 <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                   {barangMasuk.length} <span className="text-sm font-normal text-muted-foreground">Unit</span>
                 </CardTitle>
-                <CardAction className="absolute right-4 top-4">
-                  <Badge variant="outline">Aktif</Badge>
-                </CardAction>
               </CardHeader>
             </div>
           </div>
@@ -289,9 +382,6 @@ export default function BarangMasukPage() {
                 <CardTitle className="truncate text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                   {merekFallback || "-"}
                 </CardTitle>
-                <CardAction className="absolute right-4 top-4">
-                  <Badge variant="outline">{detectedBrand ? "Auto" : "Manual"}</Badge>
-                </CardAction>
               </CardHeader>
             </div>
           </div>
@@ -308,9 +398,6 @@ export default function BarangMasukPage() {
                 <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                   {validItems} <span className="text-sm font-normal text-muted-foreground">Valid</span>
                 </CardTitle>
-                <CardAction className="absolute right-4 top-4">
-                  <Badge variant="outline">Siap</Badge>
-                </CardAction>
               </CardHeader>
             </div>
           </div>
@@ -327,9 +414,6 @@ export default function BarangMasukPage() {
                 <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                   {totalKuotaTersedia} <span className="text-sm font-normal text-muted-foreground">Slot</span>
                 </CardTitle>
-                <CardAction className="absolute right-4 top-4">
-                  <Badge variant="outline">Gudang</Badge>
-                </CardAction>
               </CardHeader>
             </div>
           </div>
@@ -389,7 +473,7 @@ export default function BarangMasukPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {brandOptions.map((brand) => (
+                    {dbBrands.map((brand) => (
                       <SelectItem key={brand} value={brand}>
                         {brand}
                       </SelectItem>
@@ -413,7 +497,7 @@ export default function BarangMasukPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {kategoriOptions.map((kategori) => (
+                    {dbCategories.map((kategori) => (
                       <SelectItem key={kategori} value={kategori}>
                         {kategori}
                       </SelectItem>
@@ -462,8 +546,8 @@ export default function BarangMasukPage() {
                 <TableBody>
                   {barangMasuk.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-28 text-center text-sm text-muted-foreground">
-                        Belum ada barang masuk. Tambahkan item dari form scan di sebelah kiri.
+                      <TableCell colSpan={7} className="p-0">
+                        <EmptyScanTableState />
                       </TableCell>
                     </TableRow>
                   ) : (

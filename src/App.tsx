@@ -6,7 +6,6 @@ import Layout from "./components/layout";
 import DashboardPage from "./app/dashboard/page";
 import BarangMasukPage from "./app/barang-masuk/page";
 import BarangKeluarPage from "./app/barang-keluar/page";
-import RiwayatPage from "./app/riwayat/page";
 import DataBarangPage from "./app/data-barang/page";
 import DataTransaksiPage from "./app/data-transaksi/page";
 import LokasiBarangPage from "./app/lokasi-barang/page";

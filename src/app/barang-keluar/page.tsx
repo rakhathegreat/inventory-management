@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Archive, BadgeCheck, Boxes, PackageMinus, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -15,14 +15,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -30,11 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-// Revert to using the static master data JSON for validation
-import masterData from "../dashboard/data.json";
-
-const brandOptions = ["Ransom", "Fiberhome", "Huawei"] as const;
-const kategoriOptions = ["Kabel Fiber", "ONT", "Splitter", "Adaptor", "PDU", "Lainnya"] as const;
 const lokasiOptions = ["Kardus 01 (Huawei)", "Kardus 02 (Ransom)", "Kardus 03 (Fiberhome)", "Gudang Utama", "Rak A - Level 1", "Rak A - Level 2", "Rak B - Level 1", "Rak B - Level 2"] as const;
 
 // Kuota default untuk setiap lokasi
@@ -49,38 +36,18 @@ const defaultKuota: Record<(typeof lokasiOptions)[number], number> = {
   "Gudang Utama": 100,
 };
 
-type BrandOption = (typeof brandOptions)[number] | "";
-type KategoriOption = (typeof kategoriOptions)[number];
 type LokasiOption = (typeof lokasiOptions)[number];
-type MasterDataItem = {
-  sn?: string | number;
-  nomor?: string | number;
-};
-
-// Mapping dari prefix kode ke merek
-const brandPrefixMap: Record<string, BrandOption> = {
-  FHT: "Ransom",
-  ABC: "Fiberhome",
-  HUA: "Huawei",
-};
 
 type BarangKeluarItem = {
   id: number;
   nomor: string;
   merek: string;
-  kategori: KategoriOption;
+  kategori: string;
   lokasi: LokasiOption;
   status: "Valid" | "Invalid";
 };
 
 type KodeBarangUpdate = string | ((current: string) => string);
-
-// Fungsi untuk mendeteksi merek dari awal input kode
-const detectBrandFromCode = (code: string): BrandOption => {
-  if (!code) return "";
-  const prefix = code.substring(0, 3).toUpperCase();
-  return brandPrefixMap[prefix] || "";
-};
 
 const isTextInputTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) return false;
@@ -90,17 +57,43 @@ const isTextInputTarget = (target: EventTarget | null) => {
 
 const normalizeKodeBarang = (code: string) => code.trim().toUpperCase();
 
+function EmptyScanTableState() {
+  return (
+    <div className="flex items-center justify-center px-6 py-12">
+      <div className="flex max-w-md flex-col items-center gap-4 text-center">
+        <div className="flex size-14 items-center justify-center rounded-full border bg-muted/40 text-muted-foreground">
+          <PackageMinus className="size-7" strokeWidth={1.8} />
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-base font-semibold text-foreground">Belum ada barang keluar</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Scan atau masukkan serial number dari form di sebelah kiri untuk menambahkan item ke sesi keluar.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BarangKeluarPage() {
   const [kodeBarang, setKodeBarang] = useState("");
-  const [merekFallback, setMerekFallback] = useState<BrandOption>("");
-  const [kategoriBarang, setKategoriBarang] = useState<KategoriOption>("Kabel Fiber");
   const [barangKeluar, setBarangKeluar] = useState<BarangKeluarItem[]>([]);
   const [kuota, setKuota] = useState(defaultKuota);
   const inputRef = useRef<HTMLInputElement>(null);
   const kodeBarangRef = useRef("");
+  const [dbItems, setDbItems] = useState<any[]>([]);
 
-  const detectedBrand = detectBrandFromCode(kodeBarang);
-  const masterItems = masterData as MasterDataItem[];
+  useEffect(() => {
+    const fetchItems = async () => {
+      try {
+        const items = await invoke("get_items");
+        setDbItems(items as any[]);
+      } catch (error) {
+        console.error("Gagal mengambil data master dari SQLite:", error);
+      }
+    };
+    fetchItems();
+  }, []);
   const totalKuotaTersedia = Object.values(kuota).reduce((total, value) => total + value, 0);
   const validItems = barangKeluar.filter((item) => item.status === "Valid").length;
 
@@ -121,15 +114,6 @@ export default function BarangKeluarPage() {
     inputRef.current?.focus();
   }, []);
 
-  // Auto-detect merek berdasarkan awal input kode
-  useEffect(() => {
-    if (detectedBrand) {
-      setMerekFallback(detectedBrand);
-    } else {
-      setMerekFallback("");
-    }
-  }, [detectedBrand]);
-
   const handleSubmit = useCallback((kodeOverride = kodeBarang) => {
     const trimmedKode = kodeOverride.trim();
     if (!trimmedKode) return;
@@ -145,51 +129,41 @@ export default function BarangKeluarPage() {
       return;
     }
 
-    // Periksa apakah kode yang discan ada di data master (static JSON)
-    const existsInMaster = masterItems.some((d) =>
-      (d.sn && String(d.sn) === trimmedKode) || (d.nomor && String(d.nomor) === trimmedKode)
+    // Periksa apakah kode yang discan ada di data master (SQLite)
+    const matchedItem = dbItems.find((d) =>
+      d.serialNumber && String(d.serialNumber).toUpperCase() === trimmedKode.toUpperCase()
     );
 
-    if (!existsInMaster) {
+    if (!matchedItem) {
       alert(`Data dengan kode "${trimmedKode}" tidak ditemukan!`);
       updateKodeBarang("");
-      setMerekFallback("");
       focusKodeBarangInput();
       return;
     }
 
-    const defaultLokasi = lokasiOptions[0];
-
-    // Check if kuota tersedia
-    if (kuota[defaultLokasi] <= 0) {
-      alert(`Kuota lokasi "${defaultLokasi}" sudah penuh!`);
-      focusKodeBarangInput();
-      return;
-    }
+    const originalLoc = matchedItem.storage_location || matchedItem.lokasiPenyimpanan || "-";
 
     const newItem: BarangKeluarItem = {
       id: Date.now(),
       nomor: trimmedKode,
-      merek: merekFallback || "(otomatis)",
-      kategori: kategoriBarang,
-      lokasi: defaultLokasi,
+      merek: matchedItem.merek || "-",
+      kategori: matchedItem.kategori || "-",
+      lokasi: originalLoc as LokasiOption,
       status: "Valid",
     };
 
     setBarangKeluar((current) => [newItem, ...current]);
-    // Kurangi kuota lokasi yang dipilih
+    // Tambah kuota lokasi karena barang keluar
     setKuota((current) => ({
       ...current,
-      [defaultLokasi]: current[defaultLokasi] - 1,
+      [originalLoc]: (current[originalLoc as LokasiOption] || 0) + 1,
     }));
 
     updateKodeBarang("");
-    setMerekFallback("");
 
     // Auto-focus kembali ke input setelah submit
     focusKodeBarangInput();
-    // (No-op) previously recorded to temporary DB; reverted to original behavior.
-  }, [barangKeluar, focusKodeBarangInput, kategoriBarang, kodeBarang, kuota, masterItems, merekFallback, updateKodeBarang]);
+  }, [barangKeluar, focusKodeBarangInput, kodeBarang, kuota, dbItems, updateKodeBarang]);
 
   // Arahkan input keyboard/scanner ke field Kode/SN walaupun fokus sedang di area lain.
   useEffect(() => {
@@ -233,17 +207,84 @@ export default function BarangKeluarPage() {
   const handleDeleteItem = (id: number) => {
     const itemToDelete = barangKeluar.find((item) => item.id === id);
     if (itemToDelete) {
-      // Tambah kembali kuota lokasi
+      // Kurangi kembali kuota lokasi karena batal dikeluarkan
       setKuota((current) => ({
         ...current,
-        [itemToDelete.lokasi]: current[itemToDelete.lokasi] + 1,
+        [itemToDelete.lokasi]: (current[itemToDelete.lokasi] || 0) - 1,
       }));
     }
     setBarangKeluar((current) => current.filter((item) => item.id !== id));
   };
 
-  const handleValidateAll = () => {
-    alert(`Validasi & Simpan ${barangKeluar.length} Barang Keluar - Berhasil!`);
+  const handleValidateAll = async () => {
+    try {
+      const sessionDate = new Date().toISOString().slice(0, 10);
+      const dateStr = sessionDate.replace(/-/g, "");
+
+      const txs = await invoke<any[]>("get_transactions");
+      const prefix = `OUT-${dateStr}-`;
+      let maxNum = 0;
+      txs.forEach(t => {
+        if (t.nomor && t.nomor.startsWith(prefix)) {
+          const numStr = t.nomor.slice(prefix.length);
+          const num = parseInt(numStr, 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      });
+      const sessionNomor = `${prefix}${(maxNum + 1).toString().padStart(4, '0')}`;
+
+      for (const item of barangKeluar) {
+        let originalLoc = "-";
+        const originalItem = dbItems.find(d => String(d.serialNumber).toUpperCase() === item.nomor.toUpperCase());
+        if (originalItem) {
+          originalLoc = originalItem.storage_location || originalItem.lokasiPenyimpanan || "-";
+          const updatedItem = {
+            ...originalItem,
+            status: "Keluar",
+            lokasiPenyimpanan: "Keluar",
+            tanggalKeluar: sessionDate,
+            operatorInput: "Sistem",
+          };
+          await invoke("update_item", { item: updatedItem });
+        } else {
+          const newItem = {
+            id: `UNIT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            serialNumber: item.nomor,
+            kategori: item.kategori,
+            merek: item.merek,
+            status: "Keluar",
+            lokasiPenyimpanan: "Keluar",
+            tanggalMasuk: sessionDate,
+            tanggalKeluar: sessionDate,
+            operatorInput: "Sistem",
+          };
+          await invoke("add_item", { item: newItem });
+        }
+
+        const newTransaction = {
+          id: `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          tanggal: sessionDate,
+          nomor: sessionNomor,
+          kategori: "Keluar",
+          status: "Selesai",
+          sn: item.nomor,
+          merek: item.merek,
+          asal: originalLoc,
+          tujuan: "Keluar",
+          operator: "Sistem"
+        };
+        await invoke("add_transaction", { transaction: newTransaction });
+      }
+      alert(`Validasi & Simpan ${barangKeluar.length} Barang Keluar - Berhasil!`);
+      setBarangKeluar([]); // Clear local state after saving
+
+      // Refresh DB Items after update
+      const items = await invoke("get_items");
+      setDbItems(items as any[]);
+    } catch (error) {
+      console.error("Gagal menyimpan ke database:", error);
+      alert("Terjadi kesalahan saat menyimpan barang keluar ke database!");
+    }
   };
 
   return (
@@ -260,9 +301,6 @@ export default function BarangKeluarPage() {
                 <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                   {barangKeluar.length} <span className="text-sm font-normal text-muted-foreground">Unit</span>
                 </CardTitle>
-                <CardAction className="absolute right-4 top-4">
-                  <Badge variant="outline">Aktif</Badge>
-                </CardAction>
               </CardHeader>
             </div>
           </div>
@@ -277,11 +315,8 @@ export default function BarangKeluarPage() {
               <CardHeader className="flex flex-col">
                 <CardDescription>Data Master</CardDescription>
                 <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                  {masterItems.length} <span className="text-sm font-normal text-muted-foreground">Item</span>
+                  {dbItems.length} <span className="text-sm font-normal text-muted-foreground">Item</span>
                 </CardTitle>
-                <CardAction className="absolute right-4 top-4">
-                  <Badge variant="outline">JSON</Badge>
-                </CardAction>
               </CardHeader>
             </div>
           </div>
@@ -298,9 +333,6 @@ export default function BarangKeluarPage() {
                 <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                   {validItems} <span className="text-sm font-normal text-muted-foreground">Valid</span>
                 </CardTitle>
-                <CardAction className="absolute right-4 top-4">
-                  <Badge variant="outline">Siap</Badge>
-                </CardAction>
               </CardHeader>
             </div>
           </div>
@@ -317,9 +349,6 @@ export default function BarangKeluarPage() {
                 <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                   {totalKuotaTersedia} <span className="text-sm font-normal text-muted-foreground">Slot</span>
                 </CardTitle>
-                <CardAction className="absolute right-4 top-4">
-                  <Badge variant="outline">Gudang</Badge>
-                </CardAction>
               </CardHeader>
             </div>
           </div>
@@ -356,61 +385,6 @@ export default function BarangKeluarPage() {
                 }}
                 placeholder="Masukkan kode barang atau serial number"
               />
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-4">
-                <Label htmlFor="merek-fallback">Merek fallback</Label>
-                <span className="text-xs text-muted-foreground">
-                  {merekFallback && detectedBrand === merekFallback
-                    ? "Terdeteksi otomatis"
-                    : "Jika pola SN tidak dikenali"}
-                </span>
-              </div>
-              <Select
-                value={merekFallback}
-                onValueChange={(value) => {
-                  setMerekFallback(value as BrandOption);
-                  focusKodeBarangInput();
-                }}
-              >
-                <SelectTrigger id="merek-fallback" className="w-full">
-                  <SelectValue placeholder="Pilih merek" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {brandOptions.map((brand) => (
-                      <SelectItem key={brand} value={brand}>
-                        {brand}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <Label htmlFor="kategori-barang">Kategori Barang</Label>
-              <Select
-                value={kategoriBarang}
-                onValueChange={(value) => {
-                  setKategoriBarang(value as KategoriOption);
-                  focusKodeBarangInput();
-                }}
-              >
-                <SelectTrigger id="kategori-barang" className="w-full">
-                  <SelectValue placeholder="Pilih kategori" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {kategoriOptions.map((kategori) => (
-                      <SelectItem key={kategori} value={kategori}>
-                        {kategori}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
             </div>
           </CardContent>
 
@@ -452,8 +426,8 @@ export default function BarangKeluarPage() {
                 <TableBody>
                   {barangKeluar.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-28 text-center text-sm text-muted-foreground">
-                        Belum ada barang keluar. Tambahkan item dari form scan di sebelah kiri.
+                      <TableCell colSpan={7} className="p-0">
+                        <EmptyScanTableState />
                       </TableCell>
                     </TableRow>
                   ) : (

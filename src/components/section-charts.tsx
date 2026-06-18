@@ -1,11 +1,13 @@
 "use client"
 
 import * as React from "react"
+import { invoke } from "@tauri-apps/api/core"
 import { ArrowRight, BadgeCheck, Check, Info, AlertTriangle, PackagePlus, PackageMinus, Lightbulb, X } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import {
     Label,
+    PolarAngleAxis,
     PolarGrid,
     PolarRadiusAxis,
     RadialBar,
@@ -27,10 +29,6 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-
-const chartData = [
-    { browser: "safari", visitors: 70, fill: "var(--color-safari)" },
-]
 
 const chartConfig = {
     visitors: {
@@ -99,6 +97,42 @@ export function SectionCharts() {
     const [items, setItems] = React.useState(notifications)
     const unreadCount = items.filter((n) => !n.read).length
 
+    // Storage capacity from DB
+    const [totalCapacity, setTotalCapacity] = React.useState(0)
+    const [usedCapacity, setUsedCapacity] = React.useState(0)
+    const capacityPercent = totalCapacity > 0 ? Math.round((usedCapacity / totalCapacity) * 100) : 0
+    const remaining = totalCapacity - usedCapacity
+
+    const chartData = React.useMemo(() => [
+        { browser: "safari", visitors: capacityPercent, fill: "var(--color-safari)" },
+    ], [capacityPercent])
+
+    React.useEffect(() => {
+        const fetchCapacity = async () => {
+            try {
+                const locations = await invoke<any[]>("get_locations")
+                let total = 0
+                let used = 0
+                for (const loc of locations) {
+                    if (loc.type === "Rak" && loc.levels) {
+                        for (const lvl of loc.levels) {
+                            total += lvl.capacity || 0
+                            used += lvl.usedCapacity || 0
+                        }
+                    } else {
+                        total += loc.capacity || 0
+                        used += loc.usedCapacity || 0
+                    }
+                }
+                setTotalCapacity(total)
+                setUsedCapacity(used)
+            } catch (error) {
+                console.error("Gagal mengambil data kapasitas:", error)
+            }
+        }
+        fetchCapacity()
+    }, [])
+
     const markAsRead = (id: number) => {
         setItems(items.map((item) => (item.id === id ? { ...item, read: true } : item)))
     }
@@ -124,12 +158,13 @@ export function SectionCharts() {
                 <CardContent className="flex-1 pb-0">
                     <ChartContainer
                         config={chartConfig}
-                        className="mx-auto aspect-square max-h-[250px]"
+                        className="mx-auto aspect-square w-full max-w-[250px]"
+                        initialDimension={{ width: 250, height: 250 }}
                     >
                         <RadialBarChart
                             data={chartData}
-                            startAngle={0}
-                            endAngle={250}
+                            startAngle={90}
+                            endAngle={-270}
                             outerRadius={90}
                             innerRadius={80}
                         >
@@ -140,7 +175,8 @@ export function SectionCharts() {
                                 className="first:fill-muted last:fill-background"
                                 polarRadius={[90, 80]}
                             />
-                            <RadialBar dataKey="visitors" background cornerRadius={10} />
+                            <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+                            <RadialBar dataKey="visitors" background cornerRadius={10} isAnimationActive={false} />
                             <PolarRadiusAxis tick={false} tickLine={false} axisLine={false}>
                                 <Label
                                     content={({ viewBox }) => {
@@ -157,7 +193,7 @@ export function SectionCharts() {
                                                         y={viewBox.cy}
                                                         className="fill-foreground text-4xl font-bold"
                                                     >
-                                                        {chartData[0].visitors}%
+                                                        {capacityPercent}%
                                                     </tspan>
                                                     <tspan
                                                         x={viewBox.cx}
@@ -179,15 +215,15 @@ export function SectionCharts() {
                     <div className="grid grid-cols-3 gap-2 w-full">
                         <div className="flex flex-col text-center">
                             <p className="text-muted-foreground font-normal text-xs">Kapasitas</p>
-                            <p className="font-bold text-md">155</p>
+                            <p className="font-bold text-md">{totalCapacity}</p>
                         </div>
                         <div className="flex flex-col text-center">
                             <p className="text-muted-foreground font-normal text-xs">Digunakan</p>
-                            <p className="font-bold text-md">155</p>
+                            <p className="font-bold text-md">{usedCapacity}</p>
                         </div>
                         <div className="flex flex-col text-center">
                             <p className="text-muted-foreground font-normal text-xs">Tersisa</p>
-                            <p className="font-bold text-md">0</p>
+                            <p className="font-bold text-md">{remaining}</p>
                         </div>
                     </div>
                 </CardFooter>

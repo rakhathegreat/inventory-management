@@ -1,6 +1,6 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { DataTable } from "@/components/data-table"
-import data from "../dashboard/data.json"
+import { invoke } from "@tauri-apps/api/core"
 import { Card } from "@/components/ui/card"
 import { Download, Plus, Search, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -17,27 +17,89 @@ import {
 
 const KATEGORI_OPTIONS = ["Masuk", "Keluar", "Rusak"]
 
+type Transaction = {
+  id: string;
+  tanggal: string;
+  nomor: string;
+  kategori: string;
+  status: string;
+  sn: string;
+  merek: string;
+  asal: string | null;
+  tujuan: string | null;
+  operator: string;
+};
+
 export default function DataTransaksiPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterKategori, setFilterKategori] = useState("all")
-  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
 
-  const handleBulkDelete = () => {
-    toast.success(`${selectedIds.length} transaksi berhasil dihapus.`)
-    setSelectedIds([])
+  const fetchTransactions = async () => {
+    try {
+      const data = await invoke<Transaction[]>("get_transactions");
+      setTransactions(data);
+    } catch (error) {
+      console.error("Gagal mengambil data transaksi:", error);
+      toast.error("Gagal memuat data riwayat transaksi.");
+    }
+  };
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [])
+
+  const handleBulkDelete = async () => {
+    try {
+      for (const id of selectedIds) {
+        await invoke("delete_transaction", { id });
+      }
+      toast.success(`${selectedIds.length} transaksi berhasil dihapus.`)
+      setSelectedIds([])
+      fetchTransactions();
+    } catch (error) {
+      console.error("Gagal menghapus transaksi:", error);
+      toast.error("Gagal menghapus transaksi.");
+    }
   }
+
+  const handleDeleteRow = async (id: string) => {
+    try {
+      await invoke("delete_transaction", { id });
+      toast.success("Transaksi berhasil dihapus.");
+      fetchTransactions();
+    } catch (error) {
+      console.error("Gagal menghapus transaksi:", error);
+      toast.error("Gagal menghapus transaksi.");
+    }
+  };
 
   const handleExport = (format: string) => {
     toast.success(`Data transaksi berhasil diekspor sebagai ${format}.`)
   }
 
-  const filteredData = data.filter((item) => {
-    const matchesSearch = item.nomor.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesKategori = filterKategori === "all" || item.kategori === filterKategori
-    return matchesSearch && matchesKategori
-  })
+  const flattenedData = transactions.map((t) => ({
+    id: t.id,
+    tanggal: t.tanggal,
+    nomor: t.nomor,
+    kategori: t.kategori,
+    status: t.status,
+    sn: t.sn,
+    merek: t.merek,
+    asal: t.asal || "-",
+    tujuan: t.tujuan || "-",
+  }));
+
+  const filteredData = flattenedData.filter((item) => {
+    const matchesSearch = item.nomor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.sn.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesKategori = filterKategori === "all" || item.kategori === filterKategori;
+    return matchesSearch && matchesKategori;
+  });
+  const hasActiveFilter = searchTerm.length > 0 || filterKategori !== "all";
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 animate-fade-in">
+    <div className="flex flex-col gap-4 p-4 md:p-6 lg:p-8 animate-fade-in">
       {/* Page Header */}
       <Card className="p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -103,8 +165,12 @@ export default function DataTransaksiPage() {
           </div>
         </div>
       </Card>
-      <DataTable data={filteredData} />
+      <DataTable
+        data={filteredData}
+        isFiltered={hasActiveFilter}
+        onSelectionChange={setSelectedIds}
+        onDeleteRow={handleDeleteRow}
+      />
     </div>
   )
 }
-

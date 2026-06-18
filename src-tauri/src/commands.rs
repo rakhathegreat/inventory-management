@@ -444,3 +444,65 @@ pub fn delete_item(state: State<DbState>, id: String) -> Result<(), String> {
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+// Transaction Commands
+#[derive(Serialize, Deserialize)]
+pub struct Transaction {
+    pub id: String,
+    pub tanggal: String,
+    pub nomor: String,
+    pub kategori: String,
+    pub status: String,
+    pub sn: String,
+    pub merek: String,
+    pub asal: Option<String>,
+    pub tujuan: Option<String>,
+    pub operator: String,
+}
+
+#[tauri::command]
+pub fn get_transactions(state: State<DbState>) -> Result<Vec<Transaction>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut stmt = conn.prepare("SELECT id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination, operator FROM transactions ORDER BY transaction_date DESC").map_err(|e| e.to_string())?;
+    
+    let iter = stmt.query_map([], |row| {
+        Ok(Transaction {
+            id: row.get(0)?,
+            tanggal: row.get(1)?,
+            nomor: row.get(2)?,
+            kategori: row.get(3)?,
+            status: row.get(4)?,
+            sn: row.get(5)?,
+            merek: row.get(6)?,
+            asal: row.get(7)?,
+            tujuan: row.get(8)?,
+            operator: row.get(9)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut transactions = Vec::new();
+    for t in iter {
+        transactions.push(t.map_err(|e| e.to_string())?);
+    }
+    Ok(transactions)
+}
+
+#[tauri::command]
+pub fn add_transaction(state: State<DbState>, transaction: Transaction) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "INSERT INTO transactions (id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination, operator) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![transaction.id, transaction.tanggal, transaction.nomor, transaction.kategori, transaction.status, transaction.sn, transaction.merek, transaction.asal, transaction.tujuan, transaction.operator],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_transaction(state: State<DbState>, id: String) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "DELETE FROM transactions WHERE id = ?1",
+        params![id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}

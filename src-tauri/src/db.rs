@@ -69,5 +69,21 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS transactions (
+            id TEXT PRIMARY KEY,
+            transaction_date TEXT NOT NULL,
+            transaction_number TEXT NOT NULL,
+            category TEXT NOT NULL,
+            status TEXT NOT NULL,
+            serial_number TEXT NOT NULL,
+            brand TEXT NOT NULL,
+            origin TEXT,
+            destination TEXT,
+            operator TEXT NOT NULL
+        )",
+        [],
+    )?;
+
     Ok(conn)
 }
