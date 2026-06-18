@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "inventory-management",
-  "version": "0.1.0",
-  "identifier": "com.inventory-management.app",
+  "productName": "Arxiva",
+  "version": "1.0.0-alpha.1",
+  "identifier": "com.arxiva.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "inventory-management",
+        "title": "Arxiva",
         "width": 800,
         "height": 600
       }
