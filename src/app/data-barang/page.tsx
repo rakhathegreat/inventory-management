@@ -64,6 +64,7 @@ import {
 
 import { toast } from "sonner"
 import { Link } from "react-router-dom"
+import { saveExportFile } from "@/lib/export-file"
 
 type StatusUnit = "Masuk" | "Keluar" | "Rusak"
 
@@ -540,7 +541,7 @@ export default function DataBarangPage() {
     return date.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
   }
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (filteredBarang.length === 0) {
       toast.error("Tidak ada data barang yang dapat diekspor.")
       return
@@ -586,26 +587,25 @@ export default function DataBarangPage() {
         ...rows.map((row) => row.map(escapeCsvCell).join(";")),
       ].join("\r\n")
 
-      const blob = new Blob([`\uFEFF${csvContent}`], {
-        type: "text/csv;charset=utf-8",
-      })
-      const downloadUrl = URL.createObjectURL(blob)
-      const downloadLink = document.createElement("a")
       const now = new Date()
       const dateSuffix = [
         now.getFullYear(),
         String(now.getMonth() + 1).padStart(2, "0"),
         String(now.getDate()).padStart(2, "0"),
       ].join("-")
+      const exportResult = await saveExportFile({
+        fileName: `data-barang-${dateSuffix}.csv`,
+        contents: `\uFEFF${csvContent}`,
+      })
 
-      downloadLink.href = downloadUrl
-      downloadLink.download = `data-barang-${dateSuffix}.csv`
-      document.body.appendChild(downloadLink)
-      downloadLink.click()
-      downloadLink.remove()
-      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000)
+      if (!exportResult.saved) return
 
-      toast.success(`${filteredBarang.length} data barang berhasil diekspor untuk Excel.`)
+      toast.success(
+        `${filteredBarang.length} data barang berhasil diekspor untuk Excel.`,
+        exportResult.path
+          ? { description: `Disimpan di: ${exportResult.path}` }
+          : undefined
+      )
     } catch (error) {
       console.error("Gagal mengekspor data barang:", error)
       toast.error("Gagal memproses ekspor data barang.")

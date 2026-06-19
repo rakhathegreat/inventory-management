@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
+import { saveExportFile } from "@/lib/export-file"
 import {
   Select,
   SelectContent,
@@ -127,7 +128,7 @@ export default function DataTransaksiPage() {
   });
   const hasActiveFilter = searchTerm.length > 0 || filterKategori !== "all";
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (filteredData.length === 0) {
       toast.error("Tidak ada data riwayat yang sesuai dengan filter untuk diekspor.")
       return
@@ -175,11 +176,6 @@ export default function DataTransaksiPage() {
         ...rows.map((row) => row.map(escapeCsvCell).join(";")),
       ].join("\r\n")
 
-      const blob = new Blob([`\uFEFF${csvContent}`], {
-        type: "text/csv;charset=utf-8",
-      })
-      const downloadUrl = URL.createObjectURL(blob)
-      const downloadLink = document.createElement("a")
       const now = new Date()
       const dateSuffix = [
         now.getFullYear(),
@@ -196,16 +192,18 @@ export default function DataTransaksiPage() {
           .replace(/^-|-$/g, "")
           .slice(0, 40)}`
         : ""
+      const exportResult = await saveExportFile({
+        fileName: `riwayat-${categorySuffix}${searchSuffix}-${dateSuffix}.csv`,
+        contents: `\uFEFF${csvContent}`,
+      })
 
-      downloadLink.href = downloadUrl
-      downloadLink.download = `riwayat-${categorySuffix}${searchSuffix}-${dateSuffix}.csv`
-      document.body.appendChild(downloadLink)
-      downloadLink.click()
-      downloadLink.remove()
-      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000)
+      if (!exportResult.saved) return
 
       toast.success(
-        `${filteredData.length} data riwayat berhasil diekspor sesuai filter aktif.`
+        `${filteredData.length} data riwayat berhasil diekspor sesuai filter aktif.`,
+        exportResult.path
+          ? { description: `Disimpan di: ${exportResult.path}` }
+          : undefined
       )
     } catch (error) {
       console.error("Gagal mengekspor riwayat transaksi:", error)

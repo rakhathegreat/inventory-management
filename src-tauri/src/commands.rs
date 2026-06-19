@@ -1,7 +1,19 @@
 use crate::db::DbState;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use tauri::State;
+
+#[tauri::command]
+pub fn save_export_file(path: String, contents: String) -> Result<(), String> {
+    let export_path = PathBuf::from(path);
+
+    if let Some(parent) = export_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+
+    std::fs::write(export_path, contents.as_bytes()).map_err(|error| error.to_string())
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Category {
