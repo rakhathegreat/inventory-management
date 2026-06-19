@@ -383,15 +383,78 @@ export default function DataBarangPage() {
     return date.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
   }
 
-  const handleExport = (type: "Excel" | "PDF") => {
-    toast.promise(
-      new Promise((resolve) => setTimeout(resolve, 1500)),
-      {
-        loading: `Sedang mengekspor data unit ${type}...`,
-        success: `Data unit barang berhasil diunduh dalam format ${type}!`,
-        error: "Gagal memproses ekspor data.",
+  const handleExportExcel = () => {
+    if (filteredBarang.length === 0) {
+      toast.error("Tidak ada data barang yang dapat diekspor.")
+      return
+    }
+
+    try {
+      const escapeCsvCell = (value: string | number | undefined) => {
+        let cell = String(value ?? "")
+
+        // Hindari formula injection ketika file dibuka di aplikasi spreadsheet.
+        if (/^[\t\r ]*[=+\-@]/.test(cell)) {
+          cell = `'${cell}`
+        }
+
+        return `"${cell.replace(/"/g, '""')}"`
       }
-    )
+
+      const headers = [
+        "No",
+        "Serial Number",
+        "Merek",
+        "Kategori",
+        "Status",
+        "Lokasi Penyimpanan",
+        "Tanggal Masuk",
+        "Tanggal Keluar",
+        "Operator Input",
+      ]
+
+      const rows = filteredBarang.map((item, index) => [
+        index + 1,
+        item.serialNumber,
+        item.merek,
+        item.kategori,
+        item.status,
+        item.lokasiPenyimpanan,
+        item.tanggalMasuk,
+        item.tanggalKeluar || "",
+        item.operatorInput,
+      ])
+
+      const csvContent = [
+        "sep=;",
+        headers.map(escapeCsvCell).join(";"),
+        ...rows.map((row) => row.map(escapeCsvCell).join(";")),
+      ].join("\r\n")
+
+      const blob = new Blob([`\uFEFF${csvContent}`], {
+        type: "text/csv;charset=utf-8",
+      })
+      const downloadUrl = URL.createObjectURL(blob)
+      const downloadLink = document.createElement("a")
+      const now = new Date()
+      const dateSuffix = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0"),
+      ].join("-")
+
+      downloadLink.href = downloadUrl
+      downloadLink.download = `data-barang-${dateSuffix}.csv`
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      downloadLink.remove()
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000)
+
+      toast.success(`${filteredBarang.length} data barang berhasil diekspor untuk Excel.`)
+    } catch (error) {
+      console.error("Gagal mengekspor data barang:", error)
+      toast.error("Gagal memproses ekspor data barang.")
+    }
   }
 
   const recentRiwayat = useMemo(() => {
@@ -451,9 +514,13 @@ export default function DataBarangPage() {
                 Hapus ({selectedIds.length})
               </Button>
             )}
-            <Button variant="outline" onClick={() => handleExport("Excel")}>
+            <Button
+              variant="outline"
+              onClick={handleExportExcel}
+              disabled={filteredBarang.length === 0}
+            >
               <Download className="size-4" />
-              <span>Export Data</span>
+              <span>Export Excel</span>
             </Button>
             <Button
               className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-md transition-all active:scale-[0.98]"

@@ -108,10 +108,6 @@ export default function DataTransaksiPage() {
     }
   }
 
-  const handleExport = (format: string) => {
-    toast.success(`Data transaksi berhasil diekspor sebagai ${format}.`)
-  }
-
   const flattenedData = transactions.map((t) => ({
     id: t.id,
     tanggal: t.tanggal,
@@ -122,6 +118,7 @@ export default function DataTransaksiPage() {
     merek: t.merek,
     asal: t.asal || "-",
     tujuan: t.tujuan || "-",
+    operator: t.operator,
   }));
 
   const filteredData = flattenedData.filter((item) => {
@@ -131,6 +128,95 @@ export default function DataTransaksiPage() {
     return matchesSearch && matchesKategori;
   });
   const hasActiveFilter = searchTerm.length > 0 || filterKategori !== "all";
+
+  const handleExportExcel = () => {
+    if (filteredData.length === 0) {
+      toast.error("Tidak ada data riwayat yang sesuai dengan filter untuk diekspor.")
+      return
+    }
+
+    try {
+      const escapeCsvCell = (value: string | number | undefined) => {
+        let cell = String(value ?? "")
+
+        // Hindari formula injection ketika file dibuka di aplikasi spreadsheet.
+        if (/^[\t\r ]*[=+\-@]/.test(cell)) {
+          cell = `'${cell}`
+        }
+
+        return `"${cell.replace(/"/g, '""')}"`
+      }
+
+      const headers = [
+        "No",
+        "Tanggal",
+        "ID Transaksi",
+        "Kategori",
+        "Status",
+        "Serial Number",
+        "Merek",
+        "Lokasi Asal",
+        "Lokasi Tujuan",
+        "Operator",
+      ]
+
+      const rows = filteredData.map((item, index) => [
+        index + 1,
+        item.tanggal,
+        item.nomor,
+        item.kategori,
+        item.status,
+        item.sn,
+        item.merek,
+        item.asal,
+        item.tujuan,
+        item.operator,
+      ])
+
+      const csvContent = [
+        "sep=;",
+        headers.map(escapeCsvCell).join(";"),
+        ...rows.map((row) => row.map(escapeCsvCell).join(";")),
+      ].join("\r\n")
+
+      const blob = new Blob([`\uFEFF${csvContent}`], {
+        type: "text/csv;charset=utf-8",
+      })
+      const downloadUrl = URL.createObjectURL(blob)
+      const downloadLink = document.createElement("a")
+      const now = new Date()
+      const dateSuffix = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0"),
+      ].join("-")
+      const categorySuffix =
+        filterKategori === "all" ? "semua-kategori" : filterKategori.toLowerCase()
+      const searchSuffix = searchTerm.trim()
+        ? `-pencarian-${searchTerm
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 40)}`
+        : ""
+
+      downloadLink.href = downloadUrl
+      downloadLink.download = `riwayat-${categorySuffix}${searchSuffix}-${dateSuffix}.csv`
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      downloadLink.remove()
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000)
+
+      toast.success(
+        `${filteredData.length} data riwayat berhasil diekspor sesuai filter aktif.`
+      )
+    } catch (error) {
+      console.error("Gagal mengekspor riwayat transaksi:", error)
+      toast.error("Gagal memproses ekspor riwayat transaksi.")
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 p-4 md:p-6 lg:p-8 animate-fade-in">
       {/* Page Header */}
@@ -183,9 +269,13 @@ export default function DataTransaksiPage() {
                 Hapus ({selectedIds.length})
               </Button>
             )}
-            <Button variant="outline" onClick={() => handleExport("Excel")}>
+            <Button
+              variant="outline"
+              onClick={handleExportExcel}
+              disabled={filteredData.length === 0}
+            >
               <Download className="size-4" />
-              <span>Export Data</span>
+              <span>Export Excel</span>
             </Button>
             <Button
               className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-md transition-all active:scale-[0.98]"
