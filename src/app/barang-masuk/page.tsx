@@ -425,42 +425,6 @@ export default function BarangMasukPage() {
       const sessionNomor = `${prefix}${(maxNum + 1).toString().padStart(4, '0')}`;
 
       for (const item of barangMasuk) {
-<<<<<<< HEAD
-        const existingItem = item.existingItemId
-          ? dbItems.find((dbItem) => dbItem.id === item.existingItemId)
-          : undefined;
-
-        if (item.existingItemId && !existingItem) {
-          throw new Error(`Data lama untuk serial number ${item.nomor} tidak ditemukan.`);
-        }
-
-        if (existingItem) {
-          const updatedItem: InventoryItem = {
-            ...existingItem,
-            serialNumber: item.nomor,
-            kategori: item.kategori,
-            merek: item.merek,
-            status: "Masuk",
-            lokasiPenyimpanan: item.lokasi,
-            tanggalMasuk: sessionDate,
-            tanggalKeluar: undefined,
-            operatorInput: "Sistem",
-          };
-          await invoke("update_item", { item: updatedItem });
-        } else {
-          const newItem = {
-            id: `UNIT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-            serialNumber: item.nomor,
-            kategori: item.kategori,
-            merek: item.merek,
-            status: "Masuk",
-            lokasiPenyimpanan: item.lokasi,
-            tanggalMasuk: sessionDate,
-            operatorInput: "Sistem",
-          };
-          await invoke("add_item", { item: newItem });
-        }
-=======
         const newItem = {
           id: `UNIT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           serialNumber: item.nomor,
@@ -471,7 +435,6 @@ export default function BarangMasukPage() {
           tanggalMasuk: sessionDate,
         };
         await invoke("add_item", { item: newItem });
->>>>>>> fix-tanggal-keluar
 
         const newTransaction = {
           id: `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
