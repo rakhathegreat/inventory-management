@@ -117,7 +117,6 @@ export default function DataTransaksiPage() {
     merek: t.merek,
     asal: t.asal || "-",
     tujuan: t.tujuan || "-",
-    operator: t.operator,
   }));
 
   const filteredData = flattenedData.filter((item) => {
@@ -156,7 +155,6 @@ export default function DataTransaksiPage() {
         "Merek",
         "Lokasi Asal",
         "Lokasi Tujuan",
-        "Operator",
       ]
 
       const rows = filteredData.map((item, index) => [
@@ -169,7 +167,6 @@ export default function DataTransaksiPage() {
         item.merek,
         item.asal,
         item.tujuan,
-        item.operator,
       ])
 
       const csvContent = [

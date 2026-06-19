@@ -54,7 +54,6 @@ type InventoryItem = {
   lokasiPenyimpanan: string;
   tanggalMasuk: string;
   tanggalKeluar?: string;
-  operatorInput: string;
 };
 
 type BarangMasukItem = {
@@ -92,6 +91,7 @@ const isTextInputTarget = (target: EventTarget | null) => {
 
 const normalizeKodeBarang = (code: string) => code.trim().toUpperCase();
 const normalizeBrand = (brand: string) => brand.trim().toLocaleLowerCase("id-ID");
+const normalizeStatus = (status: string) => status.trim().toLocaleLowerCase("id-ID");
 
 const getRecommendedLocation = (
   brand: BrandOption,
@@ -263,7 +263,7 @@ export default function BarangMasukPage() {
       (item) => normalizeKodeBarang(item.serialNumber) === normalizeKodeBarang(trimmedKode)
     );
 
-    if (existingItem && existingItem.status.trim().toLowerCase() !== "keluar") {
+    if (existingItem && normalizeStatus(existingItem.status) !== "keluar") {
       toast.error("Serial number masih terdaftar sebagai barang aktif.", {
         description: `Status saat ini: ${existingItem.status}`,
       });
@@ -423,18 +423,71 @@ export default function BarangMasukPage() {
         }
       });
       const sessionNomor = `${prefix}${(maxNum + 1).toString().padStart(4, '0')}`;
+      const latestItems = await invoke<InventoryItem[]>("get_items");
+
+      const invalidItem = barangMasuk.find((item) => {
+        const existingItem = latestItems.find(
+          (dbItem) =>
+            dbItem.id === item.existingItemId ||
+            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor)
+        );
+
+        if (item.existingItemId && !existingItem) return true;
+        return Boolean(existingItem && normalizeStatus(existingItem.status) !== "keluar");
+      });
+
+      if (invalidItem) {
+        const existingItem = latestItems.find(
+          (dbItem) =>
+            dbItem.id === invalidItem.existingItemId ||
+            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(invalidItem.nomor)
+        );
+
+        toast.error(
+          existingItem
+            ? "Barang tidak dapat diproses sebagai masuk kembali."
+            : "Data barang keluar tidak lagi ditemukan.",
+          {
+            description: existingItem
+              ? `${invalidItem.nomor} berstatus ${existingItem.status}`
+              : invalidItem.nomor,
+          }
+        );
+        setDbItems(latestItems);
+        return;
+      }
 
       for (const item of barangMasuk) {
-        const newItem = {
-          id: `UNIT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          serialNumber: item.nomor,
-          kategori: item.kategori,
-          merek: item.merek,
-          status: "Masuk",
-          lokasiPenyimpanan: item.lokasi,
-          tanggalMasuk: sessionDate,
-        };
-        await invoke("add_item", { item: newItem });
+        const existingItem = latestItems.find(
+          (dbItem) =>
+            dbItem.id === item.existingItemId ||
+            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor)
+        );
+
+        if (existingItem) {
+          const updatedItem: InventoryItem = {
+            ...existingItem,
+            serialNumber: item.nomor,
+            kategori: item.kategori,
+            merek: item.merek,
+            status: "Masuk",
+            lokasiPenyimpanan: item.lokasi,
+            tanggalMasuk: sessionDate,
+            tanggalKeluar: undefined,
+          };
+          await invoke("update_item", { item: updatedItem });
+        } else {
+          const newItem: InventoryItem = {
+            id: `UNIT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            serialNumber: item.nomor,
+            kategori: item.kategori,
+            merek: item.merek,
+            status: "Masuk",
+            lokasiPenyimpanan: item.lokasi,
+            tanggalMasuk: sessionDate,
+          };
+          await invoke("add_item", { item: newItem });
+        }
 
         const newTransaction = {
           id: `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,

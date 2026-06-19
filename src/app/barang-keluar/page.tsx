@@ -26,6 +26,17 @@ import {
 } from "@/components/ui/table";
 type LokasiOption = string;
 
+type InventoryItem = {
+  id: string;
+  serialNumber: string;
+  kategori: string;
+  merek: string;
+  status: string;
+  lokasiPenyimpanan: string;
+  tanggalMasuk: string;
+  tanggalKeluar?: string;
+};
+
 type BarangKeluarItem = {
   id: number;
   nomor: string;
@@ -44,6 +55,7 @@ const isTextInputTarget = (target: EventTarget | null) => {
 };
 
 const normalizeKodeBarang = (code: string) => code.trim().toUpperCase();
+const normalizeStatus = (status: string) => status.trim().toLocaleLowerCase("id-ID");
 
 function EmptyScanTableState() {
   return (
@@ -70,13 +82,13 @@ export default function BarangKeluarPage() {
   const [kuota, setKuota] = useState<Record<string, number>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const kodeBarangRef = useRef("");
-  const [dbItems, setDbItems] = useState<any[]>([]);
+  const [dbItems, setDbItems] = useState<InventoryItem[]>([]);
 
   useEffect(() => {
     const fetchItemsAndLocations = async () => {
       try {
-        const items = await invoke("get_items");
-        setDbItems(items as any[]);
+        const items = await invoke<InventoryItem[]>("get_items");
+        setDbItems(items);
 
         const locationsData = await invoke<any[]>("get_locations");
         const newKuota: Record<string, number> = {};
@@ -150,7 +162,16 @@ export default function BarangKeluarPage() {
       return;
     }
 
-    const originalLoc = matchedItem.storage_location || matchedItem.lokasiPenyimpanan || "-";
+    if (normalizeStatus(matchedItem.status) === "keluar") {
+      toast.error("Barang ini sudah berstatus Keluar dan tidak dapat dikeluarkan kembali.", {
+        description: trimmedKode,
+      });
+      updateKodeBarang("");
+      focusKodeBarangInput();
+      return;
+    }
+
+    const originalLoc = matchedItem.lokasiPenyimpanan || "-";
 
     const newItem: BarangKeluarItem = {
       id: Date.now(),
@@ -241,32 +262,45 @@ export default function BarangKeluarPage() {
         }
       });
       const sessionNomor = `${prefix}${(maxNum + 1).toString().padStart(4, '0')}`;
+      const latestItems = await invoke<InventoryItem[]>("get_items");
+
+      const invalidItem = barangKeluar.find((item) => {
+        const latestItem = latestItems.find(
+          (dbItem) =>
+            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor)
+        );
+        return !latestItem || normalizeStatus(latestItem.status) === "keluar";
+      });
+
+      if (invalidItem) {
+        const latestItem = latestItems.find(
+          (dbItem) =>
+            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(invalidItem.nomor)
+        );
+
+        toast.error(
+          latestItem
+            ? "Barang yang sudah berstatus Keluar tidak dapat disimpan kembali."
+            : "Data barang tidak lagi ditemukan di data master.",
+          { description: invalidItem.nomor }
+        );
+        setDbItems(latestItems);
+        return;
+      }
 
       for (const item of barangKeluar) {
-        let originalLoc = "-";
-        const originalItem = dbItems.find(d => String(d.serialNumber).toUpperCase() === item.nomor.toUpperCase());
-        if (originalItem) {
-          originalLoc = originalItem.storage_location || originalItem.lokasiPenyimpanan || "-";
-          const updatedItem = {
-            ...originalItem,
-            status: "Keluar",
-            lokasiPenyimpanan: "Keluar",
-            tanggalKeluar: sessionDate,
-          };
-          await invoke("update_item", { item: updatedItem });
-        } else {
-          const newItem = {
-            id: `UNIT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-            serialNumber: item.nomor,
-            kategori: item.kategori,
-            merek: item.merek,
-            status: "Keluar",
-            lokasiPenyimpanan: "Keluar",
-            tanggalMasuk: sessionDate,
-            tanggalKeluar: sessionDate,
-          };
-          await invoke("add_item", { item: newItem });
-        }
+        const originalItem = latestItems.find(
+          (dbItem) =>
+            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor)
+        )!;
+        const originalLoc = originalItem.lokasiPenyimpanan || "-";
+        const updatedItem: InventoryItem = {
+          ...originalItem,
+          status: "Keluar",
+          lokasiPenyimpanan: "Keluar",
+          tanggalKeluar: sessionDate,
+        };
+        await invoke("update_item", { item: updatedItem });
 
         const newTransaction = {
           id: `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -285,8 +319,8 @@ export default function BarangKeluarPage() {
       setBarangKeluar([]); // Clear local state after saving
 
       // Refresh DB Items after update
-      const items = await invoke("get_items");
-      setDbItems(items as any[]);
+      const items = await invoke<InventoryItem[]>("get_items");
+      setDbItems(items);
     } catch (error) {
       console.error("Gagal menyimpan ke database:", error);
       toast.error("Gagal menyimpan barang keluar ke database.");

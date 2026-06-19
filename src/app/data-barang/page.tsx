@@ -416,7 +416,6 @@ export default function DataBarangPage() {
         "Lokasi Penyimpanan",
         "Tanggal Masuk",
         "Tanggal Keluar",
-        "Operator Input",
       ]
 
       const rows = filteredBarang.map((item, index) => [
@@ -428,7 +427,6 @@ export default function DataBarangPage() {
         item.lokasiPenyimpanan,
         item.tanggalMasuk,
         item.tanggalKeluar || "",
-        item.operatorInput,
       ])
 
       const csvContent = [
