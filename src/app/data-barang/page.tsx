@@ -76,7 +76,6 @@ interface BarangUnit {
   lokasiPenyimpanan: string;
   tanggalMasuk: string;
   tanggalKeluar?: string;
-  operatorInput: string;
 }
 
 interface RiwayatUnit {
@@ -86,8 +85,19 @@ interface RiwayatUnit {
   dariStatus: string;
   keStatus: string;
   lokasi: string;
-  oleh: string;
   catatan?: string;
+}
+
+interface Transaction {
+  id: string;
+  tanggal: string;
+  nomor: string;
+  kategori: string;
+  status: string;
+  sn: string;
+  merek: string;
+  asal: string | null;
+  tujuan: string | null;
 }
 
 type DeleteDialogState =
@@ -136,6 +146,7 @@ function EmptyBarangTableState({
 export default function DataBarangPage() {
   const isMobile = useIsMobile()
   const [barangList, setBarangList] = useState<BarangUnit[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [dbCategories, setDbCategories] = useState<string[]>([])
   const [dbLocations, setDbLocations] = useState<string[]>([])
@@ -144,6 +155,9 @@ export default function DataBarangPage() {
     try {
       const data = await invoke<BarangUnit[]>("get_items")
       setBarangList(data)
+
+      const transactionData = await invoke<Transaction[]>("get_transactions")
+      setTransactions(transactionData)
 
       const categories = await invoke<any[]>("get_categories")
       setDbCategories(categories.map(c => c.name))
@@ -179,7 +193,6 @@ export default function DataBarangPage() {
     lokasiPenyimpanan: "",
     tanggalMasuk: "",
     tanggalKeluar: "",
-    operatorInput: ""
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [isDetailOpen, setIsDetailOpen] = useState(false)
@@ -196,7 +209,6 @@ export default function DataBarangPage() {
       lokasiPenyimpanan: "",
       tanggalMasuk: new Date().toISOString().slice(0, 10),
       tanggalKeluar: "",
-      operatorInput: ""
     })
     setFormErrors({})
     setSelectedBarang(null)
@@ -213,7 +225,6 @@ export default function DataBarangPage() {
       lokasiPenyimpanan: barang.lokasiPenyimpanan,
       tanggalMasuk: barang.tanggalMasuk,
       tanggalKeluar: barang.tanggalKeluar || "",
-      operatorInput: barang.operatorInput
     })
     setFormErrors({})
     setIsFormOpen(true)
@@ -265,8 +276,6 @@ export default function DataBarangPage() {
     if (!formData.merek.trim()) errors.merek = "Merek barang wajib diisi"
     if (!formData.lokasiPenyimpanan.trim()) errors.lokasiPenyimpanan = "Lokasi penyimpanan wajib diisi"
     if (!formData.tanggalMasuk.trim()) errors.tanggalMasuk = "Tanggal masuk wajib diisi"
-    if (!formData.operatorInput.trim()) errors.operatorInput = "Operator input wajib diisi"
-
     const isDuplicateSN = barangList.some(b =>
       b.serialNumber.trim().toLowerCase() === formData.serialNumber.trim().toLowerCase() &&
       (formMode === "add" || b.id !== selectedBarang?.id)
@@ -289,7 +298,6 @@ export default function DataBarangPage() {
         lokasiPenyimpanan: formData.lokasiPenyimpanan,
         tanggalMasuk: formData.tanggalMasuk,
         tanggalKeluar: formData.tanggalKeluar || undefined,
-        operatorInput: formData.operatorInput
       }
       try {
         await invoke("add_item", { item: newBarang })
@@ -310,7 +318,6 @@ export default function DataBarangPage() {
         lokasiPenyimpanan: formData.lokasiPenyimpanan,
         tanggalMasuk: formData.tanggalMasuk,
         tanggalKeluar: formData.tanggalKeluar || undefined,
-        operatorInput: formData.operatorInput
       }
       try {
         await invoke("update_item", { item: updatedBarang })
@@ -332,8 +339,7 @@ export default function DataBarangPage() {
         b.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.kategori.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.merek.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.lokasiPenyimpanan.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.operatorInput.toLowerCase().includes(searchTerm.toLowerCase())
+        b.lokasiPenyimpanan.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesStatus = filterStatus === "all" || b.status === filterStatus
       return matchesSearch && matchesStatus
     })
@@ -394,10 +400,20 @@ export default function DataBarangPage() {
     )
   }
 
-  const recentRiwayat = useMemo(() => {
-    // History is currently not persisted in DB for data-barang
-    return [] as RiwayatUnit[]
-  }, [detailBarang])
+  const recentRiwayat = useMemo<RiwayatUnit[]>(() => {
+    if (!detailBarang) return []
+
+    return transactions
+      .filter((transaction) => transaction.sn.toLowerCase() === detailBarang.serialNumber.toLowerCase())
+      .map<RiwayatUnit>((transaction) => ({
+        tanggal: transaction.tanggal,
+        tipe: transaction.kategori,
+        nomorSurat: transaction.nomor,
+        dariStatus: transaction.asal || "-",
+        keStatus: transaction.tujuan || "-",
+        lokasi: transaction.tujuan || transaction.asal || detailBarang.lokasiPenyimpanan,
+      }))
+  }, [detailBarang, transactions])
 
   return (
     <div className="flex min-h-0 flex-col gap-6 overflow-hidden p-4 md:p-6 lg:p-8 animate-fade-in">
@@ -733,27 +749,6 @@ export default function DataBarangPage() {
                   />
                 </div>
               </div>
-
-              {/* Operator Input */}
-              <div className="flex flex-col gap-3">
-                <Label htmlFor="operatorInput">Operator Input</Label>
-                <Input
-                  id="operatorInput"
-                  placeholder="Nama petugas yang menginput data..."
-                  value={formData.operatorInput}
-                  onChange={(e) => {
-                    setFormData(prev => ({ ...prev, operatorInput: e.target.value }))
-                    if (formErrors.operatorInput) {
-                      setFormErrors(prev => { const next = { ...prev }; delete next.operatorInput; return next })
-                    }
-                  }}
-                  className={formErrors.operatorInput ? "border-destructive" : ""}
-                />
-                {formErrors.operatorInput && (
-                  <p className="text-[11px] text-destructive font-medium">{formErrors.operatorInput}</p>
-                )}
-              </div>
-
               <DrawerFooter>
                 <Button
                   type="submit"
@@ -815,16 +810,8 @@ export default function DataBarangPage() {
                     </div>
                     <div className="flex flex-col gap-3">
                       <Label>Tanggal Keluar</Label>
-                      <Input readOnly defaultValue={(() => {
-                        const exitAction = recentRiwayat.find(r => r.tipe !== "Masuk")
-                        return exitAction ? exitAction.tanggal : "-"
-                      })()} />
+                      <Input readOnly defaultValue={formatTanggal(detailBarang.tanggalKeluar || "")} />
                     </div>
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    <Label>Petugas Terdaftar</Label>
-                    <Input readOnly defaultValue={detailBarang.operatorInput} />
                   </div>
                 </form>
 

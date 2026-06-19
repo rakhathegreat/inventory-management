@@ -488,7 +488,7 @@ export default function LokasiBarangPage() {
   };
 
   return (
-    <div className="p-6 h-full flex flex-col gap-6 text-neutral-100 max-w-[1400px] mx-auto w-full">
+    <div className="p-6 h-full flex flex-col gap-6 text-neutral-100 mx-auto w-full">
       <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs md:grid-cols-2 xl:grid-cols-4 dark:*:data-[slot=card]:bg-card">
         <Card className="@container/card relative">
           <div className="flex flex-row items-center">

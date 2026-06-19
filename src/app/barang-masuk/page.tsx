@@ -398,7 +398,6 @@ export default function BarangMasukPage() {
           status: "Masuk",
           lokasiPenyimpanan: item.lokasi,
           tanggalMasuk: sessionDate,
-          operatorInput: "Sistem",
         };
         await invoke("add_item", { item: newItem });
 
@@ -412,7 +411,6 @@ export default function BarangMasukPage() {
           merek: item.merek,
           asal: "Keluar",
           tujuan: item.lokasi,
-          operator: "Sistem"
         };
         await invoke("add_transaction", { transaction: newTransaction });
       }

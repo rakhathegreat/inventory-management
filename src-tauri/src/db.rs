@@ -4,6 +4,19 @@ use std::sync::Mutex;
 
 pub struct DbState(pub Mutex<Connection>);
 
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({})", table))?;
+    let columns = stmt.query_map([], |row| row.get::<_, String>(1))?;
+
+    for current_column in columns {
+        if current_column? == column {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
 pub fn init_db(db_path: PathBuf) -> Result<Connection> {
     let conn = Connection::open(db_path)?;
 
@@ -93,8 +106,7 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
             status TEXT NOT NULL,
             storage_location TEXT NOT NULL,
             entry_date TEXT NOT NULL,
-            exit_date TEXT,
-            operator TEXT NOT NULL
+            exit_date TEXT
         )",
         [],
     )?;
@@ -109,11 +121,18 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
             serial_number TEXT NOT NULL,
             brand TEXT NOT NULL,
             origin TEXT,
-            destination TEXT,
-            operator TEXT NOT NULL
+            destination TEXT
         )",
         [],
     )?;
+
+    if column_exists(&conn, "items", "operator")? {
+        conn.execute("ALTER TABLE items DROP COLUMN operator", [])?;
+    }
+
+    if column_exists(&conn, "transactions", "operator")? {
+        conn.execute("ALTER TABLE transactions DROP COLUMN operator", [])?;
+    }
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS notifications (
