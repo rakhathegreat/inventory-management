@@ -17,6 +17,8 @@ type Transaction = {
     tujuan: string | null;
 };
 
+const DASHBOARD_TRANSACTION_LIMIT = 6
+
 export default function DashboardPage() {
     const [transactions, setTransactions] = useState<any[]>([])
 
@@ -24,7 +26,7 @@ export default function DashboardPage() {
         const fetchTransactions = async () => {
             try {
                 const data = await invoke<Transaction[]>("get_transactions")
-                const flattened = data.map((t) => ({
+                const flattened = data.slice(0, DASHBOARD_TRANSACTION_LIMIT).map((t) => ({
                     id: t.id,
                     tanggal: t.tanggal,
                     nomor: t.nomor,
@@ -51,7 +53,11 @@ export default function DashboardPage() {
                 <ChartAreaInteractive />
             </div>
             <div className="px-4 lg:px-6">
-                <DataTable data={transactions} showSelection={false} />
+                <DataTable
+                    data={transactions}
+                    showSelection={false}
+                    showPagination={false}
+                />
             </div>
         </div>
     )

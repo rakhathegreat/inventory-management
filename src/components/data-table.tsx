@@ -67,6 +67,13 @@ import {
   Tabs,
   TabsContent,
 } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 export const schema = z.object({
   no: z.number().optional(),
@@ -299,7 +306,9 @@ function EmptyTableState({
 export function DataTable({
   data: initialData,
   showSelection = true,
+  showPagination = true,
   isFiltered = false,
+  resetPaginationKey,
   onSelectionChange,
   onDeleteRow,
 }: {
@@ -307,7 +316,9 @@ export function DataTable({
   showTitle?: boolean
   showViewButton?: boolean
   showSelection?: boolean
+  showPagination?: boolean
   isFiltered?: boolean
+  resetPaginationKey?: string
   onSelectionChange?: (selectedIds: string[]) => void
   onDeleteRow?: (id: string) => void
 }) {
@@ -335,6 +346,13 @@ export function DataTable({
     pageIndex: 0,
     pageSize: 10,
   })
+
+  React.useEffect(() => {
+    setPagination((current) => ({
+      ...current,
+      pageIndex: 0,
+    }))
+  }, [resetPaginationKey])
   const sortableId = React.useId()
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -492,6 +510,52 @@ export function DataTable({
             </Table>
           </DndContext>
         </div>
+        {showPagination && data.length > 0 && (
+          <div className="flex flex-col gap-3 px-1 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Baris per halaman</span>
+              <Select
+                value={String(table.getState().pagination.pageSize)}
+                onValueChange={(value) => table.setPageSize(Number(value))}
+              >
+                <SelectTrigger className="h-8 w-[72px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[10, 20, 50].map((pageSize) => (
+                    <SelectItem key={pageSize} value={String(pageSize)}>
+                      {pageSize}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between gap-3 sm:justify-end">
+              <span className="text-sm text-muted-foreground">
+                Halaman {table.getState().pagination.pageIndex + 1} dari{" "}
+                {Math.max(table.getPageCount(), 1)}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.previousPage()}
+                  disabled={!table.getCanPreviousPage()}
+                >
+                  Sebelumnya
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.nextPage()}
+                  disabled={!table.getCanNextPage()}
+                >
+                  Berikutnya
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </TabsContent>
     </Tabs>
   )

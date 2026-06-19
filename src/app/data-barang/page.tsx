@@ -112,6 +112,10 @@ type DeleteDialogState =
   }
 
 const STATUS_OPTIONS: StatusUnit[] = ["Masuk", "Keluar", "Rusak"]
+const getLokasiPenyimpanan = (
+  status: StatusUnit,
+  lokasiPenyimpanan: string
+) => status === "Keluar" ? "Keluar" : lokasiPenyimpanan.trim()
 
 function EmptyBarangTableState({
   isFiltered,
@@ -154,7 +158,37 @@ export default function DataBarangPage() {
   const loadData = async () => {
     try {
       const data = await invoke<BarangUnit[]>("get_items")
-      setBarangList(data)
+      const normalizedData = data.map((item) => ({
+        ...item,
+        lokasiPenyimpanan: getLokasiPenyimpanan(
+          item.status,
+          item.lokasiPenyimpanan || ""
+        ),
+      }))
+      setBarangList(normalizedData)
+
+      const legacyExitedItems = data.filter(
+        (item) =>
+          item.status === "Keluar" &&
+          item.lokasiPenyimpanan?.trim() !== "Keluar"
+      )
+
+      if (legacyExitedItems.length > 0) {
+        const updateResults = await Promise.allSettled(
+          legacyExitedItems.map((item) =>
+            invoke("update_item", {
+              item: {
+                ...item,
+                lokasiPenyimpanan: "Keluar",
+              },
+            })
+          )
+        )
+
+        if (updateResults.some((result) => result.status === "rejected")) {
+          console.warn("Sebagian lokasi barang keluar gagal diperbarui ke database.")
+        }
+      }
 
       const transactionData = await invoke<Transaction[]>("get_transactions")
       setTransactions(transactionData)
@@ -199,6 +233,8 @@ export default function DataBarangPage() {
   const [detailBarang, setDetailBarang] = useState<BarangUnit | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const resetForm = () => {
     setFormData({
@@ -222,7 +258,10 @@ export default function DataBarangPage() {
       kategori: barang.kategori,
       merek: barang.merek,
       status: barang.status,
-      lokasiPenyimpanan: barang.lokasiPenyimpanan,
+      lokasiPenyimpanan: getLokasiPenyimpanan(
+        barang.status,
+        barang.lokasiPenyimpanan
+      ),
       tanggalMasuk: barang.tanggalMasuk,
       tanggalKeluar: barang.tanggalKeluar || "",
     })
@@ -268,13 +307,49 @@ export default function DataBarangPage() {
     }
   }
 
+  const buildRusakTransaction = async (
+    barang: BarangUnit,
+    lokasiAsal: string
+  ): Promise<Transaction> => {
+    const transactionDate = new Date().toISOString().slice(0, 10)
+    const dateCode = transactionDate.replace(/-/g, "")
+    const prefix = `DMG-${dateCode}-`
+    const latestTransactions = await invoke<Transaction[]>("get_transactions")
+    let maxSequence = 0
+
+    latestTransactions.forEach((transaction) => {
+      if (!transaction.nomor.startsWith(prefix)) return
+
+      const sequence = Number.parseInt(transaction.nomor.slice(prefix.length), 10)
+      if (!Number.isNaN(sequence) && sequence > maxSequence) {
+        maxSequence = sequence
+      }
+    })
+
+    return {
+      id: `TRX-DMG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      tanggal: transactionDate,
+      nomor: `${prefix}${String(maxSequence + 1).padStart(4, "0")}`,
+      kategori: "Rusak",
+      status: "Selesai",
+      sn: barang.serialNumber,
+      merek: barang.merek,
+      asal: lokasiAsal || barang.lokasiPenyimpanan,
+      tujuan: barang.lokasiPenyimpanan,
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const errors: Record<string, string> = {}
+    const lokasiPenyimpanan = getLokasiPenyimpanan(
+      formData.status,
+      formData.lokasiPenyimpanan
+    )
     if (!formData.serialNumber.trim()) errors.serialNumber = "Serial number wajib diisi"
     if (!formData.kategori.trim()) errors.kategori = "Kategori wajib diisi"
     if (!formData.merek.trim()) errors.merek = "Merek barang wajib diisi"
-    if (!formData.lokasiPenyimpanan.trim()) errors.lokasiPenyimpanan = "Lokasi penyimpanan wajib diisi"
+    if (!lokasiPenyimpanan) errors.lokasiPenyimpanan = "Lokasi penyimpanan wajib diisi"
     if (!formData.tanggalMasuk.trim()) errors.tanggalMasuk = "Tanggal masuk wajib diisi"
     const isDuplicateSN = barangList.some(b =>
       b.serialNumber.trim().toLowerCase() === formData.serialNumber.trim().toLowerCase() &&
@@ -295,12 +370,35 @@ export default function DataBarangPage() {
         kategori: formData.kategori,
         merek: formData.merek,
         status: formData.status,
-        lokasiPenyimpanan: formData.lokasiPenyimpanan,
+        lokasiPenyimpanan,
         tanggalMasuk: formData.tanggalMasuk,
         tanggalKeluar: formData.tanggalKeluar || undefined,
       }
       try {
         await invoke("add_item", { item: newBarang })
+
+        if (newBarang.status === "Rusak") {
+          let rusakTransaction: Transaction | null = null
+
+          try {
+            rusakTransaction = await buildRusakTransaction(
+              newBarang,
+              newBarang.lokasiPenyimpanan
+            )
+            await invoke("add_transaction", { transaction: rusakTransaction })
+            if (rusakTransaction) {
+              const savedTransaction = rusakTransaction
+              setTransactions(prev => [savedTransaction, ...prev])
+            }
+          } catch (transactionError) {
+            if (rusakTransaction) {
+              await invoke("delete_transaction", { id: rusakTransaction.id }).catch(() => undefined)
+            }
+            await invoke("delete_item", { id: newBarang.id })
+            throw transactionError
+          }
+        }
+
         setBarangList(prev => [newBarang, ...prev])
         toast.success(`Unit baru dengan SN ${newBarang.serialNumber} berhasil didaftarkan!`)
       } catch (error) {
@@ -315,16 +413,51 @@ export default function DataBarangPage() {
         kategori: formData.kategori,
         merek: formData.merek,
         status: formData.status,
-        lokasiPenyimpanan: formData.lokasiPenyimpanan,
+        lokasiPenyimpanan,
         tanggalMasuk: formData.tanggalMasuk,
         tanggalKeluar: formData.tanggalKeluar || undefined,
       }
+      const changedToRusak =
+        originalBarang.status !== "Rusak" && updatedBarang.status === "Rusak"
+
       try {
         await invoke("update_item", { item: updatedBarang })
+
+        if (changedToRusak) {
+          let rusakTransaction: Transaction | null = null
+
+          try {
+            rusakTransaction = await buildRusakTransaction(
+              updatedBarang,
+              originalBarang.lokasiPenyimpanan
+            )
+            await invoke("add_transaction", { transaction: rusakTransaction })
+            if (rusakTransaction) {
+              const savedTransaction = rusakTransaction
+              setTransactions(prev => [savedTransaction, ...prev])
+            }
+          } catch (transactionError) {
+            if (rusakTransaction) {
+              await invoke("delete_transaction", { id: rusakTransaction.id }).catch(() => undefined)
+            }
+            await invoke("update_item", { item: originalBarang })
+            throw transactionError
+          }
+        }
+
         setBarangList(prev => prev.map(b => b.id === originalBarang.id ? updatedBarang : b))
-        toast.success(`Unit dengan SN ${formData.serialNumber.toUpperCase()} berhasil diperbarui!`)
+        toast.success(
+          changedToRusak
+            ? `Unit dengan SN ${updatedBarang.serialNumber} ditandai Rusak dan dicatat ke riwayat.`
+            : `Unit dengan SN ${updatedBarang.serialNumber} berhasil diperbarui!`
+        )
       } catch (error) {
-        toast.error("Gagal memperbarui unit.")
+        console.error("Gagal memperbarui unit:", error)
+        toast.error(
+          changedToRusak
+            ? "Gagal menyimpan status Rusak ke data barang dan riwayat."
+            : "Gagal memperbarui unit."
+        )
         return
       }
     }
@@ -345,12 +478,30 @@ export default function DataBarangPage() {
     })
   }, [barangList, searchTerm, filterStatus])
   const hasActiveFilter = searchTerm.trim().length > 0 || filterStatus !== "all"
+  const totalPages = Math.max(1, Math.ceil(filteredBarang.length / pageSize))
+  const paginatedBarang = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize
+    return filteredBarang.slice(startIndex, startIndex + pageSize)
+  }, [currentPage, filteredBarang, pageSize])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, filterStatus, pageSize])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedIds(filteredBarang.map(b => b.id))
+      setSelectedIds(prev => [
+        ...new Set([...prev, ...paginatedBarang.map(b => b.id)])
+      ])
     } else {
-      setSelectedIds([])
+      const pageIds = new Set(paginatedBarang.map(b => b.id))
+      setSelectedIds(prev => prev.filter(id => !pageIds.has(id)))
     }
   }
 
@@ -556,7 +707,10 @@ export default function DataBarangPage() {
               <TableHead className="w-[50px] text-center">No.</TableHead>
               <TableHead className="w-[50px] text-center">
                 <Checkbox
-                  checked={filteredBarang.length > 0 && selectedIds.length === filteredBarang.length}
+                  checked={
+                    paginatedBarang.length > 0 &&
+                    paginatedBarang.every(item => selectedIds.includes(item.id))
+                  }
                   onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
                   aria-label="Pilih semua"
                 />
@@ -572,8 +726,8 @@ export default function DataBarangPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredBarang.length > 0 ? (
-              filteredBarang.map((item, index) => {
+            {paginatedBarang.length > 0 ? (
+              paginatedBarang.map((item, index) => {
                 const badge = getStatusBadgeProps(item.status)
                 return (
                   <TableRow
@@ -583,7 +737,7 @@ export default function DataBarangPage() {
                     data-state={selectedIds.includes(item.id) ? "selected" : undefined}
                   >
                     <TableCell className="text-center font-medium">
-                      {index + 1}
+                      {(currentPage - 1) * pageSize + index + 1}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()} className="text-center">
                       <Checkbox
@@ -653,6 +807,51 @@ export default function DataBarangPage() {
           </TableBody>
         </Table>
       </div>
+      {filteredBarang.length > 0 && (
+        <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Baris per halaman</span>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(value) => setPageSize(Number(value))}
+            >
+              <SelectTrigger className="h-8 w-[72px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[10, 20, 50].map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center justify-between gap-3 sm:justify-end">
+            <span className="text-sm text-muted-foreground">
+              Halaman {currentPage} dari {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+              >
+                Sebelumnya
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Berikutnya
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add / Edit Drawer Form */}
       <Drawer open={isFormOpen} onOpenChange={setIsFormOpen} direction={isMobile ? "bottom" : "right"}>
@@ -744,7 +943,26 @@ export default function DataBarangPage() {
                   <Label htmlFor="status">Status Unit</Label>
                   <Select
                     value={formData.status}
-                    onValueChange={(val) => setFormData(prev => ({ ...prev, status: val as StatusUnit }))}
+                    onValueChange={(val) => {
+                      const status = val as StatusUnit
+                      setFormData(prev => ({
+                        ...prev,
+                        status,
+                        lokasiPenyimpanan:
+                          status === "Keluar"
+                            ? "Keluar"
+                            : prev.lokasiPenyimpanan === "Keluar"
+                              ? ""
+                              : prev.lokasiPenyimpanan,
+                      }))
+                      if (status === "Keluar" && formErrors.lokasiPenyimpanan) {
+                        setFormErrors(prev => {
+                          const next = { ...prev }
+                          delete next.lokasiPenyimpanan
+                          return next
+                        })
+                      }
+                    }}
                   >
                     <SelectTrigger id="status">
                       <SelectValue placeholder="Pilih status" />
@@ -783,6 +1001,7 @@ export default function DataBarangPage() {
                   <Label htmlFor="lokasiPenyimpanan">Lokasi Penyimpanan</Label>
                   <Select
                     value={formData.lokasiPenyimpanan}
+                    disabled={formData.status === "Keluar"}
                     onValueChange={(val) => {
                       setFormData(prev => ({ ...prev, lokasiPenyimpanan: val }))
                       if (formErrors.lokasiPenyimpanan) {
@@ -794,6 +1013,9 @@ export default function DataBarangPage() {
                       <SelectValue placeholder="Pilih lokasi penyimpanan..." />
                     </SelectTrigger>
                     <SelectContent>
+                      {formData.status === "Keluar" && (
+                        <SelectItem value="Keluar">Keluar</SelectItem>
+                      )}
                       {dbLocations.map((loc) => (
                         <SelectItem key={loc} value={loc}>{loc}</SelectItem>
                       ))}

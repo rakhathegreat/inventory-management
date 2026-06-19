@@ -287,6 +287,7 @@ export default function DataTransaksiPage() {
       <DataTable
         data={filteredData}
         isFiltered={hasActiveFilter}
+        resetPaginationKey={`${searchTerm}|${filterKategori}`}
         onSelectionChange={setSelectedIds}
         onDeleteRow={handleDeleteRow}
       />

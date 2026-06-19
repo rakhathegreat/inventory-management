@@ -1,7 +1,7 @@
 {
   "name": "Arxiva",
   "private": true,
-  "version": "1.0.0-alpha.4",
+  "version": "1.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
