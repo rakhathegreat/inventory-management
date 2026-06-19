@@ -40,6 +40,10 @@ type BrandDefinition = {
 };
 type KategoriOption = string;
 type LokasiOption = string;
+type LocationDefinition = {
+  name: LokasiOption;
+  brandRule: BrandOption;
+};
 
 type BarangMasukItem = {
   id: number;
@@ -74,6 +78,32 @@ const isTextInputTarget = (target: EventTarget | null) => {
 };
 
 const normalizeKodeBarang = (code: string) => code.trim().toUpperCase();
+const normalizeBrand = (brand: string) => brand.trim().toLocaleLowerCase("id-ID");
+
+const getRecommendedLocation = (
+  brand: BrandOption,
+  locations: LocationDefinition[],
+  availableCapacity: Record<string, number>
+): LokasiOption => {
+  const availableLocations = locations.filter(
+    (location) => (availableCapacity[location.name] ?? 0) > 0
+  );
+  const normalizedBrand = normalizeBrand(brand);
+
+  if (normalizedBrand) {
+    const matchingLocation = availableLocations.find(
+      (location) => normalizeBrand(location.brandRule) === normalizedBrand
+    );
+    if (matchingLocation) return matchingLocation.name;
+  }
+
+  const mixedLocation = availableLocations.find((location) => {
+    const normalizedRule = normalizeBrand(location.brandRule);
+    return !normalizedRule || normalizedRule === "campuran";
+  });
+
+  return mixedLocation?.name || availableLocations[0]?.name || "";
+};
 
 function EmptyScanTableState() {
   return (
@@ -104,7 +134,7 @@ export default function BarangMasukPage() {
   const kodeBarangRef = useRef("");
   const [dbBrands, setDbBrands] = useState<BrandDefinition[]>([]);
   const [dbCategories, setDbCategories] = useState<string[]>([]);
-  const [dbLocations, setDbLocations] = useState<string[]>([]);
+  const [dbLocations, setDbLocations] = useState<LocationDefinition[]>([]);
 
   // Fetch brands, categories, and locations from database
   useEffect(() => {
@@ -126,19 +156,32 @@ export default function BarangMasukPage() {
         }
 
         const locationsData = await invoke<any[]>("get_locations");
-        const locs: string[] = [];
+        const locs: LocationDefinition[] = [];
         const newKuota: Record<string, number> = {};
 
         locationsData.forEach(loc => {
+          if (loc.isActive === false) return;
+
           if (loc.type === "Rak" && loc.levels) {
             loc.levels.forEach((lvl: any) => {
+              if (lvl.isActive === false) return;
+
               const name = `${loc.name} - ${lvl.name}`;
-              locs.push(name);
-              newKuota[name] = lvl.capacity - (lvl.usedCapacity || 0);
+              locs.push({
+                name,
+                brandRule: lvl.brandRule || "Campuran",
+              });
+              newKuota[name] = Math.max(0, lvl.capacity - (lvl.usedCapacity || 0));
             });
           } else {
-            locs.push(loc.name);
-            newKuota[loc.name] = (loc.capacity || 0) - (loc.usedCapacity || 0);
+            locs.push({
+              name: loc.name,
+              brandRule: loc.brandRule || "Campuran",
+            });
+            newKuota[loc.name] = Math.max(
+              0,
+              (loc.capacity || 0) - (loc.usedCapacity || 0)
+            );
           }
         });
         setDbLocations(locs);
@@ -199,18 +242,15 @@ export default function BarangMasukPage() {
       return;
     }
 
-    const defaultLokasi = dbLocations.length > 0 ? dbLocations[0] : "";
+    const itemBrand = detectBrandFromCode(trimmedKode, dbBrands) || merekFallback;
+    const recommendedLocation = getRecommendedLocation(itemBrand, dbLocations, kuota);
 
-    if (!defaultLokasi) {
-      toast.error("Tidak ada lokasi penyimpanan yang tersedia.");
-      return;
-    }
-
-    // Check if kuota tersedia
-    if (kuota[defaultLokasi] <= 0) {
-      toast.error("Kuota lokasi sudah penuh.", {
-        description: defaultLokasi,
-      });
+    if (!recommendedLocation) {
+      toast.error(
+        dbLocations.length === 0
+          ? "Tidak ada lokasi penyimpanan aktif yang tersedia."
+          : "Semua lokasi penyimpanan sudah penuh."
+      );
       focusKodeBarangInput();
       return;
     }
@@ -218,9 +258,9 @@ export default function BarangMasukPage() {
     const newItem: BarangMasukItem = {
       id: Date.now(),
       nomor: trimmedKode,
-      merek: merekFallback || "(otomatis)",
+      merek: itemBrand || "(otomatis)",
       kategori: kategoriBarang,
-      lokasi: defaultLokasi,
+      lokasi: recommendedLocation,
       status: "Valid",
     };
 
@@ -230,7 +270,7 @@ export default function BarangMasukPage() {
     // Kurangi kuota lokasi yang dipilih
     setKuota((current) => ({
       ...current,
-      [defaultLokasi]: current[defaultLokasi] - 1,
+      [recommendedLocation]: current[recommendedLocation] - 1,
     }));
 
     updateKodeBarang("");
@@ -238,7 +278,17 @@ export default function BarangMasukPage() {
 
     // Auto-focus kembali ke input setelah submit
     focusKodeBarangInput();
-  }, [barangMasuk, focusKodeBarangInput, kategoriBarang, kodeBarang, kuota, merekFallback, updateKodeBarang]);
+  }, [
+    barangMasuk,
+    dbBrands,
+    dbLocations,
+    focusKodeBarangInput,
+    kategoriBarang,
+    kodeBarang,
+    kuota,
+    merekFallback,
+    updateKodeBarang,
+  ]);
 
   // Arahkan input keyboard/scanner ke field Kode/SN walaupun fokus sedang di area lain.
   useEffect(() => {
@@ -638,10 +688,14 @@ export default function BarangMasukPage() {
                             <SelectContent>
                               <SelectGroup>
                                 {dbLocations.map((lokasi) => {
-                                  const isDisabled = kuota[lokasi] <= 0;
+                                  const isDisabled = kuota[lokasi.name] <= 0;
                                   return (
-                                    <SelectItem key={lokasi} value={lokasi} disabled={isDisabled}>
-                                      {lokasi}{isDisabled ? " (Kuota penuh)" : ""}
+                                    <SelectItem
+                                      key={lokasi.name}
+                                      value={lokasi.name}
+                                      disabled={isDisabled}
+                                    >
+                                      {lokasi.name}{isDisabled ? " (Kuota penuh)" : ""}
                                     </SelectItem>
                                   );
                                 })}
