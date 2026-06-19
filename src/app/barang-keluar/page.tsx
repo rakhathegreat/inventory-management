@@ -252,7 +252,6 @@ export default function BarangKeluarPage() {
             status: "Keluar",
             lokasiPenyimpanan: "Keluar",
             tanggalKeluar: sessionDate,
-            operatorInput: "Sistem",
           };
           await invoke("update_item", { item: updatedItem });
         } else {
@@ -265,7 +264,6 @@ export default function BarangKeluarPage() {
             lokasiPenyimpanan: "Keluar",
             tanggalMasuk: sessionDate,
             tanggalKeluar: sessionDate,
-            operatorInput: "Sistem",
           };
           await invoke("add_item", { item: newItem });
         }
@@ -280,7 +278,6 @@ export default function BarangKeluarPage() {
           merek: item.merek,
           asal: originalLoc,
           tujuan: "Keluar",
-          operator: "Sistem"
         };
         await invoke("add_transaction", { transaction: newTransaction });
       }

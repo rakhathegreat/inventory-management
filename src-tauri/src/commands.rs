@@ -431,14 +431,12 @@ pub struct Item {
     pub entry_date: String,
     #[serde(rename = "tanggalKeluar")]
     pub exit_date: Option<String>,
-    #[serde(rename = "operatorInput")]
-    pub operator: String,
 }
 
 #[tauri::command]
 pub fn get_items(state: State<DbState>) -> Result<Vec<Item>, String> {
     let conn = state.0.lock().unwrap();
-    let mut stmt = conn.prepare("SELECT id, serial_number, category, brand, status, storage_location, entry_date, exit_date, operator FROM items").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, serial_number, category, brand, status, storage_location, entry_date, exit_date FROM items").map_err(|e| e.to_string())?;
 
     let items_iter = stmt
         .query_map([], |row| {
@@ -451,7 +449,6 @@ pub fn get_items(state: State<DbState>) -> Result<Vec<Item>, String> {
                 storage_location: row.get(5)?,
                 entry_date: row.get(6)?,
                 exit_date: row.get(7)?,
-                operator: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -468,8 +465,8 @@ pub fn get_items(state: State<DbState>) -> Result<Vec<Item>, String> {
 pub fn add_item(state: State<DbState>, item: Item) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     conn.execute(
-        "INSERT INTO items (id, serial_number, category, brand, status, storage_location, entry_date, exit_date, operator) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![item.id, item.serial_number, item.category, item.brand, item.status, item.storage_location, item.entry_date, item.exit_date, item.operator],
+        "INSERT INTO items (id, serial_number, category, brand, status, storage_location, entry_date, exit_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![item.id, item.serial_number, item.category, item.brand, item.status, item.storage_location, item.entry_date, item.exit_date],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -478,8 +475,8 @@ pub fn add_item(state: State<DbState>, item: Item) -> Result<(), String> {
 pub fn update_item(state: State<DbState>, item: Item) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     conn.execute(
-        "UPDATE items SET serial_number = ?1, category = ?2, brand = ?3, status = ?4, storage_location = ?5, entry_date = ?6, exit_date = ?7, operator = ?8 WHERE id = ?9",
-        params![item.serial_number, item.category, item.brand, item.status, item.storage_location, item.entry_date, item.exit_date, item.operator, item.id],
+        "UPDATE items SET serial_number = ?1, category = ?2, brand = ?3, status = ?4, storage_location = ?5, entry_date = ?6, exit_date = ?7 WHERE id = ?8",
+        params![item.serial_number, item.category, item.brand, item.status, item.storage_location, item.entry_date, item.exit_date, item.id],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -523,13 +520,12 @@ pub struct Transaction {
     pub merek: String,
     pub asal: Option<String>,
     pub tujuan: Option<String>,
-    pub operator: String,
 }
 
 #[tauri::command]
 pub fn get_transactions(state: State<DbState>) -> Result<Vec<Transaction>, String> {
     let conn = state.0.lock().unwrap();
-    let mut stmt = conn.prepare("SELECT id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination, operator FROM transactions ORDER BY transaction_date DESC").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination FROM transactions ORDER BY transaction_date DESC").map_err(|e| e.to_string())?;
 
     let iter = stmt
         .query_map([], |row| {
@@ -543,7 +539,6 @@ pub fn get_transactions(state: State<DbState>) -> Result<Vec<Transaction>, Strin
                 merek: row.get(6)?,
                 asal: row.get(7)?,
                 tujuan: row.get(8)?,
-                operator: row.get(9)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -559,8 +554,8 @@ pub fn get_transactions(state: State<DbState>) -> Result<Vec<Transaction>, Strin
 pub fn add_transaction(state: State<DbState>, transaction: Transaction) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     conn.execute(
-        "INSERT INTO transactions (id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination, operator) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-        params![transaction.id, transaction.tanggal, transaction.nomor, transaction.kategori, transaction.status, transaction.sn, transaction.merek, transaction.asal, transaction.tujuan, transaction.operator],
+        "INSERT INTO transactions (id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![transaction.id, transaction.tanggal, transaction.nomor, transaction.kategori, transaction.status, transaction.sn, transaction.merek, transaction.asal, transaction.tujuan],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }

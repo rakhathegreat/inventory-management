@@ -43,7 +43,6 @@ type Transaction = {
     merek: string
     asal: string | null
     tujuan: string | null
-    operator: string
 }
 
 type ChartDataPoint = {

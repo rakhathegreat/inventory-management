@@ -425,6 +425,7 @@ export default function BarangMasukPage() {
       const sessionNomor = `${prefix}${(maxNum + 1).toString().padStart(4, '0')}`;
 
       for (const item of barangMasuk) {
+<<<<<<< HEAD
         const existingItem = item.existingItemId
           ? dbItems.find((dbItem) => dbItem.id === item.existingItemId)
           : undefined;
@@ -459,6 +460,18 @@ export default function BarangMasukPage() {
           };
           await invoke("add_item", { item: newItem });
         }
+=======
+        const newItem = {
+          id: `UNIT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          serialNumber: item.nomor,
+          kategori: item.kategori,
+          merek: item.merek,
+          status: "Masuk",
+          lokasiPenyimpanan: item.lokasi,
+          tanggalMasuk: sessionDate,
+        };
+        await invoke("add_item", { item: newItem });
+>>>>>>> fix-tanggal-keluar
 
         const newTransaction = {
           id: `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -470,7 +483,6 @@ export default function BarangMasukPage() {
           merek: item.merek,
           asal: "Keluar",
           tujuan: item.lokasi,
-          operator: "Sistem"
         };
         await invoke("add_transaction", { transaction: newTransaction });
       }
