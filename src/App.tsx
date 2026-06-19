@@ -11,6 +11,7 @@ import DataTransaksiPage from "./app/data-transaksi/page";
 import LokasiBarangPage from "./app/lokasi-barang/page";
 import KategoriBarangPage from "./app/kategori-barang/page";
 import MerekBarangPage from "./app/merek-barang/page";
+import MitraPage from "./app/mitra/page";
 import { useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -42,6 +43,7 @@ function App() {
               <Route path="lokasi-barang" element={<LokasiBarangPage />} />
               <Route path="kategori-barang" element={<KategoriBarangPage />} />
               <Route path="merek-barang" element={<MerekBarangPage />} />
+              <Route path="mitra" element={<MitraPage />} />
             </Route>
           </Routes>
         </Router>

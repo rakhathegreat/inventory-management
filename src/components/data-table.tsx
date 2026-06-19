@@ -86,6 +86,7 @@ export const schema = z.object({
   merek: z.string().optional(),
   asal: z.string().optional(),
   tujuan: z.string().optional(),
+  mitra: z.string().optional(),
 })
 
 const columns: ColumnDef<z.infer<typeof schema>>[] = [
@@ -194,6 +195,15 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
     cell: ({ row }) => (
       <div className="text-foreground">
         {row.original.tujuan || "-"}
+      </div>
+    ),
+  },
+  {
+    accessorKey: "mitra",
+    header: "Mitra",
+    cell: ({ row }) => (
+      <div className="text-foreground">
+        {row.original.mitra || "-"}
       </div>
     ),
   },

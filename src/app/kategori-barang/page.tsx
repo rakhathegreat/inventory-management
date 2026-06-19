@@ -45,6 +45,7 @@ export default function KategoriBarangPage() {
   // Form state
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [nameError, setNameError] = useState("");
 
   const loadCategories = async () => {
     try {
@@ -79,18 +80,37 @@ export default function KategoriBarangPage() {
       setDescription("");
       setEditId(null);
     }
+    setNameError("");
     setIsSheetOpen(true);
   };
 
   const handleSave = async () => {
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      setNameError("Nama kategori wajib diisi.");
+      toast.error("Nama kategori wajib diisi.");
+      return;
+    }
+
+    const duplicateCategory = categories.some(
+      (category) =>
+        category.id !== editId &&
+        category.name.trim().toLowerCase() === normalizedName.toLowerCase()
+    );
+    if (duplicateCategory) {
+      setNameError("Nama kategori sudah terdaftar.");
+      toast.error("Kategori dengan nama tersebut sudah terdaftar.");
+      return;
+    }
+
     try {
       if (editId) {
         const cat = categories.find(c => c.id === editId);
         await invoke("update_category", {
           category: {
             id: editId,
-            name,
-            description,
+            name: normalizedName,
+            description: description.trim() || "-",
             totalItems: cat?.totalItems || 0
           }
         });
@@ -98,8 +118,8 @@ export default function KategoriBarangPage() {
         await invoke("add_category", {
           category: {
             id: `kat-${Date.now()}`,
-            name: name || "Kategori Baru",
-            description: description || "-",
+            name: normalizedName,
+            description: description.trim() || "-",
             totalItems: 0
           }
         });
@@ -109,7 +129,7 @@ export default function KategoriBarangPage() {
       toast.success(`Berhasil ${editId ? "menyimpan perubahan" : "menambahkan"} data kategori`);
     } catch (error) {
       console.error("Failed to save category:", error);
-      toast.error("Gagal menyimpan kategori.");
+      toast.error(typeof error === "string" ? error : "Gagal menyimpan kategori.");
     }
   };
 
@@ -213,7 +233,18 @@ export default function KategoriBarangPage() {
             <div className="grid gap-5">
               <div className="space-y-2">
                 <Label>Nama Kategori</Label>
-                <Input value={name} onChange={e => setName(e.target.value)} placeholder="Contoh: Router & Switch" className="bg-neutral-900 border-neutral-800" />
+                <Input
+                  value={name}
+                  onChange={e => {
+                    setName(e.target.value)
+                    setNameError("")
+                  }}
+                  placeholder="Contoh: Router & Switch"
+                  className={`bg-neutral-900 ${nameError ? "border-destructive" : "border-neutral-800"}`}
+                />
+                {nameError && (
+                  <p className="text-xs text-destructive">{nameError}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Deskripsi</Label>

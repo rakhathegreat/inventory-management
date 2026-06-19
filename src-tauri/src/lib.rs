@@ -1,5 +1,5 @@
-pub mod db;
 pub mod commands;
+pub mod db;
 
 use db::{init_db, DbState};
 use std::sync::Mutex;
@@ -18,18 +18,22 @@ pub fn run() {
                     current_dir
                 };
                 let dev_db_dir = root_dir.join("database");
-                std::fs::create_dir_all(&dev_db_dir).expect("Failed to create dev database directory");
+                std::fs::create_dir_all(&dev_db_dir)
+                    .expect("Failed to create dev database directory");
                 dev_db_dir.join("database")
             } else {
                 // In production, save the DB to the standard OS App Data directory
-                let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
+                let app_data_dir = app
+                    .path()
+                    .app_data_dir()
+                    .expect("Failed to get app data dir");
                 std::fs::create_dir_all(&app_data_dir).expect("Failed to create app data dir");
                 app_data_dir.join("inventory.db")
             };
-            
+
             let conn = init_db(db_path).expect("Failed to initialize database");
             app.manage(DbState(Mutex::new(conn)));
-            
+
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
@@ -44,6 +48,10 @@ pub fn run() {
             commands::add_brand,
             commands::update_brand,
             commands::delete_brand,
+            commands::get_partners,
+            commands::add_partner,
+            commands::update_partner,
+            commands::delete_partner,
             commands::get_locations,
             commands::save_location,
             commands::delete_location,

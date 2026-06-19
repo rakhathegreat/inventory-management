@@ -15,6 +15,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -37,12 +44,19 @@ type InventoryItem = {
   tanggalKeluar?: string;
 };
 
+type Partner = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
 type BarangKeluarItem = {
   id: number;
   nomor: string;
   merek: string;
   kategori: string;
   lokasi: LokasiOption;
+  mitra: string;
   status: "Valid" | "Invalid";
 };
 
@@ -83,12 +97,21 @@ export default function BarangKeluarPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const kodeBarangRef = useRef("");
   const [dbItems, setDbItems] = useState<InventoryItem[]>([]);
+  const [dbPartners, setDbPartners] = useState<Partner[]>([]);
+  const [selectedPartnerId, setSelectedPartnerId] = useState("");
 
   useEffect(() => {
     const fetchItemsAndLocations = async () => {
       try {
         const items = await invoke<InventoryItem[]>("get_items");
         setDbItems(items);
+
+        const partners = await invoke<Partner[]>("get_partners");
+        const activePartners = partners.filter((partner) => partner.isActive);
+        setDbPartners(activePartners);
+        if (activePartners.length === 1) {
+          setSelectedPartnerId(activePartners[0].id);
+        }
 
         const locationsData = await invoke<any[]>("get_locations");
         const newKuota: Record<string, number> = {};
@@ -135,6 +158,16 @@ export default function BarangKeluarPage() {
     const trimmedKode = kodeOverride.trim();
     if (!trimmedKode) return;
 
+    const selectedPartner = dbPartners.find(
+      (partner) => partner.id === selectedPartnerId
+    );
+
+    if (!selectedPartner) {
+      toast.error("Pilih mitra tujuan sebelum menambahkan barang keluar.");
+      focusKodeBarangInput();
+      return;
+    }
+
     const isDuplicate = barangKeluar.some(
       (item) => normalizeKodeBarang(item.nomor) === normalizeKodeBarang(trimmedKode)
     );
@@ -179,6 +212,7 @@ export default function BarangKeluarPage() {
       merek: matchedItem.merek || "-",
       kategori: matchedItem.kategori || "-",
       lokasi: originalLoc as LokasiOption,
+      mitra: selectedPartner.name,
       status: "Valid",
     };
 
@@ -193,7 +227,16 @@ export default function BarangKeluarPage() {
 
     // Auto-focus kembali ke input setelah submit
     focusKodeBarangInput();
-  }, [barangKeluar, focusKodeBarangInput, kodeBarang, kuota, dbItems, updateKodeBarang]);
+  }, [
+    barangKeluar,
+    dbItems,
+    dbPartners,
+    focusKodeBarangInput,
+    kodeBarang,
+    kuota,
+    selectedPartnerId,
+    updateKodeBarang,
+  ]);
 
   // Arahkan input keyboard/scanner ke field Kode/SN walaupun fokus sedang di area lain.
   useEffect(() => {
@@ -312,6 +355,7 @@ export default function BarangKeluarPage() {
           merek: item.merek,
           asal: originalLoc,
           tujuan: "Keluar",
+          mitra: item.mitra,
         };
         await invoke("add_transaction", { transaction: newTransaction });
       }
@@ -413,6 +457,33 @@ export default function BarangKeluarPage() {
             </CardHeader>
 
             <CardContent className="flex flex-1 flex-col gap-4">
+              <div className="flex flex-col gap-3">
+                <Label htmlFor="mitra-tujuan">Mitra Tujuan</Label>
+                <Select
+                  value={selectedPartnerId}
+                  onValueChange={(value) => {
+                    setSelectedPartnerId(value);
+                    focusKodeBarangInput();
+                  }}
+                >
+                  <SelectTrigger id="mitra-tujuan" className="w-full">
+                    <SelectValue placeholder="Pilih mitra tujuan..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dbPartners.map((partner) => (
+                      <SelectItem key={partner.id} value={partner.id}>
+                        {partner.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {dbPartners.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Belum ada mitra aktif. Tambahkan atau aktifkan mitra terlebih dahulu.
+                  </p>
+                )}
+              </div>
+
               <TabsContent value="auto" className="mt-0 flex flex-1 flex-col">
                 <Input
                   ref={inputRef}
@@ -492,6 +563,7 @@ export default function BarangKeluarPage() {
                     <TableHead>Merek</TableHead>
                     <TableHead>Kategori</TableHead>
                     <TableHead>Asal Lokasi</TableHead>
+                    <TableHead>Mitra</TableHead>
                     <TableHead>Status Validasi</TableHead>
                     <TableHead className="w-16 text-center">Aksi</TableHead>
                   </TableRow>
@@ -499,7 +571,7 @@ export default function BarangKeluarPage() {
                 <TableBody>
                   {barangKeluar.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="p-0">
+                      <TableCell colSpan={8} className="p-0">
                         <EmptyScanTableState />
                       </TableCell>
                     </TableRow>
@@ -515,6 +587,7 @@ export default function BarangKeluarPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>{item.lokasi}</TableCell>
+                        <TableCell>{item.mitra}</TableCell>
                         <TableCell>
                           <Badge variant="secondary" className="font-normal gap-1.5 px-2.5 py-0.5">
                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

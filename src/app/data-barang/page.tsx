@@ -99,6 +99,7 @@ interface Transaction {
   merek: string;
   asal: string | null;
   tujuan: string | null;
+  mitra?: string | null;
 }
 
 type DeleteDialogState =

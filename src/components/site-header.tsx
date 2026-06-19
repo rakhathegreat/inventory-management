@@ -42,9 +42,9 @@ export function SiteHeader() {
     } else if (path === "/merek-barang") {
         parent = "Manajemen Data"
         pageName = "Merek Barang"
-    } else if (path === "/supplier") {
+    } else if (path === "/mitra") {
         parent = "Manajemen Data"
-        pageName = "Supplier"
+        pageName = "Mitra"
     }
 
     return (

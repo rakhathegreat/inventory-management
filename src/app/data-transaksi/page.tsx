@@ -38,6 +38,7 @@ type Transaction = {
   merek: string;
   asal: string | null;
   tujuan: string | null;
+  mitra?: string | null;
 };
 
 type DeleteDialogState =
@@ -118,11 +119,13 @@ export default function DataTransaksiPage() {
     merek: t.merek,
     asal: t.asal || "-",
     tujuan: t.tujuan || "-",
+    mitra: t.mitra || "-",
   }));
 
   const filteredData = flattenedData.filter((item) => {
     const matchesSearch = item.nomor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.sn.toLowerCase().includes(searchTerm.toLowerCase());
+      item.sn.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.mitra.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesKategori = filterKategori === "all" || item.kategori === filterKategori;
     return matchesSearch && matchesKategori;
   });
@@ -156,6 +159,7 @@ export default function DataTransaksiPage() {
         "Merek",
         "Lokasi Asal",
         "Lokasi Tujuan",
+        "Mitra",
       ]
 
       const rows = filteredData.map((item, index) => [
@@ -168,6 +172,7 @@ export default function DataTransaksiPage() {
         item.merek,
         item.asal,
         item.tujuan,
+        item.mitra,
       ])
 
       const csvContent = [

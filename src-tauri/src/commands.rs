@@ -34,6 +34,21 @@ pub struct Brand {
     pub total_items: i32,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Partner {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "partnerType")]
+    pub partner_type: String,
+    #[serde(rename = "contactPerson")]
+    pub contact_person: String,
+    pub phone: String,
+    pub email: String,
+    pub address: String,
+    #[serde(rename = "isActive")]
+    pub is_active: bool,
+}
+
 // Category Commands
 #[tauri::command]
 pub fn get_categories(state: State<DbState>) -> Result<Vec<Category>, String> {
@@ -64,11 +79,32 @@ pub fn get_categories(state: State<DbState>) -> Result<Vec<Category>, String> {
 #[tauri::command]
 pub fn add_category(state: State<DbState>, category: Category) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
+    let normalized_name = category.name.trim();
+
+    if normalized_name.is_empty() {
+        return Err("Nama kategori wajib diisi.".to_string());
+    }
+
+    let duplicate_exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM categories
+                WHERE LOWER(TRIM(name)) = LOWER(TRIM(?1))
+            )",
+            params![normalized_name],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+
+    if duplicate_exists {
+        return Err("Nama kategori sudah terdaftar.".to_string());
+    }
+
     conn.execute(
         "INSERT INTO categories (id, name, description, total_items) VALUES (?1, ?2, ?3, ?4)",
         params![
             category.id,
-            category.name,
+            normalized_name,
             category.description,
             category.total_items
         ],
@@ -80,10 +116,32 @@ pub fn add_category(state: State<DbState>, category: Category) -> Result<(), Str
 #[tauri::command]
 pub fn update_category(state: State<DbState>, category: Category) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
+    let normalized_name = category.name.trim();
+
+    if normalized_name.is_empty() {
+        return Err("Nama kategori wajib diisi.".to_string());
+    }
+
+    let duplicate_exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM categories
+                WHERE LOWER(TRIM(name)) = LOWER(TRIM(?1))
+                  AND id <> ?2
+            )",
+            params![normalized_name, &category.id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+
+    if duplicate_exists {
+        return Err("Nama kategori sudah terdaftar.".to_string());
+    }
+
     conn.execute(
         "UPDATE categories SET name = ?1, description = ?2, total_items = ?3 WHERE id = ?4",
         params![
-            category.name,
+            normalized_name,
             category.description,
             category.total_items,
             category.id
@@ -132,9 +190,47 @@ pub fn get_brands(state: State<DbState>) -> Result<Vec<Brand>, String> {
 #[tauri::command]
 pub fn add_brand(state: State<DbState>, brand: Brand) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
+    let normalized_name = brand.name.trim();
+    let normalized_identifier = brand.identifier.trim().to_uppercase();
+
+    if normalized_name.is_empty() {
+        return Err("Nama merek wajib diisi.".to_string());
+    }
+    if normalized_identifier.is_empty() {
+        return Err("Identifier merek wajib diisi.".to_string());
+    }
+
+    let duplicate_name: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM brands
+                WHERE LOWER(TRIM(name)) = LOWER(TRIM(?1))
+            )",
+            params![normalized_name],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if duplicate_name {
+        return Err("Nama merek sudah terdaftar.".to_string());
+    }
+
+    let duplicate_identifier: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM brands
+                WHERE LOWER(TRIM(identifier)) = LOWER(TRIM(?1))
+            )",
+            params![&normalized_identifier],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if duplicate_identifier {
+        return Err("Identifier merek sudah digunakan.".to_string());
+    }
+
     conn.execute(
         "INSERT INTO brands (id, name, identifier, origin, total_items) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![brand.id, brand.name, brand.identifier, brand.origin, brand.total_items],
+        params![brand.id, normalized_name, normalized_identifier, brand.origin, brand.total_items],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -142,11 +238,51 @@ pub fn add_brand(state: State<DbState>, brand: Brand) -> Result<(), String> {
 #[tauri::command]
 pub fn update_brand(state: State<DbState>, brand: Brand) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
+    let normalized_name = brand.name.trim();
+    let normalized_identifier = brand.identifier.trim().to_uppercase();
+
+    if normalized_name.is_empty() {
+        return Err("Nama merek wajib diisi.".to_string());
+    }
+    if normalized_identifier.is_empty() {
+        return Err("Identifier merek wajib diisi.".to_string());
+    }
+
+    let duplicate_name: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM brands
+                WHERE LOWER(TRIM(name)) = LOWER(TRIM(?1))
+                  AND id <> ?2
+            )",
+            params![normalized_name, &brand.id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if duplicate_name {
+        return Err("Nama merek sudah terdaftar.".to_string());
+    }
+
+    let duplicate_identifier: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM brands
+                WHERE LOWER(TRIM(identifier)) = LOWER(TRIM(?1))
+                  AND id <> ?2
+            )",
+            params![&normalized_identifier, &brand.id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if duplicate_identifier {
+        return Err("Identifier merek sudah digunakan.".to_string());
+    }
+
     conn.execute(
         "UPDATE brands SET name = ?1, identifier = ?2, origin = ?3, total_items = ?4 WHERE id = ?5",
         params![
-            brand.name,
-            brand.identifier,
+            normalized_name,
+            normalized_identifier,
             brand.origin,
             brand.total_items,
             brand.id
@@ -161,6 +297,97 @@ pub fn delete_brand(state: State<DbState>, id: String) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     conn.execute("DELETE FROM brands WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// Partner Commands
+#[tauri::command]
+pub fn get_partners(state: State<DbState>) -> Result<Vec<Partner>, String> {
+    let conn = state.0.lock().unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, name, partner_type, contact_person, phone, email, address, is_active
+             FROM partners
+             ORDER BY name COLLATE NOCASE ASC",
+        )
+        .map_err(|error| error.to_string())?;
+
+    let partners_iter = stmt
+        .query_map([], |row| {
+            Ok(Partner {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                partner_type: row.get(2)?,
+                contact_person: row.get(3)?,
+                phone: row.get(4)?,
+                email: row.get(5)?,
+                address: row.get(6)?,
+                is_active: row.get::<_, i32>(7)? != 0,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+
+    let mut partners = Vec::new();
+    for partner in partners_iter {
+        partners.push(partner.map_err(|error| error.to_string())?);
+    }
+
+    Ok(partners)
+}
+
+#[tauri::command]
+pub fn add_partner(state: State<DbState>, partner: Partner) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "INSERT INTO partners
+         (id, name, partner_type, contact_person, phone, email, address, is_active)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            partner.id,
+            partner.name,
+            partner.partner_type,
+            partner.contact_person,
+            partner.phone,
+            partner.email,
+            partner.address,
+            if partner.is_active { 1 } else { 0 },
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_partner(state: State<DbState>, partner: Partner) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute(
+        "UPDATE partners
+         SET name = ?1, partner_type = ?2, contact_person = ?3, phone = ?4,
+             email = ?5, address = ?6, is_active = ?7
+         WHERE id = ?8",
+        params![
+            partner.name,
+            partner.partner_type,
+            partner.contact_person,
+            partner.phone,
+            partner.email,
+            partner.address,
+            if partner.is_active { 1 } else { 0 },
+            partner.id,
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_partner(state: State<DbState>, id: String) -> Result<(), String> {
+    let conn = state.0.lock().unwrap();
+    conn.execute("DELETE FROM partners WHERE id = ?1", params![id])
+        .map_err(|error| error.to_string())?;
+
     Ok(())
 }
 
@@ -532,12 +759,13 @@ pub struct Transaction {
     pub merek: String,
     pub asal: Option<String>,
     pub tujuan: Option<String>,
+    pub mitra: Option<String>,
 }
 
 #[tauri::command]
 pub fn get_transactions(state: State<DbState>) -> Result<Vec<Transaction>, String> {
     let conn = state.0.lock().unwrap();
-    let mut stmt = conn.prepare("SELECT id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination FROM transactions ORDER BY transaction_date DESC").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination, partner FROM transactions ORDER BY transaction_date DESC, rowid DESC").map_err(|e| e.to_string())?;
 
     let iter = stmt
         .query_map([], |row| {
@@ -551,6 +779,7 @@ pub fn get_transactions(state: State<DbState>) -> Result<Vec<Transaction>, Strin
                 merek: row.get(6)?,
                 asal: row.get(7)?,
                 tujuan: row.get(8)?,
+                mitra: row.get(9)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -566,8 +795,8 @@ pub fn get_transactions(state: State<DbState>) -> Result<Vec<Transaction>, Strin
 pub fn add_transaction(state: State<DbState>, transaction: Transaction) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     conn.execute(
-        "INSERT INTO transactions (id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![transaction.id, transaction.tanggal, transaction.nomor, transaction.kategori, transaction.status, transaction.sn, transaction.merek, transaction.asal, transaction.tujuan],
+        "INSERT INTO transactions (id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination, partner) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![transaction.id, transaction.tanggal, transaction.nomor, transaction.kategori, transaction.status, transaction.sn, transaction.merek, transaction.asal, transaction.tujuan, transaction.mitra],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }

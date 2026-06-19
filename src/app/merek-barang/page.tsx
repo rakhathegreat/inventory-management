@@ -47,6 +47,7 @@ export default function MerekBarangPage() {
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [origin, setOrigin] = useState("");
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const loadBrands = async () => {
     try {
@@ -84,32 +85,67 @@ export default function MerekBarangPage() {
       setOrigin("");
       setEditId(null);
     }
+    setFormErrors({});
     setIsSheetOpen(true);
   };
 
   const handleSave = async () => {
-    try {
-      const normalizedIdentifier = identifier.trim().toUpperCase();
+    const trimmedName = name.trim();
+    const normalizedIdentifier =
+      identifier.trim().toUpperCase() ||
+      trimmedName.slice(0, 3).toUpperCase();
+    const errors: Record<string, string> = {};
 
+    if (!trimmedName) {
+      errors.name = "Nama merek wajib diisi.";
+    }
+    if (!normalizedIdentifier) {
+      errors.identifier = "Identifier merek wajib diisi.";
+    }
+
+    const duplicateName = brands.some(
+      (brand) =>
+        brand.id !== editId &&
+        brand.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (duplicateName) {
+      errors.name = "Nama merek sudah terdaftar.";
+    }
+
+    const duplicateIdentifier = brands.some(
+      (brand) =>
+        brand.id !== editId &&
+        brand.identifier.trim().toLowerCase() === normalizedIdentifier.toLowerCase()
+    );
+    if (duplicateIdentifier) {
+      errors.identifier = "Identifier merek sudah digunakan.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      toast.error("Merek tidak dapat disimpan karena data harus unik.");
+      return;
+    }
+
+    try {
       if (editId) {
         const brand = brands.find(b => b.id === editId);
         await invoke("update_brand", {
           brand: {
             id: editId,
-            name,
+            name: trimmedName,
             identifier: normalizedIdentifier,
-            origin,
+            origin: origin.trim() || "-",
             totalItems: brand?.totalItems || 0
           }
         });
       } else {
-        const trimmedName = name.trim();
         await invoke("add_brand", {
           brand: {
             id: `mrk-${Date.now()}`,
-            name: trimmedName || "Merek Baru",
-            identifier: normalizedIdentifier || (trimmedName || "MRK").slice(0, 3).toUpperCase(),
-            origin: origin || "-",
+            name: trimmedName,
+            identifier: normalizedIdentifier,
+            origin: origin.trim() || "-",
             totalItems: 0
           }
         });
@@ -119,7 +155,7 @@ export default function MerekBarangPage() {
       toast.success(`Berhasil ${editId ? "menyimpan perubahan" : "menambahkan"} data merek`);
     } catch (error) {
       console.error("Failed to save brand:", error);
-      toast.error("Gagal menyimpan merek.");
+      toast.error(typeof error === "string" ? error : "Gagal menyimpan merek.");
     }
   };
 
@@ -223,16 +259,33 @@ export default function MerekBarangPage() {
             <div className="grid gap-5">
               <div className="space-y-2">
                 <Label>Nama Merek</Label>
-                <Input value={name} onChange={e => setName(e.target.value)} placeholder="Contoh: Cisco" className="bg-neutral-900 border-neutral-800" />
+                <Input
+                  value={name}
+                  onChange={e => {
+                    setName(e.target.value)
+                    setFormErrors(current => ({ ...current, name: "" }))
+                  }}
+                  placeholder="Contoh: Cisco"
+                  className={`bg-neutral-900 ${formErrors.name ? "border-destructive" : "border-neutral-800"}`}
+                />
+                {formErrors.name && (
+                  <p className="text-xs text-destructive">{formErrors.name}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Identifier</Label>
                 <Input
                   value={identifier}
-                  onChange={e => setIdentifier(e.target.value.toUpperCase())}
+                  onChange={e => {
+                    setIdentifier(e.target.value.toUpperCase())
+                    setFormErrors(current => ({ ...current, identifier: "" }))
+                  }}
                   placeholder="Contoh: CIS"
-                  className="bg-neutral-900 border-neutral-800 font-mono uppercase"
+                  className={`bg-neutral-900 font-mono uppercase ${formErrors.identifier ? "border-destructive" : "border-neutral-800"}`}
                 />
+                {formErrors.identifier && (
+                  <p className="text-xs text-destructive">{formErrors.identifier}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Asal / Deskripsi</Label>

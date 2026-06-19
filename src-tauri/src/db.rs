@@ -41,6 +41,20 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS partners (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            partner_type TEXT NOT NULL,
+            contact_person TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            email TEXT NOT NULL,
+            address TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1
+        )",
+        [],
+    )?;
+
     let has_brand_identifier = {
         let mut stmt = conn.prepare("PRAGMA table_info(brands)")?;
         let columns = stmt.query_map([], |row| row.get::<_, String>(1))?;
@@ -69,6 +83,58 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
          WHERE identifier IS NULL OR TRIM(identifier) = ''",
         [],
     )?;
+
+    conn.execute(
+        "DELETE FROM categories
+         WHERE rowid NOT IN (
+             SELECT MIN(rowid)
+             FROM categories
+             GROUP BY LOWER(TRIM(name))
+         )",
+        [],
+    )?;
+
+    conn.execute(
+        "DELETE FROM brands
+         WHERE rowid NOT IN (
+             SELECT MIN(rowid)
+             FROM brands
+             GROUP BY LOWER(TRIM(name))
+         )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_unique_name
+         ON categories(LOWER(TRIM(name)))",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_brands_unique_name
+         ON brands(LOWER(TRIM(name)))",
+        [],
+    )?;
+
+    let duplicate_brand_identifiers: i64 = conn.query_row(
+        "SELECT COUNT(*)
+         FROM (
+             SELECT LOWER(TRIM(identifier))
+             FROM brands
+             GROUP BY LOWER(TRIM(identifier))
+             HAVING COUNT(*) > 1
+         )",
+        [],
+        |row| row.get(0),
+    )?;
+
+    if duplicate_brand_identifiers == 0 {
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_brands_unique_identifier
+             ON brands(LOWER(TRIM(identifier)))",
+            [],
+        )?;
+    }
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS storage_locations (
@@ -121,10 +187,15 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
             serial_number TEXT NOT NULL,
             brand TEXT NOT NULL,
             origin TEXT,
-            destination TEXT
+            destination TEXT,
+            partner TEXT
         )",
         [],
     )?;
+
+    if !column_exists(&conn, "transactions", "partner")? {
+        conn.execute("ALTER TABLE transactions ADD COLUMN partner TEXT", [])?;
+    }
 
     if column_exists(&conn, "items", "operator")? {
         conn.execute("ALTER TABLE items DROP COLUMN operator", [])?;
