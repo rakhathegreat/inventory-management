@@ -45,6 +45,18 @@ type LocationDefinition = {
   brandRule: BrandOption;
 };
 
+type InventoryItem = {
+  id: string;
+  serialNumber: string;
+  kategori: string;
+  merek: string;
+  status: string;
+  lokasiPenyimpanan: string;
+  tanggalMasuk: string;
+  tanggalKeluar?: string;
+  operatorInput: string;
+};
+
 type BarangMasukItem = {
   id: number;
   nomor: string;
@@ -52,6 +64,7 @@ type BarangMasukItem = {
   kategori: KategoriOption;
   lokasi: LokasiOption;
   status: "Valid" | "Invalid";
+  existingItemId?: string;
 };
 
 type KodeBarangUpdate = string | ((current: string) => string);
@@ -135,6 +148,7 @@ export default function BarangMasukPage() {
   const [dbBrands, setDbBrands] = useState<BrandDefinition[]>([]);
   const [dbCategories, setDbCategories] = useState<string[]>([]);
   const [dbLocations, setDbLocations] = useState<LocationDefinition[]>([]);
+  const [dbItems, setDbItems] = useState<InventoryItem[]>([]);
 
   // Fetch brands, categories, and locations from database
   useEffect(() => {
@@ -154,6 +168,9 @@ export default function BarangMasukPage() {
         if (categoryNames.length > 0) {
           setKategoriBarang(categoryNames[0]);
         }
+
+        const items = await invoke<InventoryItem[]>("get_items");
+        setDbItems(items);
 
         const locationsData = await invoke<any[]>("get_locations");
         const locs: LocationDefinition[] = [];
@@ -242,7 +259,23 @@ export default function BarangMasukPage() {
       return;
     }
 
-    const itemBrand = detectBrandFromCode(trimmedKode, dbBrands) || merekFallback;
+    const existingItem = dbItems.find(
+      (item) => normalizeKodeBarang(item.serialNumber) === normalizeKodeBarang(trimmedKode)
+    );
+
+    if (existingItem && existingItem.status.trim().toLowerCase() !== "keluar") {
+      toast.error("Serial number masih terdaftar sebagai barang aktif.", {
+        description: `Status saat ini: ${existingItem.status}`,
+      });
+      updateKodeBarang("");
+      focusKodeBarangInput();
+      return;
+    }
+
+    const itemBrand =
+      existingItem?.merek ||
+      detectBrandFromCode(trimmedKode, dbBrands) ||
+      merekFallback;
     const recommendedLocation = getRecommendedLocation(itemBrand, dbLocations, kuota);
 
     if (!recommendedLocation) {
@@ -259,9 +292,10 @@ export default function BarangMasukPage() {
       id: Date.now(),
       nomor: trimmedKode,
       merek: itemBrand || "(otomatis)",
-      kategori: kategoriBarang,
+      kategori: existingItem?.kategori || kategoriBarang,
       lokasi: recommendedLocation,
       status: "Valid",
+      existingItemId: existingItem?.id,
     };
 
     // Add to local UI list
@@ -281,6 +315,7 @@ export default function BarangMasukPage() {
   }, [
     barangMasuk,
     dbBrands,
+    dbItems,
     dbLocations,
     focusKodeBarangInput,
     kategoriBarang,
@@ -390,17 +425,40 @@ export default function BarangMasukPage() {
       const sessionNomor = `${prefix}${(maxNum + 1).toString().padStart(4, '0')}`;
 
       for (const item of barangMasuk) {
-        const newItem = {
-          id: `UNIT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          serialNumber: item.nomor,
-          kategori: item.kategori,
-          merek: item.merek,
-          status: "Masuk",
-          lokasiPenyimpanan: item.lokasi,
-          tanggalMasuk: sessionDate,
-          operatorInput: "Sistem",
-        };
-        await invoke("add_item", { item: newItem });
+        const existingItem = item.existingItemId
+          ? dbItems.find((dbItem) => dbItem.id === item.existingItemId)
+          : undefined;
+
+        if (item.existingItemId && !existingItem) {
+          throw new Error(`Data lama untuk serial number ${item.nomor} tidak ditemukan.`);
+        }
+
+        if (existingItem) {
+          const updatedItem: InventoryItem = {
+            ...existingItem,
+            serialNumber: item.nomor,
+            kategori: item.kategori,
+            merek: item.merek,
+            status: "Masuk",
+            lokasiPenyimpanan: item.lokasi,
+            tanggalMasuk: sessionDate,
+            tanggalKeluar: undefined,
+            operatorInput: "Sistem",
+          };
+          await invoke("update_item", { item: updatedItem });
+        } else {
+          const newItem = {
+            id: `UNIT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            serialNumber: item.nomor,
+            kategori: item.kategori,
+            merek: item.merek,
+            status: "Masuk",
+            lokasiPenyimpanan: item.lokasi,
+            tanggalMasuk: sessionDate,
+            operatorInput: "Sistem",
+          };
+          await invoke("add_item", { item: newItem });
+        }
 
         const newTransaction = {
           id: `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -418,6 +476,9 @@ export default function BarangMasukPage() {
       }
       toast.success(`${barangMasuk.length} barang masuk berhasil disimpan.`);
       setBarangMasuk([]); // Clear local state after saving
+
+      const items = await invoke<InventoryItem[]>("get_items");
+      setDbItems(items);
     } catch (error) {
       console.error("Gagal menyimpan ke database:", error);
       toast.error("Gagal menyimpan barang masuk ke database.");
@@ -705,8 +766,8 @@ export default function BarangMasukPage() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className="font-normal gap-1.5 px-2.5 py-0.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            {item.status}
+                            <div className={`w-1.5 h-1.5 rounded-full ${item.existingItemId ? "bg-sky-500" : "bg-emerald-500"}`} />
+                            {item.existingItemId ? "Masuk Kembali" : item.status}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
