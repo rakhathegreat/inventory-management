@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAuth } from "@/lib/auth";
 
 type BrandOption = string;
 type BrandDefinition = {
@@ -54,6 +55,7 @@ type InventoryItem = {
   lokasiPenyimpanan: string;
   tanggalMasuk: string;
   tanggalKeluar?: string;
+  mitra?: string | null;
 };
 
 type BarangMasukItem = {
@@ -64,9 +66,11 @@ type BarangMasukItem = {
   lokasi: LokasiOption;
   status: "Valid" | "Invalid";
   existingItemId?: string;
+  source: "KP" | "Mitra" | "Baru";
 };
 
 type KodeBarangUpdate = string | ((current: string) => string);
+const ADMIN_LOCATION = "KP";
 
 const detectBrandFromCode = (code: string, brands: BrandDefinition[]): BrandOption => {
   if (!code) return "";
@@ -92,6 +96,21 @@ const isTextInputTarget = (target: EventTarget | null) => {
 const normalizeKodeBarang = (code: string) => code.trim().toUpperCase();
 const normalizeBrand = (brand: string) => brand.trim().toLocaleLowerCase("id-ID");
 const normalizeStatus = (status: string) => status.trim().toLocaleLowerCase("id-ID");
+const normalizeOwner = (owner?: string | null) =>
+  (owner || "").trim().toLocaleLowerCase("id-ID");
+
+const isValidMitraInboundSource = (
+  item: InventoryItem,
+  mitraName: string
+) => {
+  const owner = normalizeOwner(item.mitra);
+  const status = normalizeStatus(item.status);
+
+  return (
+    (owner === normalizeOwner(ADMIN_LOCATION) && status === "masuk") ||
+    (owner === normalizeOwner(mitraName) && status === "keluar")
+  );
+};
 
 const getRecommendedLocation = (
   brand: BrandOption,
@@ -137,6 +156,7 @@ function EmptyScanTableState() {
 }
 
 export default function BarangMasukPage() {
+  const { user } = useAuth();
   const [kodeBarang, setKodeBarang] = useState("");
   const [inputMode, setInputMode] = useState<"auto" | "manual">("auto");
   const [merekFallback, setMerekFallback] = useState<BrandOption>("");
@@ -175,9 +195,17 @@ export default function BarangMasukPage() {
         const locationsData = await invoke<any[]>("get_locations");
         const locs: LocationDefinition[] = [];
         const newKuota: Record<string, number> = {};
+        const locationOwner =
+          user?.role === "mitra" ? user.displayName : ADMIN_LOCATION;
 
         locationsData.forEach(loc => {
           if (loc.isActive === false) return;
+          if (
+            normalizeOwner(loc.owner || ADMIN_LOCATION) !==
+            normalizeOwner(locationOwner)
+          ) {
+            return;
+          }
 
           if (loc.type === "Rak" && loc.levels) {
             loc.levels.forEach((lvl: any) => {
@@ -210,7 +238,7 @@ export default function BarangMasukPage() {
       }
     };
     fetchData();
-  }, []);
+  }, [user]);
 
   const detectedBrand = detectBrandFromCode(kodeBarang, dbBrands);
   const totalKuotaTersedia = Object.values(kuota).reduce((total, value) => total + value, 0);
@@ -263,7 +291,33 @@ export default function BarangMasukPage() {
       (item) => normalizeKodeBarang(item.serialNumber) === normalizeKodeBarang(trimmedKode)
     );
 
-    if (existingItem && normalizeStatus(existingItem.status) !== "keluar") {
+    if (user?.role === "mitra" && !existingItem) {
+      toast.error("Barang belum terdaftar di KP.", {
+        description: `${trimmedKode} harus didaftarkan oleh Admin terlebih dahulu.`,
+      });
+      updateKodeBarang("");
+      focusKodeBarangInput();
+      return;
+    }
+
+    if (
+      user?.role === "mitra" &&
+      existingItem &&
+      !isValidMitraInboundSource(existingItem, user.displayName)
+    ) {
+      toast.error("Barang tidak dapat diterima oleh Mitra.", {
+        description: `${trimmedKode} harus tersedia di KP atau sudah dikeluarkan dari KP untuk Mitra ini.`,
+      });
+      updateKodeBarang("");
+      focusKodeBarangInput();
+      return;
+    }
+
+    if (
+      user?.role !== "mitra" &&
+      existingItem &&
+      normalizeStatus(existingItem.status) !== "keluar"
+    ) {
       toast.error("Serial number masih terdaftar sebagai barang aktif.", {
         description: `Status saat ini: ${existingItem.status}`,
       });
@@ -296,6 +350,12 @@ export default function BarangMasukPage() {
       lokasi: recommendedLocation,
       status: "Valid",
       existingItemId: existingItem?.id,
+      source:
+        normalizeOwner(existingItem?.mitra) === normalizeOwner(ADMIN_LOCATION)
+          ? "KP"
+          : existingItem
+            ? "Mitra"
+            : "Baru",
     };
 
     // Add to local UI list
@@ -323,6 +383,7 @@ export default function BarangMasukPage() {
     kuota,
     merekFallback,
     updateKodeBarang,
+    user,
   ]);
 
   // Arahkan input keyboard/scanner ke field Kode/SN walaupun fokus sedang di area lain.
@@ -432,6 +493,13 @@ export default function BarangMasukPage() {
             normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor)
         );
 
+        if (user?.role === "mitra") {
+          return (
+            !existingItem ||
+            !isValidMitraInboundSource(existingItem, user.displayName)
+          );
+        }
+
         if (item.existingItemId && !existingItem) return true;
         return Boolean(existingItem && normalizeStatus(existingItem.status) !== "keluar");
       });
@@ -444,12 +512,16 @@ export default function BarangMasukPage() {
         );
 
         toast.error(
-          existingItem
-            ? "Barang tidak dapat diproses sebagai masuk kembali."
-            : "Data barang keluar tidak lagi ditemukan.",
+          user?.role === "mitra"
+            ? existingItem
+              ? "Barang tidak lagi tersedia untuk diterima dari KP."
+              : "Barang tidak ditemukan di data KP."
+            : existingItem
+              ? "Barang tidak dapat diproses sebagai masuk kembali."
+              : "Data barang keluar tidak lagi ditemukan.",
           {
             description: existingItem
-              ? `${invalidItem.nomor} berstatus ${existingItem.status}`
+              ? `${invalidItem.nomor} berstatus ${existingItem.status} pada ${existingItem.mitra || ADMIN_LOCATION}`
               : invalidItem.nomor,
           }
         );
@@ -464,6 +536,12 @@ export default function BarangMasukPage() {
             normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor)
         );
 
+        if (user?.role === "mitra" && !existingItem) {
+          throw new Error(
+            `${item.nomor} tidak ditemukan di KP dan tidak dapat dibuat oleh Mitra.`
+          );
+        }
+
         if (existingItem) {
           const updatedItem: InventoryItem = {
             ...existingItem,
@@ -474,6 +552,10 @@ export default function BarangMasukPage() {
             lokasiPenyimpanan: item.lokasi,
             tanggalMasuk: sessionDate,
             tanggalKeluar: undefined,
+            mitra:
+              user?.role === "mitra"
+                ? user.displayName
+                : existingItem.mitra || ADMIN_LOCATION,
           };
           await invoke("update_item", { item: updatedItem });
         } else {
@@ -485,6 +567,10 @@ export default function BarangMasukPage() {
             status: "Masuk",
             lokasiPenyimpanan: item.lokasi,
             tanggalMasuk: sessionDate,
+            mitra:
+              user?.role === "mitra"
+                ? user.displayName
+                : ADMIN_LOCATION,
           };
           await invoke("add_item", { item: newItem });
         }
@@ -497,8 +583,17 @@ export default function BarangMasukPage() {
           status: "Selesai",
           sn: item.nomor,
           merek: item.merek,
-          asal: "Keluar",
+          asal:
+            user?.role === "mitra" &&
+            normalizeOwner(existingItem?.mitra) === normalizeOwner(ADMIN_LOCATION)
+              ? ADMIN_LOCATION
+              : "Keluar",
           tujuan: item.lokasi,
+          mitra:
+            user?.role === "mitra"
+              ? user.displayName
+              : existingItem?.mitra || ADMIN_LOCATION,
+          keterangan: null,
         };
         await invoke("add_transaction", { transaction: newTransaction });
       }
@@ -599,6 +694,13 @@ export default function BarangMasukPage() {
             </CardHeader>
 
             <CardContent className="flex flex-1 flex-col gap-4">
+              {user?.role === "mitra" && (
+                <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs leading-5 text-sky-600 dark:text-sky-400">
+                  Barang Mitra harus sudah terdaftar di KP. Serial number baru hanya
+                  dapat didaftarkan oleh Admin.
+                </div>
+              )}
+
               <TabsContent value="auto" className="mt-0 flex flex-1 flex-col">
                 <Input
                   ref={inputRef}
@@ -795,7 +897,11 @@ export default function BarangMasukPage() {
                         <TableCell>
                           <Badge variant="secondary" className="font-normal gap-1.5 px-2.5 py-0.5">
                             <div className={`w-1.5 h-1.5 rounded-full ${item.existingItemId ? "bg-sky-500" : "bg-emerald-500"}`} />
-                            {item.existingItemId ? "Masuk Kembali" : item.status}
+                            {user?.role === "mitra" && item.source === "KP"
+                              ? "Dari KP"
+                              : item.existingItemId
+                                ? "Masuk Kembali"
+                                : item.status}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">

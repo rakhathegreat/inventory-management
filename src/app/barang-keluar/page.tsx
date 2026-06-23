@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAuth } from "@/lib/auth";
 type LokasiOption = string;
 
 type InventoryItem = {
@@ -42,6 +43,7 @@ type InventoryItem = {
   lokasiPenyimpanan: string;
   tanggalMasuk: string;
   tanggalKeluar?: string;
+  mitra?: string | null;
 };
 
 type Partner = {
@@ -57,6 +59,7 @@ type BarangKeluarItem = {
   kategori: string;
   lokasi: LokasiOption;
   mitra: string;
+  keterangan: string;
   status: "Valid" | "Invalid";
 };
 
@@ -90,6 +93,7 @@ function EmptyScanTableState() {
 }
 
 export default function BarangKeluarPage() {
+  const { user } = useAuth();
   const [kodeBarang, setKodeBarang] = useState("");
   const [inputMode, setInputMode] = useState<"auto" | "manual">("auto");
   const [barangKeluar, setBarangKeluar] = useState<BarangKeluarItem[]>([]);
@@ -99,24 +103,52 @@ export default function BarangKeluarPage() {
   const [dbItems, setDbItems] = useState<InventoryItem[]>([]);
   const [dbPartners, setDbPartners] = useState<Partner[]>([]);
   const [selectedPartnerId, setSelectedPartnerId] = useState("");
+  const [keterangan, setKeterangan] = useState("");
 
   useEffect(() => {
     const fetchItemsAndLocations = async () => {
       try {
         const items = await invoke<InventoryItem[]>("get_items");
-        setDbItems(items);
+        setDbItems(
+          user?.role === "mitra"
+            ? items.filter(
+                (item) =>
+                  item.mitra?.trim().toLowerCase() ===
+                  user.displayName.trim().toLowerCase()
+              )
+            : items
+        );
 
-        const partners = await invoke<Partner[]>("get_partners");
-        const activePartners = partners.filter((partner) => partner.isActive);
-        setDbPartners(activePartners);
-        if (activePartners.length === 1) {
-          setSelectedPartnerId(activePartners[0].id);
+        if (user?.role === "mitra") {
+          const ownPartner = {
+            id: user.partnerId || `mitra-${user.id}`,
+            name: user.displayName,
+            isActive: true,
+          };
+          setDbPartners([ownPartner]);
+          setSelectedPartnerId(ownPartner.id);
+        } else {
+          const partners = await invoke<Partner[]>("get_partners");
+          const activePartners = partners.filter((partner) => partner.isActive);
+          setDbPartners(activePartners);
+          if (activePartners.length === 1) {
+            setSelectedPartnerId(activePartners[0].id);
+          }
         }
 
         const locationsData = await invoke<any[]>("get_locations");
         const newKuota: Record<string, number> = {};
+        const locationOwner =
+          user?.role === "mitra" ? user.displayName : "KP";
 
         locationsData.forEach(loc => {
+          if (
+            (loc.owner || "KP").trim().toLowerCase() !==
+            locationOwner.trim().toLowerCase()
+          ) {
+            return;
+          }
+
           if (loc.type === "Rak" && loc.levels) {
             loc.levels.forEach((lvl: any) => {
               const name = `${loc.name} - ${lvl.name}`;
@@ -133,7 +165,7 @@ export default function BarangKeluarPage() {
       }
     };
     fetchItemsAndLocations();
-  }, []);
+  }, [user]);
   const totalKuotaTersedia = Object.values(kuota).reduce((total, value) => total + value, 0);
   const validItems = barangKeluar.filter((item) => item.status === "Valid").length;
 
@@ -164,6 +196,12 @@ export default function BarangKeluarPage() {
 
     if (!selectedPartner) {
       toast.error("Pilih mitra tujuan sebelum menambahkan barang keluar.");
+      focusKodeBarangInput();
+      return;
+    }
+
+    if (user?.role === "mitra" && !keterangan.trim()) {
+      toast.error("PA / keterangan wajib diisi sebelum menambahkan barang keluar.");
       focusKodeBarangInput();
       return;
     }
@@ -213,6 +251,7 @@ export default function BarangKeluarPage() {
       kategori: matchedItem.kategori || "-",
       lokasi: originalLoc as LokasiOption,
       mitra: selectedPartner.name,
+      keterangan: user?.role === "mitra" ? keterangan.trim() : "",
       status: "Valid",
     };
 
@@ -233,9 +272,11 @@ export default function BarangKeluarPage() {
     dbPartners,
     focusKodeBarangInput,
     kodeBarang,
+    keterangan,
     kuota,
     selectedPartnerId,
     updateKodeBarang,
+    user,
   ]);
 
   // Arahkan input keyboard/scanner ke field Kode/SN walaupun fokus sedang di area lain.
@@ -290,6 +331,11 @@ export default function BarangKeluarPage() {
   };
 
   const handleValidateAll = async () => {
+    if (user?.role === "mitra" && !keterangan.trim()) {
+      toast.error("PA / keterangan wajib diisi sebelum transaksi disimpan.");
+      return;
+    }
+
     try {
       const sessionDate = new Date().toISOString().slice(0, 10);
       const dateStr = sessionDate.replace(/-/g, "");
@@ -310,7 +356,10 @@ export default function BarangKeluarPage() {
       const invalidItem = barangKeluar.find((item) => {
         const latestItem = latestItems.find(
           (dbItem) =>
-            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor)
+            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor) &&
+            (user?.role !== "mitra" ||
+              dbItem.mitra?.trim().toLowerCase() ===
+                user.displayName.trim().toLowerCase())
         );
         return !latestItem || normalizeStatus(latestItem.status) === "keluar";
       });
@@ -318,7 +367,10 @@ export default function BarangKeluarPage() {
       if (invalidItem) {
         const latestItem = latestItems.find(
           (dbItem) =>
-            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(invalidItem.nomor)
+            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(invalidItem.nomor) &&
+            (user?.role !== "mitra" ||
+              dbItem.mitra?.trim().toLowerCase() ===
+                user.displayName.trim().toLowerCase())
         );
 
         toast.error(
@@ -334,7 +386,10 @@ export default function BarangKeluarPage() {
       for (const item of barangKeluar) {
         const originalItem = latestItems.find(
           (dbItem) =>
-            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor)
+            normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor) &&
+            (user?.role !== "mitra" ||
+              dbItem.mitra?.trim().toLowerCase() ===
+                user.displayName.trim().toLowerCase())
         )!;
         const originalLoc = originalItem.lokasiPenyimpanan || "-";
         const updatedItem: InventoryItem = {
@@ -342,6 +397,7 @@ export default function BarangKeluarPage() {
           status: "Keluar",
           lokasiPenyimpanan: "Keluar",
           tanggalKeluar: sessionDate,
+          mitra: item.mitra,
         };
         await invoke("update_item", { item: updatedItem });
 
@@ -356,15 +412,26 @@ export default function BarangKeluarPage() {
           asal: originalLoc,
           tujuan: "Keluar",
           mitra: item.mitra,
+          keterangan:
+            user?.role === "mitra" ? keterangan.trim() : null,
         };
         await invoke("add_transaction", { transaction: newTransaction });
       }
       toast.success(`${barangKeluar.length} barang keluar berhasil disimpan.`);
       setBarangKeluar([]); // Clear local state after saving
+      setKeterangan("");
 
       // Refresh DB Items after update
       const items = await invoke<InventoryItem[]>("get_items");
-      setDbItems(items);
+      setDbItems(
+        user?.role === "mitra"
+          ? items.filter(
+              (item) =>
+                item.mitra?.trim().toLowerCase() ===
+                user.displayName.trim().toLowerCase()
+            )
+          : items
+      );
     } catch (error) {
       console.error("Gagal menyimpan ke database:", error);
       toast.error("Gagal menyimpan barang keluar ke database.");
@@ -459,30 +526,69 @@ export default function BarangKeluarPage() {
             <CardContent className="flex flex-1 flex-col gap-4">
               <div className="flex flex-col gap-3">
                 <Label htmlFor="mitra-tujuan">Mitra Tujuan</Label>
-                <Select
-                  value={selectedPartnerId}
-                  onValueChange={(value) => {
-                    setSelectedPartnerId(value);
-                    focusKodeBarangInput();
-                  }}
-                >
-                  <SelectTrigger id="mitra-tujuan" className="w-full">
-                    <SelectValue placeholder="Pilih mitra tujuan..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dbPartners.map((partner) => (
-                      <SelectItem key={partner.id} value={partner.id}>
-                        {partner.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {user?.role === "mitra" ? (
+                  <div
+                    id="mitra-tujuan"
+                    className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm"
+                  >
+                    {user.displayName}
+                  </div>
+                ) : (
+                  <Select
+                    value={selectedPartnerId}
+                    onValueChange={(value) => {
+                      setSelectedPartnerId(value);
+                      focusKodeBarangInput();
+                    }}
+                  >
+                    <SelectTrigger id="mitra-tujuan" className="w-full">
+                      <SelectValue placeholder="Pilih mitra tujuan..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {dbPartners.map((partner) => (
+                        <SelectItem key={partner.id} value={partner.id}>
+                          {partner.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 {dbPartners.length === 0 && (
                   <p className="text-xs text-muted-foreground">
                     Belum ada mitra aktif. Tambahkan atau aktifkan mitra terlebih dahulu.
                   </p>
                 )}
               </div>
+
+              {user?.role === "mitra" && (
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="keterangan-keluar">PA / Keterangan</Label>
+                  <Input
+                    id="keterangan-keluar"
+                    value={keterangan}
+                    onChange={(event) => {
+                      const nextKeterangan = event.target.value;
+                      setKeterangan(nextKeterangan);
+                      setBarangKeluar((current) =>
+                        current.map((item) => ({
+                          ...item,
+                          keterangan: nextKeterangan,
+                        }))
+                      );
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        focusKodeBarangInput();
+                      }
+                    }}
+                    placeholder="Contoh: PA-00123 atau keperluan barang"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Tekan Enter setelah mengisi agar scanner kembali aktif.
+                  </p>
+                </div>
+              )}
 
               <TabsContent value="auto" className="mt-0 flex flex-1 flex-col">
                 <Input
@@ -564,6 +670,9 @@ export default function BarangKeluarPage() {
                     <TableHead>Kategori</TableHead>
                     <TableHead>Asal Lokasi</TableHead>
                     <TableHead>Mitra</TableHead>
+                    {user?.role === "mitra" && (
+                      <TableHead>PA / Keterangan</TableHead>
+                    )}
                     <TableHead>Status Validasi</TableHead>
                     <TableHead className="w-16 text-center">Aksi</TableHead>
                   </TableRow>
@@ -571,7 +680,10 @@ export default function BarangKeluarPage() {
                 <TableBody>
                   {barangKeluar.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="p-0">
+                      <TableCell
+                        colSpan={user?.role === "mitra" ? 9 : 8}
+                        className="p-0"
+                      >
                         <EmptyScanTableState />
                       </TableCell>
                     </TableRow>
@@ -588,6 +700,9 @@ export default function BarangKeluarPage() {
                         </TableCell>
                         <TableCell>{item.lokasi}</TableCell>
                         <TableCell>{item.mitra}</TableCell>
+                        {user?.role === "mitra" && (
+                          <TableCell>{item.keterangan}</TableCell>
+                        )}
                         <TableCell>
                           <Badge variant="secondary" className="font-normal gap-1.5 px-2.5 py-0.5">
                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

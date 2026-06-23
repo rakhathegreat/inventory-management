@@ -26,6 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/auth";
 
 // Types
 type BrandRule = string;
@@ -48,12 +49,16 @@ type StorageLocation = {
   capacity?: number;
   usedCapacity?: number;
   brandRule?: BrandRule;
+  owner: string;
 };
 
 type SheetMode = "closed" | "add-rak" | "add-kardus" | "edit-rak" | "edit-kardus" | "add-level" | "edit-level";
 
 
 export default function LokasiBarangPage() {
+  const { user } = useAuth();
+  const isMitra = user?.role === "mitra";
+  const currentOwner = isMitra ? user.displayName : "KP";
   const [locations, setLocations] = useState<StorageLocation[]>([]);
   const [brands, setBrands] = useState<string[]>(["Campuran"]);
   const [sheetMode, setSheetMode] = useState<SheetMode>("closed");
@@ -81,7 +86,13 @@ export default function LokasiBarangPage() {
   const loadLocations = async () => {
     try {
       const data = await invoke<StorageLocation[]>("get_locations");
-      setLocations(data);
+      setLocations(
+        data.filter(
+          (location) =>
+            (location.owner || "KP").trim().toLowerCase() ===
+            currentOwner.trim().toLowerCase()
+        )
+      );
     } catch (error) {
       console.error("Failed to load locations:", error);
     }
@@ -101,7 +112,7 @@ export default function LokasiBarangPage() {
   useEffect(() => {
     loadLocations();
     loadBrands();
-  }, []);
+  }, [currentOwner, isMitra]);
 
   const stats = useMemo(() => {
     let totalRak = 0;
@@ -129,7 +140,9 @@ export default function LokasiBarangPage() {
   const filteredLocations = useMemo(() => {
     return locations.filter(loc => {
       const matchesTab = loc.type.toLowerCase() === activeTab;
-      const matchesSearch = loc.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch =
+        loc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        loc.owner.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesTab && matchesSearch;
     });
   }, [locations, activeTab, searchQuery]);
@@ -174,12 +187,15 @@ export default function LokasiBarangPage() {
 
   const handleSave = async () => {
     try {
+      const effectiveOwner = currentOwner;
+
       if (sheetMode === "add-rak") {
         const newRak: StorageLocation = {
           id: `rak-${Date.now()}`,
           name: locName || "Rak Baru",
           type: "Rak",
           isActive: true,
+          owner: effectiveOwner,
           levels: Array.from({ length: parseInt(locLevelsCount) || 1 }).map((_, i) => ({
             id: `lvl-${Date.now()}-${i}`,
             name: `Level ${i + 1}`,
@@ -196,6 +212,7 @@ export default function LokasiBarangPage() {
           name: locName || "Kardus Baru",
           type: "Kardus",
           isActive: true,
+          owner: effectiveOwner,
           capacity: parseInt(locCapacity) || 0,
           usedCapacity: 0,
           brandRule: locBrand
@@ -204,13 +221,13 @@ export default function LokasiBarangPage() {
       } else if (sheetMode === "edit-rak" && activeItem?.parentId) {
         const loc = locations.find(l => l.id === activeItem.parentId);
         if (loc) {
-          const updated = { ...loc, name: locName };
+          const updated = { ...loc, name: locName, owner: effectiveOwner };
           await invoke("save_location", { location: updated });
         }
       } else if (sheetMode === "edit-kardus" && activeItem?.parentId) {
         const loc = locations.find(l => l.id === activeItem.parentId);
         if (loc) {
-          const updated = { ...loc, name: locName, capacity: parseInt(locCapacity) || 0, brandRule: locBrand };
+          const updated = { ...loc, name: locName, owner: effectiveOwner, capacity: parseInt(locCapacity) || 0, brandRule: locBrand };
           await invoke("save_location", { location: updated });
         }
       } else if (sheetMode === "add-level" && activeItem?.parentId) {
@@ -407,6 +424,20 @@ export default function LokasiBarangPage() {
     );
   };
 
+  const renderOwnerInput = () => (
+    <div className="space-y-2">
+      <Label>Pemilik Lokasi</Label>
+      <div className="flex h-9 items-center rounded-md border border-neutral-800 bg-neutral-900 px-3 text-sm">
+        {currentOwner}
+      </div>
+      <p className="text-xs text-neutral-500">
+        {isMitra
+          ? "Lokasi ini hanya dapat digunakan oleh akun Mitra Anda."
+          : "Lokasi Admin selalu tersimpan sebagai milik KP."}
+      </p>
+    </div>
+  );
+
   const renderForm = () => {
     if (sheetMode === "add-rak" || sheetMode === "edit-rak") {
       return (
@@ -415,6 +446,7 @@ export default function LokasiBarangPage() {
             <Label>Nama Rak</Label>
             <Input value={locName} onChange={e => setLocName(e.target.value)} placeholder="Contoh: Rak A1" className="bg-neutral-900 border-neutral-800" />
           </div>
+          {renderOwnerInput()}
           {sheetMode === "add-rak" && (
             <div className="space-y-2">
               <Label>Jumlah Level Awal</Label>
@@ -432,6 +464,7 @@ export default function LokasiBarangPage() {
             <Label>Nama Kardus</Label>
             <Input value={locName} onChange={e => setLocName(e.target.value)} placeholder="Contoh: Kardus K-01" className="bg-neutral-900 border-neutral-800" />
           </div>
+          {renderOwnerInput()}
           {renderCapacityInput()}
           <div className="space-y-2">
             <Label>Merek</Label>
@@ -489,6 +522,23 @@ export default function LokasiBarangPage() {
 
   return (
     <div className="p-6 h-full flex flex-col gap-6 text-neutral-100 mx-auto w-full">
+      {(
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardContent className="flex items-center gap-3 px-4">
+            <div className="rounded-lg bg-blue-500/10 p-2 text-blue-400">
+              <Archive className="size-5" />
+            </div>
+            <div>
+              <p className="font-semibold">Lokasi penyimpanan {currentOwner}</p>
+              <p className="text-sm text-muted-foreground">
+                Semua rak dan kardus pada halaman ini hanya dapat dilihat dan
+                dikelola oleh pemiliknya.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs md:grid-cols-2 xl:grid-cols-4 dark:*:data-[slot=card]:bg-card">
         <Card className="@container/card relative">
           <div className="flex flex-row items-center">
@@ -605,6 +655,8 @@ export default function LokasiBarangPage() {
                       </div>
                       <CardDescription className="flex items-center gap-2 text-xs font-medium">
                         <span className="text-neutral-400">{loc.levels?.length || 0} Level</span>
+                        <span className="text-neutral-600">•</span>
+                        <span className="text-blue-400">{loc.owner}</span>
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
@@ -704,6 +756,7 @@ export default function LokasiBarangPage() {
                       </div>
                       <div className="space-y-0.5">
                         <CardTitle className="text-base font-semibold tracking-tight text-neutral-100">{loc.name}</CardTitle>
+                        <p className="text-xs font-medium text-orange-400">{loc.owner}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">

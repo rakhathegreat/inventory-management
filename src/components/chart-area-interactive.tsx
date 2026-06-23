@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { invoke } from "@tauri-apps/api/core"
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
 
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -33,7 +32,7 @@ import {
 
 export const description = "Grafik aktivitas transaksi barang"
 
-type Transaction = {
+export type ChartTransaction = {
     id: string
     tanggal: string
     nomor: string
@@ -89,7 +88,7 @@ const addDays = (date: Date, days: number) => {
 }
 
 const buildDailyTransactionData = (
-    transactions: Transaction[],
+    transactions: ChartTransaction[],
     timeRange: string
 ): ChartDataPoint[] => {
     const rangeDays = getRangeDays(timeRange)
@@ -138,29 +137,19 @@ const buildDailyTransactionData = (
     return Array.from(points.values())
 }
 
-export function ChartAreaInteractive() {
+export function ChartAreaInteractive({
+    transactions,
+}: {
+    transactions: ChartTransaction[]
+}) {
     const isMobile = useIsMobile()
     const [timeRange, setTimeRange] = React.useState("90d")
-    const [transactions, setTransactions] = React.useState<Transaction[]>([])
 
     React.useEffect(() => {
         if (isMobile) {
             setTimeRange("7d")
         }
     }, [isMobile])
-
-    React.useEffect(() => {
-        const fetchTransactions = async () => {
-            try {
-                const data = await invoke<Transaction[]>("get_transactions")
-                setTransactions(data)
-            } catch (error) {
-                console.error("Gagal mengambil data transaksi untuk grafik:", error)
-            }
-        }
-
-        fetchTransactions()
-    }, [])
 
     const chartData = React.useMemo(
         () => buildDailyTransactionData(transactions, timeRange),

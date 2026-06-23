@@ -5,6 +5,8 @@ import { invoke } from "@tauri-apps/api/core"
 import {
   Building2,
   Edit,
+  Fingerprint,
+  KeyRound,
   Mail,
   MapPin,
   MoreVertical,
@@ -53,11 +55,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 type PartnerType = "Supplier" | "Vendor" | "Jasa" | "Lainnya"
 
 type Partner = {
   id: string
+  code: string
   name: string
   partnerType: PartnerType
   contactPerson: string
@@ -65,11 +76,18 @@ type Partner = {
   email: string
   address: string
   isActive: boolean
+  username?: string | null
+}
+
+type OwnerIdentitySettings = {
+  kpCode: string
 }
 
 const PARTNER_TYPES: PartnerType[] = ["Supplier", "Vendor", "Jasa", "Lainnya"]
+const normalizeIdentityCode = (value: string) => value.trim().toUpperCase()
 
 const initialForm = {
+  code: "",
   name: "",
   partnerType: "Supplier" as PartnerType,
   contactPerson: "",
@@ -77,6 +95,9 @@ const initialForm = {
   email: "",
   address: "",
   isActive: true,
+  username: "",
+  password: "",
+  confirmPassword: "",
 }
 
 export default function MitraPage() {
@@ -89,6 +110,10 @@ export default function MitraPage() {
   const [formData, setFormData] = useState(initialForm)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [deleteTarget, setDeleteTarget] = useState<Partner | null>(null)
+  const [kpCode, setKpCode] = useState("KP")
+  const [kpCodeDraft, setKpCodeDraft] = useState("KP")
+  const [kpCodeError, setKpCodeError] = useState("")
+  const [isKpCodeDialogOpen, setIsKpCodeDialogOpen] = useState(false)
 
   const loadPartners = async () => {
     try {
@@ -100,8 +125,22 @@ export default function MitraPage() {
     }
   }
 
+  const loadIdentitySettings = async () => {
+    try {
+      const settings = await invoke<OwnerIdentitySettings>(
+        "get_owner_identity_settings"
+      )
+      setKpCode(settings.kpCode)
+      setKpCodeDraft(settings.kpCode)
+    } catch (error) {
+      console.error("Gagal memuat kode identitas KP:", error)
+      toast.error("Gagal memuat kode identitas KP.")
+    }
+  }
+
   useEffect(() => {
     loadPartners()
+    loadIdentitySettings()
   }, [])
 
   const filteredPartners = useMemo(() => {
@@ -110,11 +149,13 @@ export default function MitraPage() {
     return partners.filter((partner) => {
       const matchesSearch =
         !query ||
+        partner.code.toLowerCase().includes(query) ||
         partner.name.toLowerCase().includes(query) ||
         partner.contactPerson.toLowerCase().includes(query) ||
         partner.phone.toLowerCase().includes(query) ||
         partner.email.toLowerCase().includes(query) ||
-        partner.address.toLowerCase().includes(query)
+        partner.address.toLowerCase().includes(query) ||
+        partner.username?.toLowerCase().includes(query)
       const matchesType =
         typeFilter === "all" || partner.partnerType === typeFilter
       const matchesStatus =
@@ -135,6 +176,7 @@ export default function MitraPage() {
   const openEditSheet = (partner: Partner) => {
     setEditId(partner.id)
     setFormData({
+      code: partner.code,
       name: partner.name,
       partnerType: partner.partnerType,
       contactPerson: partner.contactPerson === "-" ? "" : partner.contactPerson,
@@ -142,6 +184,9 @@ export default function MitraPage() {
       email: partner.email === "-" ? "" : partner.email,
       address: partner.address === "-" ? "" : partner.address,
       isActive: partner.isActive,
+      username: partner.username || "",
+      password: "",
+      confirmPassword: "",
     })
     setFormErrors({})
     setIsSheetOpen(true)
@@ -151,7 +196,17 @@ export default function MitraPage() {
     const errors: Record<string, string> = {}
     const normalizedName = formData.name.trim()
     const normalizedEmail = formData.email.trim()
+    const normalizedUsername = formData.username.trim()
+    const normalizedCode = normalizeIdentityCode(formData.code)
 
+    if (
+      normalizedCode.length < 2 ||
+      normalizedCode.length > 30 ||
+      !/^[A-Z0-9_-]+$/.test(normalizedCode)
+    ) {
+      errors.code =
+        "Kode harus 2-30 karakter dan hanya berisi huruf, angka, - atau _."
+    }
     if (!normalizedName) {
       errors.name = "Nama mitra wajib diisi."
     }
@@ -160,6 +215,18 @@ export default function MitraPage() {
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
     ) {
       errors.email = "Format email tidak valid."
+    }
+    if (normalizedUsername.length < 4) {
+      errors.username = "Username minimal 4 karakter."
+    }
+    if (!editId && formData.password.length < 8) {
+      errors.password = "Password minimal 8 karakter."
+    }
+    if (editId && formData.password && formData.password.length < 8) {
+      errors.password = "Password minimal 8 karakter."
+    }
+    if (formData.password !== formData.confirmPassword) {
+      errors.confirmPassword = "Konfirmasi password tidak sama."
     }
 
     const hasDuplicateName = partners.some(
@@ -170,7 +237,14 @@ export default function MitraPage() {
     if (hasDuplicateName) {
       errors.name = "Nama mitra sudah terdaftar."
     }
-
+    const hasDuplicateUsername = partners.some(
+      (partner) =>
+        partner.username?.trim().toLowerCase() ===
+          normalizedUsername.toLowerCase() && partner.id !== editId
+    )
+    if (hasDuplicateUsername) {
+      errors.username = "Username sudah digunakan."
+    }
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors)
       toast.error("Periksa kembali data mitra.")
@@ -179,6 +253,7 @@ export default function MitraPage() {
 
     const partner: Partner = {
       id: editId || `mitra-${Date.now()}`,
+      code: normalizedCode,
       name: normalizedName,
       partnerType: formData.partnerType,
       contactPerson: formData.contactPerson.trim() || "-",
@@ -186,10 +261,23 @@ export default function MitraPage() {
       email: normalizedEmail || "-",
       address: formData.address.trim() || "-",
       isActive: formData.isActive,
+      username: normalizedUsername,
     }
 
     try {
-      await invoke(editId ? "update_partner" : "add_partner", { partner })
+      if (editId) {
+        await invoke("update_partner_account", {
+          partner,
+          username: normalizedUsername,
+          password: formData.password || null,
+        })
+      } else {
+        await invoke("add_partner_account", {
+          partner,
+          username: normalizedUsername,
+          password: formData.password,
+        })
+      }
       await loadPartners()
       setIsSheetOpen(false)
       toast.success(
@@ -197,7 +285,36 @@ export default function MitraPage() {
       )
     } catch (error) {
       console.error("Gagal menyimpan data mitra:", error)
-      toast.error("Gagal menyimpan data mitra.")
+      toast.error(
+        typeof error === "string" ? error : "Gagal menyimpan data mitra."
+      )
+    }
+  }
+
+  const handleSaveKpCode = async () => {
+    const normalizedCode = normalizeIdentityCode(kpCodeDraft)
+    if (
+      normalizedCode.length < 2 ||
+      normalizedCode.length > 30 ||
+      !/^[A-Z0-9_-]+$/.test(normalizedCode)
+    ) {
+      setKpCodeError(
+        "Kode harus 2-30 karakter dan hanya berisi huruf, angka, - atau _."
+      )
+      return
+    }
+
+    try {
+      await invoke("update_kp_identity_code", { code: normalizedCode })
+      setKpCode(normalizedCode)
+      setKpCodeDraft(normalizedCode)
+      setKpCodeError("")
+      setIsKpCodeDialogOpen(false)
+      toast.success("Kode identitas KP berhasil diperbarui.")
+    } catch (error) {
+      setKpCodeError(
+        typeof error === "string" ? error : "Gagal memperbarui kode KP."
+      )
     }
   }
 
@@ -235,6 +352,34 @@ export default function MitraPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="flex flex-col gap-4 px-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Fingerprint className="size-5" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Identitas KP</p>
+              <div className="mt-1 flex items-center gap-2">
+                <p className="text-xl font-semibold">{kpCode}</p>
+                <Badge variant="secondary">Admin</Badge>
+              </div>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setKpCodeDraft(kpCode)
+              setKpCodeError("")
+              setIsKpCodeDialogOpen(true)
+            }}
+          >
+            <Edit className="size-4" />
+            Ubah Kode KP
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card className="p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -292,6 +437,7 @@ export default function MitraPage() {
                   <div className="min-w-0">
                     <h3 className="truncate font-semibold">{partner.name}</h3>
                     <div className="mt-1 flex flex-wrap gap-2">
+                      <Badge className="font-mono">{partner.code}</Badge>
                       <Badge variant="secondary">{partner.partnerType}</Badge>
                       <Badge
                         variant="outline"
@@ -335,6 +481,12 @@ export default function MitraPage() {
                   <span>{partner.contactPerson}</span>
                 </div>
                 <div className="flex items-start gap-3">
+                  <KeyRound className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  <span>
+                    {partner.username ? `@${partner.username}` : "Akun belum dibuat"}
+                  </span>
+                </div>
+                <div className="flex items-start gap-3">
                   <Phone className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                   <span>{partner.phone}</span>
                 </div>
@@ -369,14 +521,40 @@ export default function MitraPage() {
       </div>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="flex flex-col sm:max-w-md">
+        <SheetContent className="flex flex-col sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>{editId ? "Edit Mitra" : "Tambah Mitra"}</SheetTitle>
             <SheetDescription>
-              Kelola identitas dan informasi kontak mitra perusahaan.
+              Kelola identitas mitra sekaligus akun yang digunakan untuk login.
             </SheetDescription>
           </SheetHeader>
           <div className="flex-1 space-y-5 overflow-y-auto px-4">
+            <div className="space-y-2">
+              <Label htmlFor="partner-code">Kode Mitra</Label>
+              <Input
+                id="partner-code"
+                value={formData.code}
+                onChange={(event) => {
+                  setFormData((current) => ({
+                    ...current,
+                    code: event.target.value.toUpperCase(),
+                  }))
+                  setFormErrors((current) => ({ ...current, code: "" }))
+                }}
+                placeholder="Contoh: MTR-001"
+                className={`font-mono ${
+                  formErrors.code ? "border-destructive" : ""
+                }`}
+              />
+              <p className="text-xs text-muted-foreground">
+                Kode digunakan sebagai identitas Mitra dan boleh sama dengan
+                identitas lain.
+              </p>
+              {formErrors.code && (
+                <p className="text-xs text-destructive">{formErrors.code}</p>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="partner-name">Nama Mitra</Label>
               <Input
@@ -497,6 +675,106 @@ export default function MitraPage() {
                 placeholder="Alamat kantor mitra"
               />
             </div>
+
+            <div className="border-t pt-5">
+              <div className="mb-4">
+                <h3 className="font-medium">Akun Login Mitra</h3>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Akun ini dibuat oleh admin. Mitra tidak dapat mendaftarkan akun
+                  secara mandiri.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="partner-username">Username</Label>
+                  <Input
+                    id="partner-username"
+                    value={formData.username}
+                    onChange={(event) => {
+                      setFormData((current) => ({
+                        ...current,
+                        username: event.target.value,
+                      }))
+                      setFormErrors((current) => ({
+                        ...current,
+                        username: "",
+                      }))
+                    }}
+                    autoComplete="off"
+                    placeholder="Minimal 4 karakter"
+                    className={formErrors.username ? "border-destructive" : ""}
+                  />
+                  {formErrors.username && (
+                    <p className="text-xs text-destructive">
+                      {formErrors.username}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="partner-password">
+                      {editId ? "Password Baru" : "Password"}
+                    </Label>
+                    <Input
+                      id="partner-password"
+                      type="password"
+                      value={formData.password}
+                      onChange={(event) => {
+                        setFormData((current) => ({
+                          ...current,
+                          password: event.target.value,
+                        }))
+                        setFormErrors((current) => ({
+                          ...current,
+                          password: "",
+                        }))
+                      }}
+                      autoComplete="new-password"
+                      placeholder={editId ? "Kosongkan jika tetap" : "Minimal 8 karakter"}
+                      className={formErrors.password ? "border-destructive" : ""}
+                    />
+                    {formErrors.password && (
+                      <p className="text-xs text-destructive">
+                        {formErrors.password}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="partner-password-confirmation">
+                      Konfirmasi Password
+                    </Label>
+                    <Input
+                      id="partner-password-confirmation"
+                      type="password"
+                      value={formData.confirmPassword}
+                      onChange={(event) => {
+                        setFormData((current) => ({
+                          ...current,
+                          confirmPassword: event.target.value,
+                        }))
+                        setFormErrors((current) => ({
+                          ...current,
+                          confirmPassword: "",
+                        }))
+                      }}
+                      autoComplete="new-password"
+                      placeholder="Ulangi password"
+                      className={
+                        formErrors.confirmPassword ? "border-destructive" : ""
+                      }
+                    />
+                    {formErrors.confirmPassword && (
+                      <p className="text-xs text-destructive">
+                        {formErrors.confirmPassword}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <SheetFooter>
             <Button variant="outline" onClick={() => setIsSheetOpen(false)}>
@@ -524,6 +802,47 @@ export default function MitraPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={isKpCodeDialogOpen}
+        onOpenChange={setIsKpCodeDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ubah kode identitas KP</DialogTitle>
+            <DialogDescription>
+              Kode ini menjadi identitas resmi lokasi dan barang milik Admin.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="kp-identity-code">Kode KP</Label>
+            <Input
+              id="kp-identity-code"
+              value={kpCodeDraft}
+              onChange={(event) => {
+                setKpCodeDraft(event.target.value.toUpperCase())
+                setKpCodeError("")
+              }}
+              className={`font-mono ${
+                kpCodeError ? "border-destructive" : ""
+              }`}
+              placeholder="Contoh: KP-TSM"
+            />
+            {kpCodeError && (
+              <p className="text-xs text-destructive">{kpCodeError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsKpCodeDialogOpen(false)}
+            >
+              Batal
+            </Button>
+            <Button onClick={handleSaveKpCode}>Simpan Kode</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

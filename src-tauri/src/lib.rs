@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod commands;
 pub mod db;
 
@@ -39,6 +40,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            commands::login,
+            commands::get_owner_identity_settings,
+            commands::update_kp_identity_code,
             commands::save_export_file,
             commands::get_categories,
             commands::add_category,
@@ -52,6 +56,8 @@ pub fn run() {
             commands::add_partner,
             commands::update_partner,
             commands::delete_partner,
+            commands::add_partner_account,
+            commands::update_partner_account,
             commands::get_locations,
             commands::save_location,
             commands::delete_location,

@@ -1,3 +1,4 @@
+use crate::auth::{hash_password, verify_password};
 use crate::db::DbState;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,8 @@ pub struct Category {
     pub description: String,
     #[serde(rename = "totalItems")]
     pub total_items: i32,
+    #[serde(rename = "safetyStock")]
+    pub safety_stock: i32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -37,6 +40,7 @@ pub struct Brand {
 #[derive(Serialize, Deserialize)]
 pub struct Partner {
     pub id: String,
+    pub code: String,
     pub name: String,
     #[serde(rename = "partnerType")]
     pub partner_type: String,
@@ -47,6 +51,148 @@ pub struct Partner {
     pub address: String,
     #[serde(rename = "isActive")]
     pub is_active: bool,
+    #[serde(default)]
+    pub username: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct AuthUser {
+    pub id: String,
+    pub username: String,
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    pub role: String,
+    #[serde(rename = "partnerId")]
+    pub partner_id: Option<String>,
+    #[serde(rename = "identityCode")]
+    pub identity_code: String,
+}
+
+#[derive(Serialize)]
+pub struct OwnerIdentitySettings {
+    #[serde(rename = "kpCode")]
+    pub kp_code: String,
+}
+
+fn normalize_identity_code(code: &str) -> Result<String, String> {
+    let normalized = code.trim().to_uppercase();
+
+    if normalized.len() < 2 || normalized.len() > 30 {
+        return Err("Kode identitas harus terdiri dari 2 sampai 30 karakter.".to_string());
+    }
+    if !normalized
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+    {
+        return Err(
+            "Kode identitas hanya boleh berisi huruf, angka, tanda hubung, atau underscore."
+                .to_string(),
+        );
+    }
+
+    Ok(normalized)
+}
+
+#[tauri::command]
+pub fn login(
+    state: State<DbState>,
+    username: String,
+    password: String,
+) -> Result<AuthUser, String> {
+    let conn = state.0.lock().unwrap();
+    let normalized_username = username.trim();
+
+    let user = conn
+        .query_row(
+            "SELECT u.id, u.username, u.password_hash, u.role, u.display_name,
+                    u.partner_id, u.is_active,
+                    CASE
+                        WHEN u.role = 'admin' THEN (
+                            SELECT value FROM app_settings
+                            WHERE key = 'kp_identity_code'
+                        )
+                        ELSE p.code
+                    END
+             FROM users u
+             LEFT JOIN partners p ON p.id = u.partner_id
+             WHERE u.username = ?1 COLLATE NOCASE",
+            params![normalized_username],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, i32>(6)? != 0,
+                    row.get::<_, String>(7)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+
+    let Some((
+        id,
+        username,
+        password_hash,
+        role,
+        display_name,
+        partner_id,
+        is_active,
+        identity_code,
+    )) = user
+    else {
+        return Err("Username atau password salah.".to_string());
+    };
+
+    if !is_active {
+        return Err("Akun ini sedang dinonaktifkan.".to_string());
+    }
+
+    if !verify_password(&password, &password_hash) {
+        return Err("Username atau password salah.".to_string());
+    }
+
+    Ok(AuthUser {
+        id,
+        username,
+        display_name,
+        role,
+        partner_id,
+        identity_code,
+    })
+}
+
+#[tauri::command]
+pub fn get_owner_identity_settings(state: State<DbState>) -> Result<OwnerIdentitySettings, String> {
+    let conn = state.0.lock().unwrap();
+    let kp_code = conn
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = 'kp_identity_code'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(OwnerIdentitySettings { kp_code })
+}
+
+#[tauri::command]
+pub fn update_kp_identity_code(state: State<DbState>, code: String) -> Result<(), String> {
+    let normalized_code = normalize_identity_code(&code)?;
+    let conn = state.0.lock().unwrap();
+
+    conn.execute(
+        "INSERT INTO app_settings (key, value)
+         VALUES ('kp_identity_code', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![normalized_code],
+    )
+    .map_err(|error| error.to_string())?;
+
+    Ok(())
 }
 
 // Category Commands
@@ -54,7 +200,7 @@ pub struct Partner {
 pub fn get_categories(state: State<DbState>) -> Result<Vec<Category>, String> {
     let conn = state.0.lock().unwrap();
     let mut stmt = conn
-        .prepare("SELECT id, name, description, total_items FROM categories")
+        .prepare("SELECT id, name, description, total_items, safety_stock FROM categories")
         .map_err(|e| e.to_string())?;
 
     let categories_iter = stmt
@@ -64,6 +210,7 @@ pub fn get_categories(state: State<DbState>) -> Result<Vec<Category>, String> {
                 name: row.get(1)?,
                 description: row.get(2)?,
                 total_items: row.get(3)?,
+                safety_stock: row.get(4)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -84,6 +231,9 @@ pub fn add_category(state: State<DbState>, category: Category) -> Result<(), Str
     if normalized_name.is_empty() {
         return Err("Nama kategori wajib diisi.".to_string());
     }
+    if category.safety_stock < 0 {
+        return Err("Safety stock tidak boleh bernilai negatif.".to_string());
+    }
 
     let duplicate_exists: bool = conn
         .query_row(
@@ -101,12 +251,13 @@ pub fn add_category(state: State<DbState>, category: Category) -> Result<(), Str
     }
 
     conn.execute(
-        "INSERT INTO categories (id, name, description, total_items) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT INTO categories (id, name, description, total_items, safety_stock) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
             category.id,
             normalized_name,
             category.description,
-            category.total_items
+            category.total_items,
+            category.safety_stock
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -120,6 +271,9 @@ pub fn update_category(state: State<DbState>, category: Category) -> Result<(), 
 
     if normalized_name.is_empty() {
         return Err("Nama kategori wajib diisi.".to_string());
+    }
+    if category.safety_stock < 0 {
+        return Err("Safety stock tidak boleh bernilai negatif.".to_string());
     }
 
     let duplicate_exists: bool = conn
@@ -139,11 +293,12 @@ pub fn update_category(state: State<DbState>, category: Category) -> Result<(), 
     }
 
     conn.execute(
-        "UPDATE categories SET name = ?1, description = ?2, total_items = ?3 WHERE id = ?4",
+        "UPDATE categories SET name = ?1, description = ?2, total_items = ?3, safety_stock = ?4 WHERE id = ?5",
         params![
             normalized_name,
             category.description,
             category.total_items,
+            category.safety_stock,
             category.id
         ],
     )
@@ -306,9 +461,11 @@ pub fn get_partners(state: State<DbState>) -> Result<Vec<Partner>, String> {
     let conn = state.0.lock().unwrap();
     let mut stmt = conn
         .prepare(
-            "SELECT id, name, partner_type, contact_person, phone, email, address, is_active
-             FROM partners
-             ORDER BY name COLLATE NOCASE ASC",
+            "SELECT p.id, p.code, p.name, p.partner_type, p.contact_person, p.phone,
+                    p.email, p.address, p.is_active, u.username
+             FROM partners p
+             LEFT JOIN users u ON u.partner_id = p.id
+             ORDER BY p.name COLLATE NOCASE ASC",
         )
         .map_err(|error| error.to_string())?;
 
@@ -316,13 +473,15 @@ pub fn get_partners(state: State<DbState>) -> Result<Vec<Partner>, String> {
         .query_map([], |row| {
             Ok(Partner {
                 id: row.get(0)?,
-                name: row.get(1)?,
-                partner_type: row.get(2)?,
-                contact_person: row.get(3)?,
-                phone: row.get(4)?,
-                email: row.get(5)?,
-                address: row.get(6)?,
-                is_active: row.get::<_, i32>(7)? != 0,
+                code: row.get(1)?,
+                name: row.get(2)?,
+                partner_type: row.get(3)?,
+                contact_person: row.get(4)?,
+                phone: row.get(5)?,
+                email: row.get(6)?,
+                address: row.get(7)?,
+                is_active: row.get::<_, i32>(8)? != 0,
+                username: row.get(9)?,
             })
         })
         .map_err(|error| error.to_string())?;
@@ -338,12 +497,15 @@ pub fn get_partners(state: State<DbState>) -> Result<Vec<Partner>, String> {
 #[tauri::command]
 pub fn add_partner(state: State<DbState>, partner: Partner) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
+    let normalized_code = normalize_identity_code(&partner.code)?;
+
     conn.execute(
         "INSERT INTO partners
-         (id, name, partner_type, contact_person, phone, email, address, is_active)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+         (id, code, name, partner_type, contact_person, phone, email, address, is_active)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             partner.id,
+            normalized_code,
             partner.name,
             partner.partner_type,
             partner.contact_person,
@@ -360,13 +522,25 @@ pub fn add_partner(state: State<DbState>, partner: Partner) -> Result<(), String
 
 #[tauri::command]
 pub fn update_partner(state: State<DbState>, partner: Partner) -> Result<(), String> {
-    let conn = state.0.lock().unwrap();
-    conn.execute(
+    let mut conn = state.0.lock().unwrap();
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+    let normalized_code = normalize_identity_code(&partner.code)?;
+    let previous_name = tx
+        .query_row(
+            "SELECT name FROM partners WHERE id = ?1",
+            params![&partner.id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+
+    tx.execute(
         "UPDATE partners
-         SET name = ?1, partner_type = ?2, contact_person = ?3, phone = ?4,
-             email = ?5, address = ?6, is_active = ?7
-         WHERE id = ?8",
+         SET code = ?1, name = ?2, partner_type = ?3, contact_person = ?4,
+             phone = ?5, email = ?6, address = ?7, is_active = ?8
+         WHERE id = ?9",
         params![
+            normalized_code,
             partner.name,
             partner.partner_type,
             partner.contact_person,
@@ -379,16 +553,269 @@ pub fn update_partner(state: State<DbState>, partner: Partner) -> Result<(), Str
     )
     .map_err(|error| error.to_string())?;
 
+    tx.execute(
+        "UPDATE users
+         SET display_name = ?1, is_active = ?2
+         WHERE partner_id = ?3",
+        params![
+            partner.name,
+            if partner.is_active { 1 } else { 0 },
+            partner.id
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+
+    if let Some(previous_name) = previous_name {
+        if previous_name != partner.name {
+            tx.execute(
+                "UPDATE items SET partner = ?1 WHERE partner = ?2 COLLATE NOCASE",
+                params![&partner.name, &previous_name],
+            )
+            .map_err(|error| error.to_string())?;
+            tx.execute(
+                "UPDATE transactions SET partner = ?1 WHERE partner = ?2 COLLATE NOCASE",
+                params![&partner.name, &previous_name],
+            )
+            .map_err(|error| error.to_string())?;
+            tx.execute(
+                "UPDATE storage_locations SET owner = ?1 WHERE owner = ?2 COLLATE NOCASE",
+                params![&partner.name, &previous_name],
+            )
+            .map_err(|error| error.to_string())?;
+        }
+    }
+
+    tx.commit().map_err(|error| error.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
 pub fn delete_partner(state: State<DbState>, id: String) -> Result<(), String> {
-    let conn = state.0.lock().unwrap();
-    conn.execute("DELETE FROM partners WHERE id = ?1", params![id])
+    let mut conn = state.0.lock().unwrap();
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+
+    tx.execute("DELETE FROM users WHERE partner_id = ?1", params![&id])
+        .map_err(|error| error.to_string())?;
+    tx.execute(
+        "UPDATE storage_locations
+         SET owner = 'KP'
+         WHERE owner = (SELECT name FROM partners WHERE id = ?1) COLLATE NOCASE",
+        params![&id],
+    )
+    .map_err(|error| error.to_string())?;
+    tx.execute("DELETE FROM partners WHERE id = ?1", params![id])
         .map_err(|error| error.to_string())?;
 
+    tx.commit().map_err(|error| error.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn add_partner_account(
+    state: State<DbState>,
+    partner: Partner,
+    username: String,
+    password: String,
+) -> Result<(), String> {
+    let normalized_username = username.trim();
+    let normalized_code = normalize_identity_code(&partner.code)?;
+    if normalized_username.len() < 4 {
+        return Err("Username minimal 4 karakter.".to_string());
+    }
+    if password.len() < 8 {
+        return Err("Password minimal 8 karakter.".to_string());
+    }
+
+    let password_hash = hash_password(&password)?;
+    let mut conn = state.0.lock().unwrap();
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+
+    let username_exists: bool = tx
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE username = ?1 COLLATE NOCASE)",
+            params![normalized_username],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if username_exists {
+        return Err("Username sudah digunakan.".to_string());
+    }
+
+    tx.execute(
+        "INSERT INTO partners
+         (id, code, name, partner_type, contact_person, phone, email, address, is_active)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            &partner.id,
+            normalized_code,
+            &partner.name,
+            &partner.partner_type,
+            &partner.contact_person,
+            &partner.phone,
+            &partner.email,
+            &partner.address,
+            if partner.is_active { 1 } else { 0 },
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+
+    tx.execute(
+        "INSERT INTO users
+         (id, username, password_hash, role, display_name, partner_id, is_active)
+         VALUES (?1, ?2, ?3, 'mitra', ?4, ?5, ?6)",
+        params![
+            format!("user-{}", partner.id),
+            normalized_username,
+            password_hash,
+            &partner.name,
+            &partner.id,
+            if partner.is_active { 1 } else { 0 },
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+
+    tx.commit().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_partner_account(
+    state: State<DbState>,
+    partner: Partner,
+    username: String,
+    password: Option<String>,
+) -> Result<(), String> {
+    let normalized_username = username.trim();
+    let normalized_code = normalize_identity_code(&partner.code)?;
+    if normalized_username.len() < 4 {
+        return Err("Username minimal 4 karakter.".to_string());
+    }
+    if password.as_ref().is_some_and(|value| value.len() < 8) {
+        return Err("Password minimal 8 karakter.".to_string());
+    }
+
+    let new_password_hash = password
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .map(hash_password)
+        .transpose()?;
+    let mut conn = state.0.lock().unwrap();
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+    let previous_name = tx
+        .query_row(
+            "SELECT name FROM partners WHERE id = ?1",
+            params![&partner.id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+
+    let username_exists: bool = tx
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM users
+                WHERE username = ?1 COLLATE NOCASE
+                  AND (partner_id IS NULL OR partner_id <> ?2)
+            )",
+            params![normalized_username, &partner.id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if username_exists {
+        return Err("Username sudah digunakan.".to_string());
+    }
+
+    tx.execute(
+        "UPDATE partners
+         SET code = ?1, name = ?2, partner_type = ?3, contact_person = ?4,
+             phone = ?5, email = ?6, address = ?7, is_active = ?8
+         WHERE id = ?9",
+        params![
+            normalized_code,
+            &partner.name,
+            &partner.partner_type,
+            &partner.contact_person,
+            &partner.phone,
+            &partner.email,
+            &partner.address,
+            if partner.is_active { 1 } else { 0 },
+            &partner.id,
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+
+    let account_exists: bool = tx
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE partner_id = ?1)",
+            params![&partner.id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+
+    if account_exists {
+        tx.execute(
+            "UPDATE users
+             SET username = ?1, display_name = ?2, is_active = ?3
+             WHERE partner_id = ?4",
+            params![
+                normalized_username,
+                &partner.name,
+                if partner.is_active { 1 } else { 0 },
+                &partner.id
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+
+        if let Some(password_hash) = new_password_hash {
+            tx.execute(
+                "UPDATE users SET password_hash = ?1 WHERE partner_id = ?2",
+                params![password_hash, &partner.id],
+            )
+            .map_err(|error| error.to_string())?;
+        }
+    } else {
+        let Some(password_hash) = new_password_hash else {
+            return Err(
+                "Mitra lama ini belum memiliki akun. Isi password untuk membuat akun.".to_string(),
+            );
+        };
+
+        tx.execute(
+            "INSERT INTO users
+             (id, username, password_hash, role, display_name, partner_id, is_active)
+             VALUES (?1, ?2, ?3, 'mitra', ?4, ?5, ?6)",
+            params![
+                format!("user-{}", partner.id),
+                normalized_username,
+                password_hash,
+                &partner.name,
+                &partner.id,
+                if partner.is_active { 1 } else { 0 },
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    }
+
+    if let Some(previous_name) = previous_name {
+        if previous_name != partner.name {
+            tx.execute(
+                "UPDATE items SET partner = ?1 WHERE partner = ?2 COLLATE NOCASE",
+                params![&partner.name, &previous_name],
+            )
+            .map_err(|error| error.to_string())?;
+            tx.execute(
+                "UPDATE transactions SET partner = ?1 WHERE partner = ?2 COLLATE NOCASE",
+                params![&partner.name, &previous_name],
+            )
+            .map_err(|error| error.to_string())?;
+            tx.execute(
+                "UPDATE storage_locations SET owner = ?1 WHERE owner = ?2 COLLATE NOCASE",
+                params![&partner.name, &previous_name],
+            )
+            .map_err(|error| error.to_string())?;
+        }
+    }
+
+    tx.commit().map_err(|error| error.to_string())
 }
 
 // Storage Location Structs & Commands
@@ -419,12 +846,13 @@ pub struct StorageLocation {
     pub used_capacity: Option<i32>,
     #[serde(rename = "brandRule")]
     pub brand_rule: Option<String>,
+    pub owner: String,
 }
 
 #[tauri::command]
 pub fn get_locations(state: State<DbState>) -> Result<Vec<StorageLocation>, String> {
     let conn = state.0.lock().unwrap();
-    let mut stmt = conn.prepare("SELECT id, name, type, is_active, capacity, used_capacity, brand_rule FROM storage_locations").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, name, type, is_active, capacity, used_capacity, brand_rule, owner FROM storage_locations").map_err(|e| e.to_string())?;
 
     let locations_iter = stmt
         .query_map([], |row| {
@@ -436,6 +864,7 @@ pub fn get_locations(state: State<DbState>) -> Result<Vec<StorageLocation>, Stri
             let capacity: Option<i32> = row.get(4)?;
             let used_capacity: Option<i32> = row.get(5)?;
             let brand_rule: Option<String> = row.get(6)?;
+            let owner: String = row.get(7)?;
 
             Ok(StorageLocation {
                 id,
@@ -446,6 +875,7 @@ pub fn get_locations(state: State<DbState>) -> Result<Vec<StorageLocation>, Stri
                 capacity,
                 used_capacity,
                 brand_rule,
+                owner,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -497,7 +927,7 @@ pub fn save_location(state: State<DbState>, location: StorageLocation) -> Result
 
     if exists {
         tx.execute(
-            "UPDATE storage_locations SET name = ?1, type = ?2, is_active = ?3, capacity = ?4, used_capacity = ?5, brand_rule = ?6 WHERE id = ?7",
+            "UPDATE storage_locations SET name = ?1, type = ?2, is_active = ?3, capacity = ?4, used_capacity = ?5, brand_rule = ?6, owner = ?7 WHERE id = ?8",
             params![
                 location.name,
                 location.location_type,
@@ -505,12 +935,13 @@ pub fn save_location(state: State<DbState>, location: StorageLocation) -> Result
                 location.capacity,
                 location.used_capacity,
                 location.brand_rule,
+                location.owner,
                 location.id
             ],
         ).map_err(|e| e.to_string())?;
     } else {
         tx.execute(
-            "INSERT INTO storage_locations (id, name, type, is_active, capacity, used_capacity, brand_rule) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO storage_locations (id, name, type, is_active, capacity, used_capacity, brand_rule, owner) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 location.id,
                 location.name,
@@ -518,7 +949,8 @@ pub fn save_location(state: State<DbState>, location: StorageLocation) -> Result
                 if location.is_active { 1 } else { 0 },
                 location.capacity,
                 location.used_capacity,
-                location.brand_rule
+                location.brand_rule,
+                location.owner
             ],
         ).map_err(|e| e.to_string())?;
     }
@@ -670,12 +1102,13 @@ pub struct Item {
     pub entry_date: String,
     #[serde(rename = "tanggalKeluar")]
     pub exit_date: Option<String>,
+    pub mitra: Option<String>,
 }
 
 #[tauri::command]
 pub fn get_items(state: State<DbState>) -> Result<Vec<Item>, String> {
     let conn = state.0.lock().unwrap();
-    let mut stmt = conn.prepare("SELECT id, serial_number, category, brand, status, storage_location, entry_date, exit_date FROM items").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, serial_number, category, brand, status, storage_location, entry_date, exit_date, partner FROM items").map_err(|e| e.to_string())?;
 
     let items_iter = stmt
         .query_map([], |row| {
@@ -688,6 +1121,7 @@ pub fn get_items(state: State<DbState>) -> Result<Vec<Item>, String> {
                 storage_location: row.get(5)?,
                 entry_date: row.get(6)?,
                 exit_date: row.get(7)?,
+                mitra: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -704,8 +1138,8 @@ pub fn get_items(state: State<DbState>) -> Result<Vec<Item>, String> {
 pub fn add_item(state: State<DbState>, item: Item) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     conn.execute(
-        "INSERT INTO items (id, serial_number, category, brand, status, storage_location, entry_date, exit_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![item.id, item.serial_number, item.category, item.brand, item.status, item.storage_location, item.entry_date, item.exit_date],
+        "INSERT INTO items (id, serial_number, category, brand, status, storage_location, entry_date, exit_date, partner) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![item.id, item.serial_number, item.category, item.brand, item.status, item.storage_location, item.entry_date, item.exit_date, item.mitra],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -714,8 +1148,8 @@ pub fn add_item(state: State<DbState>, item: Item) -> Result<(), String> {
 pub fn update_item(state: State<DbState>, item: Item) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     conn.execute(
-        "UPDATE items SET serial_number = ?1, category = ?2, brand = ?3, status = ?4, storage_location = ?5, entry_date = ?6, exit_date = ?7 WHERE id = ?8",
-        params![item.serial_number, item.category, item.brand, item.status, item.storage_location, item.entry_date, item.exit_date, item.id],
+        "UPDATE items SET serial_number = ?1, category = ?2, brand = ?3, status = ?4, storage_location = ?5, entry_date = ?6, exit_date = ?7, partner = ?8 WHERE id = ?9",
+        params![item.serial_number, item.category, item.brand, item.status, item.storage_location, item.entry_date, item.exit_date, item.mitra, item.id],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -760,12 +1194,13 @@ pub struct Transaction {
     pub asal: Option<String>,
     pub tujuan: Option<String>,
     pub mitra: Option<String>,
+    pub keterangan: Option<String>,
 }
 
 #[tauri::command]
 pub fn get_transactions(state: State<DbState>) -> Result<Vec<Transaction>, String> {
     let conn = state.0.lock().unwrap();
-    let mut stmt = conn.prepare("SELECT id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination, partner FROM transactions ORDER BY transaction_date DESC, rowid DESC").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination, partner, note FROM transactions ORDER BY transaction_date DESC, rowid DESC").map_err(|e| e.to_string())?;
 
     let iter = stmt
         .query_map([], |row| {
@@ -780,6 +1215,7 @@ pub fn get_transactions(state: State<DbState>) -> Result<Vec<Transaction>, Strin
                 asal: row.get(7)?,
                 tujuan: row.get(8)?,
                 mitra: row.get(9)?,
+                keterangan: row.get(10)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -795,8 +1231,8 @@ pub fn get_transactions(state: State<DbState>) -> Result<Vec<Transaction>, Strin
 pub fn add_transaction(state: State<DbState>, transaction: Transaction) -> Result<(), String> {
     let conn = state.0.lock().unwrap();
     conn.execute(
-        "INSERT INTO transactions (id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination, partner) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-        params![transaction.id, transaction.tanggal, transaction.nomor, transaction.kategori, transaction.status, transaction.sn, transaction.merek, transaction.asal, transaction.tujuan, transaction.mitra],
+        "INSERT INTO transactions (id, transaction_date, transaction_number, category, status, serial_number, brand, origin, destination, partner, note) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![transaction.id, transaction.tanggal, transaction.nomor, transaction.kategori, transaction.status, transaction.sn, transaction.merek, transaction.asal, transaction.tujuan, transaction.mitra, transaction.keterangan],
     ).map_err(|e| e.to_string())?;
     Ok(())
 }

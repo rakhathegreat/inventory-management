@@ -4,47 +4,30 @@ import * as React from "react"
 
 import { NavMain } from "@/components/navigation/nav-main"
 import { NavProjects } from "@/components/navigation/nav-projects"
-import { TeamSwitcher } from "@/components/navigation/team-switcher"
 import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { AudioLinesIcon, TerminalIcon, HistoryIcon, LayoutGrid, Database, MapPinHouse, Shapes, CircleStar, PackagePlus, PackageMinus, Zap, Handshake } from "lucide-react"
+import {
+  CircleStar,
+  Database,
+  Handshake,
+  HistoryIcon,
+  LayoutGrid,
+  MapPinHouse,
+  PackageMinus,
+  PackagePlus,
+  Shapes,
+  Zap,
+} from "lucide-react"
+import { useAuth } from "@/lib/auth"
 
-// This is sample data.
 const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-  teams: [
-    {
-      name: "ICON Plus Tasikmalaya",
-      logo: (
-        <Zap className="text-yellow-300" fill="currentColor" />
-      ),
-      plan: "Enterprise",
-    },
-    {
-      name: "Acme Corp.",
-      logo: (
-        <AudioLinesIcon
-        />
-      ),
-      plan: "Startup",
-    },
-    {
-      name: "Evil Corp.",
-      logo: (
-        <TerminalIcon
-        />
-      ),
-      plan: "Free",
-    },
-  ],
   navMain: [
     {
       title: "Operasional",
@@ -140,14 +123,48 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { user } = useAuth()
+  const isAdmin = user?.role === "admin"
+  const mitraAllowedUrls = new Set([
+    "/barang-masuk",
+    "/barang-keluar",
+    "/riwayat",
+    "/data-barang",
+    "/lokasi-barang",
+  ])
+  const visibleNavMain = isAdmin
+    ? data.navMain
+    : data.navMain
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => mitraAllowedUrls.has(item.url)),
+        }))
+        .filter((group) => group.items.length > 0)
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              size="lg"
+              tooltip="Arxiva Inventory"
+              className="pointer-events-none"
+            >
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Zap className="size-4" fill="currentColor" />
+              </div>
+              <div className="grid flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-semibold">Arxiva</span>
+                <span className="truncate text-xs">Inventory Management</span>
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
         <NavProjects main={data.main} />
-        <NavMain items={data.navMain} />
+        <NavMain items={visibleNavMain} />
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

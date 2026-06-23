@@ -3,7 +3,7 @@
 import * as React from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { ArrowRight, BadgeCheck, Check, Info, AlertTriangle, PackagePlus, PackageMinus, Lightbulb, X } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 
 import {
     Label,
@@ -29,6 +29,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import type { InventoryStats } from "@/components/section-cards"
 
 const chartConfig = {
     visitors: {
@@ -47,33 +48,117 @@ type NotificationItem = {
     type: string
     date: string
     isRead: boolean
+    generated?: boolean
+    targetUrl?: string
 }
 
-export function SectionCharts() {
+export type SafetyStockAlert = {
+    category: string
+    available: number
+    safetyStock: number
+    status: "Menipis" | "Habis"
+}
+
+export function SectionCharts({
+    isMitra = false,
+    displayName,
+    stats,
+    safetyStockAlerts,
+}: {
+    isMitra?: boolean
+    displayName?: string
+    stats: InventoryStats
+    safetyStockAlerts: SafetyStockAlert[]
+}) {
+    const navigate = useNavigate()
     const [items, setItems] = React.useState<NotificationItem[]>([])
 
     const fetchNotifications = React.useCallback(async () => {
+        if (isMitra) return
+
         try {
             const data = await invoke<NotificationItem[]>("get_notifications")
             setItems(data)
         } catch (error) {
             console.error("Failed to fetch notifications:", error)
         }
-    }, [])
+    }, [isMitra])
 
     React.useEffect(() => {
+        if (isMitra) return
+
         fetchNotifications()
         const interval = setInterval(fetchNotifications, 10000)
         return () => clearInterval(interval)
-    }, [fetchNotifications])
+    }, [fetchNotifications, isMitra])
 
-    const unreadCount = items.filter((n) => !n.isRead).length
+    const mitraNotifications = React.useMemo<NotificationItem[]>(
+        () => [
+            {
+                id: "mitra-tersedia",
+                title: "Barang tersedia",
+                message: `${stats.tersedia} unit milik ${displayName || "mitra"} saat ini berstatus Masuk.`,
+                type: "success",
+                date: "",
+                isRead: true,
+                generated: true,
+            },
+            {
+                id: "mitra-keluar",
+                title: "Barang keluar",
+                message: `${stats.keluar} unit tercatat berstatus Keluar.`,
+                type: "info",
+                date: "",
+                isRead: true,
+                generated: true,
+            },
+            ...(stats.rusak > 0
+                ? [{
+                    id: "mitra-rusak",
+                    title: "Perhatian barang rusak",
+                    message: `${stats.rusak} unit tercatat berstatus Rusak.`,
+                    type: "warning",
+                    date: "",
+                    isRead: true,
+                    generated: true,
+                }]
+                : []),
+        ],
+        [displayName, stats]
+    )
+    const safetyStockNotifications = React.useMemo<NotificationItem[]>(
+        () =>
+            safetyStockAlerts.map((alert) => ({
+                id: `safety-stock-${alert.category}`,
+                title: `Safety stock ${alert.status.toLowerCase()}`,
+                message:
+                    alert.status === "Habis"
+                        ? `${alert.category} tidak memiliki stok tersedia. Batas minimum ${alert.safetyStock} unit.`
+                        : `${alert.category} tersisa ${alert.available} unit dari batas minimum ${alert.safetyStock} unit.`,
+                type: alert.status === "Habis" ? "error" : "warning",
+                date: "",
+                isRead: true,
+                generated: true,
+                targetUrl: "/data-barang",
+            })),
+        [safetyStockAlerts]
+    )
+    const displayedNotifications = isMitra
+        ? [...safetyStockNotifications, ...mitraNotifications]
+        : [...safetyStockNotifications, ...items]
+    const unreadCount = isMitra
+        ? 0
+        : displayedNotifications.filter((n) => !n.isRead).length
 
     // Storage capacity from DB
     const [totalCapacity, setTotalCapacity] = React.useState(0)
     const [usedCapacity, setUsedCapacity] = React.useState(0)
-    const capacityPercent = totalCapacity > 0 ? Math.round((usedCapacity / totalCapacity) * 100) : 0
-    const remaining = totalCapacity - usedCapacity
+    const displayedTotal = isMitra ? stats.totalItems : totalCapacity
+    const displayedUsed = isMitra ? stats.tersedia : usedCapacity
+    const displayedRemaining = isMitra ? stats.keluar : totalCapacity - usedCapacity
+    const capacityPercent = displayedTotal > 0
+        ? Math.round((displayedUsed / displayedTotal) * 100)
+        : 0
 
     const chartData = React.useMemo(() => [
         { browser: "safari", visitors: capacityPercent, fill: "var(--color-safari)" },
@@ -81,11 +166,19 @@ export function SectionCharts() {
 
     React.useEffect(() => {
         const fetchCapacity = async () => {
+            if (isMitra) return
+
             try {
                 const locations = await invoke<any[]>("get_locations")
                 let total = 0
                 let used = 0
                 for (const loc of locations) {
+                    if (
+                        (loc.owner || "KP").trim().toLowerCase() !== "kp"
+                    ) {
+                        continue
+                    }
+
                     if (loc.type === "Rak" && loc.levels) {
                         for (const lvl of loc.levels) {
                             total += lvl.capacity || 0
@@ -103,9 +196,11 @@ export function SectionCharts() {
             }
         }
         fetchCapacity()
-    }, [])
+    }, [isMitra])
 
     const markAsRead = async (id: string) => {
+        if (isMitra) return
+
         try {
             await invoke("mark_notification_read", { id })
             fetchNotifications()
@@ -116,6 +211,8 @@ export function SectionCharts() {
 
     const markAllAsRead = async (e: React.MouseEvent) => {
         e.preventDefault()
+        if (isMitra) return
+
         try {
             await invoke("mark_all_notifications_read")
             fetchNotifications()
@@ -126,6 +223,8 @@ export function SectionCharts() {
 
     const deleteNotification = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation()
+        if (isMitra) return
+
         try {
             await invoke("delete_notification", { id })
             fetchNotifications()
@@ -163,8 +262,12 @@ export function SectionCharts() {
             {/* Card 1 */}
             <Card className="flex flex-col">
                 <CardHeader className="items-center pb-0">
-                    <CardTitle>Kapasitas Penyimpanan</CardTitle>
-                    <CardDescription>January - June 2024</CardDescription>
+                    <CardTitle>
+                        {isMitra ? "Komposisi Barang Mitra" : "Kapasitas Penyimpanan"}
+                    </CardTitle>
+                    <CardDescription>
+                        {isMitra ? displayName : "Kapasitas gudang aktif"}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-1 pb-0">
                     <ChartContainer
@@ -211,7 +314,7 @@ export function SectionCharts() {
                                                         y={(viewBox.cy || 0) + 24}
                                                         className="fill-muted-foreground"
                                                     >
-                                                        Terisi
+                                                        {isMitra ? "Tersedia" : "Terisi"}
                                                     </tspan>
                                                 </text>
                                             )
@@ -225,16 +328,22 @@ export function SectionCharts() {
                 <CardFooter className="flex-col gap-2 text-sm bg-card mt-auto">
                     <div className="grid grid-cols-3 gap-2 w-full">
                         <div className="flex flex-col text-center">
-                            <p className="text-muted-foreground font-normal text-xs">Kapasitas</p>
-                            <p className="font-bold text-md">{totalCapacity}</p>
+                            <p className="text-muted-foreground font-normal text-xs">
+                                {isMitra ? "Total" : "Kapasitas"}
+                            </p>
+                            <p className="font-bold text-md">{displayedTotal}</p>
                         </div>
                         <div className="flex flex-col text-center">
-                            <p className="text-muted-foreground font-normal text-xs">Digunakan</p>
-                            <p className="font-bold text-md">{usedCapacity}</p>
+                            <p className="text-muted-foreground font-normal text-xs">
+                                {isMitra ? "Tersedia" : "Digunakan"}
+                            </p>
+                            <p className="font-bold text-md">{displayedUsed}</p>
                         </div>
                         <div className="flex flex-col text-center">
-                            <p className="text-muted-foreground font-normal text-xs">Tersisa</p>
-                            <p className="font-bold text-md">{remaining}</p>
+                            <p className="text-muted-foreground font-normal text-xs">
+                                {isMitra ? "Keluar" : "Tersisa"}
+                            </p>
+                            <p className="font-bold text-md">{displayedRemaining}</p>
                         </div>
                     </div>
                 </CardFooter>
@@ -244,8 +353,14 @@ export function SectionCharts() {
             <Card className="flex flex-col">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <div className="space-y-1">
-                        <CardTitle>Notifikasi</CardTitle>
-                        <CardDescription>Pembaruan sistem & stok</CardDescription>
+                        <CardTitle>{isMitra ? "Ringkasan Mitra" : "Notifikasi"}</CardTitle>
+                        <CardDescription>
+                            {safetyStockAlerts.length > 0
+                                ? `${safetyStockAlerts.length} kategori perlu perhatian`
+                                : isMitra
+                                    ? "Informasi inventori akun Anda"
+                                    : "Pembaruan sistem & stok"}
+                        </CardDescription>
                     </div>
                     {unreadCount > 0 && (
                         <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
@@ -256,17 +371,23 @@ export function SectionCharts() {
                 <CardContent className="flex flex-col flex-1 pb-0 px-0">
                     <ScrollArea className="h-[260px] w-full px-4">
                         <div className="flex flex-col gap-1 py-2 h-full">
-                            {items.length === 0 ? (
+                            {displayedNotifications.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center h-full pt-16 text-center gap-2">
                                     <BadgeCheck strokeWidth={1.5} className="text-muted-foreground/40 h-10 w-10 mx-auto" />
                                     <p className="text-muted-foreground/60 text-sm">Tidak ada notifikasi baru.</p>
                                 </div>
-                            ) : items.map((notification) => {
+                            ) : displayedNotifications.map((notification) => {
                                 const { icon: Icon, color, bg } = getIconProps(notification.type)
                                 return (
                                     <button
                                         key={notification.id}
-                                        onClick={() => markAsRead(notification.id)}
+                                        onClick={() => {
+                                            if (notification.targetUrl) {
+                                                navigate(notification.targetUrl)
+                                            } else if (!notification.generated) {
+                                                markAsRead(notification.id)
+                                            }
+                                        }}
                                         className={cn(
                                             "group flex items-start gap-3 rounded-lg p-3 text-left transition-all hover:bg-accent focus:bg-accent outline-none relative",
                                             !notification.isRead && "bg-muted/40"
@@ -293,9 +414,11 @@ export function SectionCharts() {
                                             <p className="line-clamp-2 text-xs text-muted-foreground leading-relaxed">
                                                 {notification.message}
                                             </p>
-                                            <p className="text-[10px] font-medium text-muted-foreground/60 mt-0.5">
-                                                {formatTime(notification.date)}
-                                            </p>
+                                            {notification.date && (
+                                                <p className="text-[10px] font-medium text-muted-foreground/60 mt-0.5">
+                                                    {formatTime(notification.date)}
+                                                </p>
+                                            )}
                                         </div>
                                         <div className="absolute right-3 top-3 flex flex-col items-end gap-2 h-full justify-between pb-4">
                                             {!notification.isRead ? (
@@ -303,13 +426,15 @@ export function SectionCharts() {
                                             ) : (
                                                 <div className="flex size-2 shrink-0 opacity-0" />
                                             )}
-                                            <div
-                                                onClick={(e) => deleteNotification(e, notification.id)}
-                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-muted-foreground/20 rounded-md text-muted-foreground hover:text-foreground cursor-pointer -mr-1"
-                                                title="Hapus notifikasi"
-                                            >
-                                                <X className="size-3.5" />
-                                            </div>
+                                            {!isMitra && !notification.generated && (
+                                                <div
+                                                    onClick={(e) => deleteNotification(e, notification.id)}
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-muted-foreground/20 rounded-md text-muted-foreground hover:text-foreground cursor-pointer -mr-1"
+                                                    title="Hapus notifikasi"
+                                                >
+                                                    <X className="size-3.5" />
+                                                </div>
+                                            )}
                                         </div>
                                     </button>
                                 )
@@ -318,12 +443,21 @@ export function SectionCharts() {
                     </ScrollArea>
                 </CardContent>
                 <CardFooter className="flex-col gap-2 text-sm border-t-0 bg-card items-end mt-auto pt-4">
-                    <div className="flex items-center gap-2 leading-none font-medium w-full justify-between">
-                        <button onClick={markAllAsRead} className="text-muted-foreground hover:text-foreground transition-colors px-2">
-                            Tandai semua dibaca
-                        </button>
-                        <a className="flex items-center gap-2 px-2" href="#">Lihat Semua <ArrowRight className="h-4 w-4" /></a>
-                    </div>
+                    {isMitra ? (
+                        <Button asChild variant="ghost" className="w-full justify-between">
+                            <Link to="/riwayat">
+                                Lihat riwayat lengkap
+                                <ArrowRight className="h-4 w-4" />
+                            </Link>
+                        </Button>
+                    ) : (
+                        <div className="flex items-center gap-2 leading-none font-medium w-full justify-between">
+                            <button onClick={markAllAsRead} className="text-muted-foreground hover:text-foreground transition-colors px-2">
+                                Tandai semua dibaca
+                            </button>
+                            <a className="flex items-center gap-2 px-2" href="#">Lihat Semua <ArrowRight className="h-4 w-4" /></a>
+                        </div>
+                    )}
                 </CardFooter>
             </Card>
 

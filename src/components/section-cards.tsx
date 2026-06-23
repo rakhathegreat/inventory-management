@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react"
-import { invoke } from "@tauri-apps/api/core"
 import { Boxes, ArrowsUpFromLine, Archive, ArchiveX } from "lucide-react"
 
 import {
@@ -9,26 +7,21 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 
-export function SectionCards() {
-    const [totalItems, setTotalItems] = useState(0)
-    const [tersedia, setTersedia] = useState(0)
-    const [keluar, setKeluar] = useState(0)
-    const [rusak, setRusak] = useState(0)
+export type InventoryStats = {
+    totalItems: number
+    tersedia: number
+    keluar: number
+    rusak: number
+}
 
-    useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                const items = await invoke<any[]>("get_items")
-                setTotalItems(items.length)
-                setTersedia(items.filter((i) => i.status === "Masuk").length)
-                setKeluar(items.filter((i) => i.status === "Keluar").length)
-                setRusak(items.filter((i) => i.status === "Rusak").length)
-            } catch (error) {
-                console.error("Gagal mengambil data items:", error)
-            }
-        }
-        fetchStats()
-    }, [])
+export function SectionCards({
+    stats,
+    totalLabel = "Total Barang",
+}: {
+    stats: InventoryStats
+    totalLabel?: string
+}) {
+    const { totalItems, tersedia, keluar, rusak } = stats
 
     return (
         <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card">
@@ -39,7 +32,7 @@ export function SectionCards() {
                     </div>
                     <div className="flex flex-col w-full ">
                         <CardHeader className="flex flex-col">
-                            <CardDescription>Total</CardDescription>
+                            <CardDescription>{totalLabel}</CardDescription>
                             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
                                 {totalItems} <span className="text-sm font-normal text-muted-foreground">Unit</span>
                             </CardTitle>

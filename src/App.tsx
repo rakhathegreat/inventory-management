@@ -1,5 +1,10 @@
 import "./App.css";
-import { HashRouter as Router, Routes, Route } from "react-router-dom";
+import {
+  HashRouter as Router,
+  Navigate,
+  Route,
+  Routes,
+} from "react-router-dom";
 import { ThemeProvider } from "./components/themeProvider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Layout from "./components/layout";
@@ -12,8 +17,30 @@ import LokasiBarangPage from "./app/lokasi-barang/page";
 import KategoriBarangPage from "./app/kategori-barang/page";
 import MerekBarangPage from "./app/merek-barang/page";
 import MitraPage from "./app/mitra/page";
-import { useEffect } from "react";
+import LoginPage from "./app/login/page";
+import { useEffect, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider, useAuth } from "@/lib/auth";
+
+function ProtectedRoute({
+  children,
+  adminOnly = false,
+}: {
+  children: ReactNode;
+  adminOnly?: boolean;
+}) {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (adminOnly && user.role !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
 
 function App() {
   useEffect(() => {
@@ -32,21 +59,68 @@ function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
       <TooltipProvider>
-        <Router>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<DashboardPage />} />
-              <Route path="barang-masuk" element={<BarangMasukPage />} />
-              <Route path="barang-keluar" element={<BarangKeluarPage />} />
-              <Route path="riwayat" element={<DataTransaksiPage />} />
-              <Route path="data-barang" element={<DataBarangPage />} />
-              <Route path="lokasi-barang" element={<LokasiBarangPage />} />
-              <Route path="kategori-barang" element={<KategoriBarangPage />} />
-              <Route path="merek-barang" element={<MerekBarangPage />} />
-              <Route path="mitra" element={<MitraPage />} />
-            </Route>
-          </Routes>
-        </Router>
+        <AuthProvider>
+          <Router>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Layout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<DashboardPage />} />
+                <Route
+                  path="barang-masuk"
+                  element={<BarangMasukPage />}
+                />
+                <Route
+                  path="barang-keluar"
+                  element={<BarangKeluarPage />}
+                />
+                <Route
+                  path="riwayat"
+                  element={<DataTransaksiPage />}
+                />
+                <Route
+                  path="data-barang"
+                  element={<DataBarangPage />}
+                />
+                <Route
+                  path="lokasi-barang"
+                  element={<LokasiBarangPage />}
+                />
+                <Route
+                  path="kategori-barang"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <KategoriBarangPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="merek-barang"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <MerekBarangPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="mitra"
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <MitraPage />
+                    </ProtectedRoute>
+                  }
+                />
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Router>
+        </AuthProvider>
       </TooltipProvider>
       <Toaster position="top-right" />
     </ThemeProvider>

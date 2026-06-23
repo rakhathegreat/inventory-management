@@ -25,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { useAuth } from "@/lib/auth"
 
 const KATEGORI_OPTIONS = ["Masuk", "Keluar", "Rusak"]
 
@@ -39,6 +40,7 @@ type Transaction = {
   asal: string | null;
   tujuan: string | null;
   mitra?: string | null;
+  keterangan?: string | null;
 };
 
 type DeleteDialogState =
@@ -53,6 +55,7 @@ type DeleteDialogState =
   }
 
 export default function DataTransaksiPage() {
+  const { user } = useAuth()
   const [searchTerm, setSearchTerm] = useState("")
   const [filterKategori, setFilterKategori] = useState("all")
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -62,7 +65,15 @@ export default function DataTransaksiPage() {
   const fetchTransactions = async () => {
     try {
       const data = await invoke<Transaction[]>("get_transactions");
-      setTransactions(data);
+      setTransactions(
+        user?.role === "mitra"
+          ? data.filter(
+            (transaction) =>
+              transaction.mitra?.trim().toLowerCase() ===
+              user.displayName.trim().toLowerCase()
+          )
+          : data
+      );
     } catch (error) {
       console.error("Gagal mengambil data transaksi:", error);
       toast.error("Gagal memuat data riwayat transaksi.");
@@ -71,7 +82,7 @@ export default function DataTransaksiPage() {
 
   useEffect(() => {
     fetchTransactions();
-  }, [])
+  }, [user])
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return
@@ -120,12 +131,14 @@ export default function DataTransaksiPage() {
     asal: t.asal || "-",
     tujuan: t.tujuan || "-",
     mitra: t.mitra || "-",
+    keterangan: t.keterangan || "-",
   }));
 
   const filteredData = flattenedData.filter((item) => {
     const matchesSearch = item.nomor.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.sn.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.mitra.toLowerCase().includes(searchTerm.toLowerCase());
+      item.mitra.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.keterangan.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesKategori = filterKategori === "all" || item.kategori === filterKategori;
     return matchesSearch && matchesKategori;
   });
@@ -160,6 +173,7 @@ export default function DataTransaksiPage() {
         "Lokasi Asal",
         "Lokasi Tujuan",
         "Mitra",
+        "PA / Keterangan",
       ]
 
       const rows = filteredData.map((item, index) => [
@@ -173,6 +187,7 @@ export default function DataTransaksiPage() {
         item.asal,
         item.tujuan,
         item.mitra,
+        item.keterangan,
       ])
 
       const csvContent = [
@@ -262,7 +277,7 @@ export default function DataTransaksiPage() {
           </div>
 
           <div className="flex items-center gap-2 self-start md:self-auto">
-            {selectedIds.length > 0 && (
+            {user?.role === "admin" && selectedIds.length > 0 && (
               <Button variant="outline" onClick={handleBulkDelete}>
                 <Trash2 className="size-4 mr-2" />
                 Hapus ({selectedIds.length})
@@ -291,8 +306,12 @@ export default function DataTransaksiPage() {
         data={filteredData}
         isFiltered={hasActiveFilter}
         resetPaginationKey={`${searchTerm}|${filterKategori}`}
-        onSelectionChange={setSelectedIds}
-        onDeleteRow={handleDeleteRow}
+        showSelection={user?.role === "admin"}
+        showActions={user?.role === "admin"}
+        onSelectionChange={
+          user?.role === "admin" ? setSelectedIds : undefined
+        }
+        onDeleteRow={user?.role === "admin" ? handleDeleteRow : undefined}
       />
 
       <AlertDialog open={deleteDialog !== null} onOpenChange={(open) => !open && setDeleteDialog(null)}>

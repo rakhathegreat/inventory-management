@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import {
-  Plus, Edit, Trash2, Search, Shapes, MoreVertical
+  Plus, Edit, Trash2, Search, Shapes, MoreVertical, ShieldAlert
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -29,6 +29,7 @@ type Kategori = {
   name: string;
   description: string;
   totalItems: number;
+  safetyStock: number;
 };
 
 export default function KategoriBarangPage() {
@@ -45,7 +46,9 @@ export default function KategoriBarangPage() {
   // Form state
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [safetyStock, setSafetyStock] = useState(5);
   const [nameError, setNameError] = useState("");
+  const [safetyStockError, setSafetyStockError] = useState("");
 
   const loadCategories = async () => {
     try {
@@ -73,14 +76,17 @@ export default function KategoriBarangPage() {
       if (cat) {
         setName(cat.name);
         setDescription(cat.description);
+        setSafetyStock(cat.safetyStock);
         setEditId(id);
       }
     } else {
       setName("");
       setDescription("");
+      setSafetyStock(5);
       setEditId(null);
     }
     setNameError("");
+    setSafetyStockError("");
     setIsSheetOpen(true);
   };
 
@@ -89,6 +95,11 @@ export default function KategoriBarangPage() {
     if (!normalizedName) {
       setNameError("Nama kategori wajib diisi.");
       toast.error("Nama kategori wajib diisi.");
+      return;
+    }
+    if (!Number.isInteger(safetyStock) || safetyStock < 0) {
+      setSafetyStockError("Safety stock harus berupa angka 0 atau lebih.");
+      toast.error("Nilai safety stock tidak valid.");
       return;
     }
 
@@ -111,7 +122,8 @@ export default function KategoriBarangPage() {
             id: editId,
             name: normalizedName,
             description: description.trim() || "-",
-            totalItems: cat?.totalItems || 0
+            totalItems: cat?.totalItems || 0,
+            safetyStock,
           }
         });
       } else {
@@ -120,7 +132,8 @@ export default function KategoriBarangPage() {
             id: `kat-${Date.now()}`,
             name: normalizedName,
             description: description.trim() || "-",
-            totalItems: 0
+            totalItems: 0,
+            safetyStock,
           }
         });
       }
@@ -203,8 +216,13 @@ export default function KategoriBarangPage() {
               </div>
 
               <div className="mt-auto pt-4 border-t border-neutral-800/60 flex justify-between items-center">
-                <span className="text-xs font-medium text-neutral-500">Total Barang</span>
-                <span className="text-sm font-medium text-neutral-300">{cat.totalItems} Unit</span>
+                <div className="flex items-center gap-2 text-xs font-medium text-neutral-500">
+                  <ShieldAlert className="size-3.5 text-amber-400" />
+                  Safety Stock
+                </div>
+                <span className="text-sm font-medium text-neutral-300">
+                  {cat.safetyStock} Unit
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -249,6 +267,28 @@ export default function KategoriBarangPage() {
               <div className="space-y-2">
                 <Label>Deskripsi</Label>
                 <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Masukkan deskripsi..." className="bg-neutral-900 border-neutral-800" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="safety-stock">Safety Stock Minimum</Label>
+                <Input
+                  id="safety-stock"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={safetyStock}
+                  onChange={(event) => {
+                    setSafetyStock(Number(event.target.value))
+                    setSafetyStockError("")
+                  }}
+                  className={`bg-neutral-900 ${safetyStockError ? "border-destructive" : "border-neutral-800"}`}
+                />
+                <p className="text-xs text-neutral-500">
+                  Indikator akan menandai stok menipis ketika jumlah barang tersedia
+                  sama atau di bawah batas ini.
+                </p>
+                {safetyStockError && (
+                  <p className="text-xs text-destructive">{safetyStockError}</p>
+                )}
               </div>
             </div>
           </div>

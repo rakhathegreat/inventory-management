@@ -11,6 +11,8 @@ import {
   Edit,
   Download,
   ScanLine,
+  ShieldCheck,
+  TriangleAlert,
 } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
@@ -65,6 +67,7 @@ import {
 import { toast } from "sonner"
 import { Link } from "react-router-dom"
 import { saveExportFile } from "@/lib/export-file"
+import { useAuth } from "@/lib/auth"
 
 type StatusUnit = "Masuk" | "Keluar" | "Rusak"
 
@@ -77,6 +80,7 @@ interface BarangUnit {
   lokasiPenyimpanan: string;
   tanggalMasuk: string;
   tanggalKeluar?: string;
+  mitra?: string | null;
 }
 
 interface RiwayatUnit {
@@ -100,6 +104,17 @@ interface Transaction {
   asal: string | null;
   tujuan: string | null;
   mitra?: string | null;
+  keterangan?: string | null;
+}
+
+type CategoryDefinition = {
+  name: string
+  safetyStock: number
+}
+
+type StorageLocationOption = {
+  name: string
+  owner: string
 }
 
 type DeleteDialogState =
@@ -114,6 +129,7 @@ type DeleteDialogState =
   }
 
 const STATUS_OPTIONS: StatusUnit[] = ["Masuk", "Keluar", "Rusak"]
+const ADMIN_LOCATION = "KP"
 const getLokasiPenyimpanan = (
   status: StatusUnit,
   lokasiPenyimpanan: string
@@ -150,18 +166,29 @@ function EmptyBarangTableState({
 }
 
 export default function DataBarangPage() {
+  const { user } = useAuth()
   const isMobile = useIsMobile()
   const [barangList, setBarangList] = useState<BarangUnit[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [dbCategories, setDbCategories] = useState<string[]>([])
-  const [dbLocations, setDbLocations] = useState<string[]>([])
+  const [categoryDefinitions, setCategoryDefinitions] = useState<CategoryDefinition[]>([])
+  const [dbLocations, setDbLocations] = useState<StorageLocationOption[]>([])
 
   const loadData = async () => {
     try {
       const data = await invoke<BarangUnit[]>("get_items")
-      const normalizedData = data.map((item) => ({
+      const visibleData =
+        user?.role === "mitra"
+          ? data.filter(
+            (item) =>
+              item.mitra?.trim().toLowerCase() ===
+              user.displayName.trim().toLowerCase()
+          )
+          : data
+      const normalizedData = visibleData.map((item) => ({
         ...item,
+        mitra: item.mitra || ADMIN_LOCATION,
         lokasiPenyimpanan: getLokasiPenyimpanan(
           item.status,
           item.lokasiPenyimpanan || ""
@@ -169,7 +196,7 @@ export default function DataBarangPage() {
       }))
       setBarangList(normalizedData)
 
-      const legacyExitedItems = data.filter(
+      const legacyExitedItems = visibleData.filter(
         (item) =>
           item.status === "Keluar" &&
           item.lokasiPenyimpanan?.trim() !== "Keluar"
@@ -193,18 +220,41 @@ export default function DataBarangPage() {
       }
 
       const transactionData = await invoke<Transaction[]>("get_transactions")
-      setTransactions(transactionData)
+      setTransactions(
+        user?.role === "mitra"
+          ? transactionData.filter(
+            (transaction) =>
+              transaction.mitra?.trim().toLowerCase() ===
+              user.displayName.trim().toLowerCase()
+          )
+          : transactionData
+      )
 
       const categories = await invoke<any[]>("get_categories")
       setDbCategories(categories.map(c => c.name))
+      setCategoryDefinitions(
+        categories.map((category) => ({
+          name: category.name,
+          safetyStock: Math.max(0, Number(category.safetyStock ?? 5)),
+        }))
+      )
 
       const locationsData = await invoke<any[]>("get_locations")
-      const locs: string[] = []
+      const locs: StorageLocationOption[] = []
       locationsData.forEach(loc => {
+        const owner = loc.owner || ADMIN_LOCATION
         if (loc.type === "Rak" && loc.levels) {
-          loc.levels.forEach((lvl: any) => locs.push(`${loc.name} - ${lvl.name}`))
+          loc.levels.forEach((lvl: any) =>
+            locs.push({
+              name: `${loc.name} - ${lvl.name}`,
+              owner,
+            })
+          )
         } else {
-          locs.push(loc.name)
+          locs.push({
+            name: loc.name,
+            owner,
+          })
         }
       })
       setDbLocations(locs)
@@ -216,7 +266,7 @@ export default function DataBarangPage() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [user])
   const [filterStatus, setFilterStatus] = useState("all")
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [formMode, setFormMode] = useState<"add" | "edit">("add")
@@ -237,6 +287,18 @@ export default function DataBarangPage() {
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+
+  const formLocationOwner =
+    user?.role === "mitra"
+      ? user.displayName
+      : formMode === "edit"
+        ? selectedBarang?.mitra || ADMIN_LOCATION
+        : ADMIN_LOCATION
+  const availableFormLocations = dbLocations.filter(
+    (location) =>
+      location.owner.trim().toLowerCase() ===
+      formLocationOwner.trim().toLowerCase()
+  )
 
   const resetForm = () => {
     setFormData({
@@ -338,6 +400,11 @@ export default function DataBarangPage() {
       merek: barang.merek,
       asal: lokasiAsal || barang.lokasiPenyimpanan,
       tujuan: barang.lokasiPenyimpanan,
+      mitra:
+        user?.role === "mitra"
+          ? user.displayName
+          : barang.mitra,
+      keterangan: "Status barang diubah menjadi Rusak",
     }
   }
 
@@ -375,6 +442,10 @@ export default function DataBarangPage() {
         lokasiPenyimpanan,
         tanggalMasuk: formData.tanggalMasuk,
         tanggalKeluar: formData.tanggalKeluar || undefined,
+        mitra:
+          user?.role === "mitra"
+            ? user.displayName
+            : ADMIN_LOCATION,
       }
       try {
         await invoke("add_item", { item: newBarang })
@@ -418,6 +489,10 @@ export default function DataBarangPage() {
         lokasiPenyimpanan,
         tanggalMasuk: formData.tanggalMasuk,
         tanggalKeluar: formData.tanggalKeluar || undefined,
+        mitra:
+          user?.role === "mitra"
+            ? user.displayName
+            : originalBarang.mitra || ADMIN_LOCATION,
       }
       const changedToRusak =
         originalBarang.status !== "Rusak" && updatedBarang.status === "Rusak"
@@ -474,11 +549,71 @@ export default function DataBarangPage() {
         b.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.kategori.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.merek.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.lokasiPenyimpanan.toLowerCase().includes(searchTerm.toLowerCase())
+        b.lokasiPenyimpanan.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        b.mitra?.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesStatus = filterStatus === "all" || b.status === filterStatus
       return matchesSearch && matchesStatus
     })
   }, [barangList, searchTerm, filterStatus])
+
+  const availableStockByCategory = useMemo(() => {
+    const stock = new Map<string, number>()
+
+    barangList.forEach((item) => {
+      if (item.status.trim().toLowerCase() !== "masuk") return
+
+      const key = item.kategori.trim().toLowerCase()
+      stock.set(key, (stock.get(key) || 0) + 1)
+    })
+
+    return stock
+  }, [barangList])
+
+  const getSafetyStockInfo = (categoryName: string) => {
+    const normalizedCategory = categoryName.trim().toLowerCase()
+    const category = categoryDefinitions.find(
+      (item) => item.name.trim().toLowerCase() === normalizedCategory
+    )
+    const safetyStock = category?.safetyStock ?? 5
+    const available = availableStockByCategory.get(normalizedCategory) || 0
+
+    if (available === 0) {
+      return {
+        label: "Habis",
+        available,
+        safetyStock,
+        className: "border-rose-500/30 bg-rose-500/10 text-rose-500",
+      }
+    }
+
+    if (available <= safetyStock) {
+      return {
+        label: "Menipis",
+        available,
+        safetyStock,
+        className: "border-amber-500/30 bg-amber-500/10 text-amber-500",
+      }
+    }
+
+    return {
+      label: "Aman",
+      available,
+      safetyStock,
+      className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-500",
+    }
+  }
+
+  const safetyStockSummary = useMemo(
+    () =>
+      categoryDefinitions.map((category) => ({
+        category: category.name,
+        ...getSafetyStockInfo(category.name),
+      })),
+    [availableStockByCategory, categoryDefinitions]
+  )
+  const lowStockCategories = safetyStockSummary.filter(
+    (item) => item.label !== "Aman"
+  )
   const hasActiveFilter = searchTerm.trim().length > 0 || filterStatus !== "all"
   const totalPages = Math.max(1, Math.ceil(filteredBarang.length / pageSize))
   const paginatedBarang = useMemo(() => {
@@ -567,20 +702,32 @@ export default function DataBarangPage() {
         "Kategori",
         "Status",
         "Lokasi Penyimpanan",
+        "Tempat / Pemilik",
+        "Stok Tersedia Kategori",
+        "Safety Stock Minimum",
+        "Indikator Safety Stock",
         "Tanggal Masuk",
         "Tanggal Keluar",
       ]
 
-      const rows = filteredBarang.map((item, index) => [
-        index + 1,
-        item.serialNumber,
-        item.merek,
-        item.kategori,
-        item.status,
-        item.lokasiPenyimpanan,
-        item.tanggalMasuk,
-        item.tanggalKeluar || "",
-      ])
+      const rows = filteredBarang.map((item, index) => {
+        const safetyStock = getSafetyStockInfo(item.kategori)
+
+        return [
+          index + 1,
+          item.serialNumber,
+          item.merek,
+          item.kategori,
+          item.status,
+          item.lokasiPenyimpanan,
+          item.mitra || ADMIN_LOCATION,
+          safetyStock.available,
+          safetyStock.safetyStock,
+          safetyStock.label,
+          item.tanggalMasuk,
+          item.tanggalKeluar || "",
+        ]
+      })
 
       const csvContent = [
         "sep=;",
@@ -625,6 +772,7 @@ export default function DataBarangPage() {
         dariStatus: transaction.asal || "-",
         keStatus: transaction.tujuan || "-",
         lokasi: transaction.tujuan || transaction.asal || detailBarang.lokasiPenyimpanan,
+        catatan: transaction.keterangan || undefined,
       }))
   }, [detailBarang, transactions])
 
@@ -637,7 +785,7 @@ export default function DataBarangPage() {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute top-2 left-3 size-4 text-muted-foreground" />
               <Input
-                placeholder="Cari serial number, merek, lokasi..."
+                placeholder="Cari SN, merek, lokasi, atau pemilik..."
                 className="pl-9"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -674,7 +822,7 @@ export default function DataBarangPage() {
           </div>
 
           <div className="flex items-center gap-2 self-start md:self-auto">
-            {selectedIds.length > 0 && (
+            {user?.role === "admin" && selectedIds.length > 0 && (
               <Button variant="outline" onClick={handleBulkDelete}>
                 <Trash2 className="size-4 mr-2" />
                 Hapus ({selectedIds.length})
@@ -688,15 +836,73 @@ export default function DataBarangPage() {
               <Download className="size-4" />
               <span>Export Excel</span>
             </Button>
-            <Button
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-md transition-all active:scale-[0.98]"
-            >
-              <Link to="/barang-masuk" className="flex flex-row items-center">
-                <Plus className="size-4" />
-                <span>Tambah Unit Baru</span>
-              </Link>
-            </Button>
+            {user?.role === "admin" && (
+              <Button
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-md transition-all active:scale-[0.98]"
+              >
+                <Link to="/barang-masuk" className="flex flex-row items-center">
+                  <Plus className="size-4" />
+                  <span>Tambah Unit Baru</span>
+                </Link>
+              </Button>
+            )}
           </div>
+        </div>
+      </Card>
+
+      <Card
+        className={`shrink-0 border ${
+          lowStockCategories.length > 0
+            ? "border-amber-500/30 bg-amber-500/5"
+            : "border-emerald-500/30 bg-emerald-500/5"
+        }`}
+      >
+        <div className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div
+              className={`rounded-lg p-2 ${
+                lowStockCategories.length > 0
+                  ? "bg-amber-500/10 text-amber-500"
+                  : "bg-emerald-500/10 text-emerald-500"
+              }`}
+            >
+              {lowStockCategories.length > 0 ? (
+                <TriangleAlert className="size-5" />
+              ) : (
+                <ShieldCheck className="size-5" />
+              )}
+            </div>
+            <div>
+              <p className="font-semibold">
+                {lowStockCategories.length > 0
+                  ? `${lowStockCategories.length} kategori perlu restock`
+                  : "Safety stock seluruh kategori aman"}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Perhitungan berdasarkan barang berstatus Masuk pada data yang dapat
+                diakses akun ini.
+              </p>
+            </div>
+          </div>
+
+          {lowStockCategories.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {lowStockCategories.slice(0, 5).map((item) => (
+                <Badge
+                  key={item.category}
+                  variant="outline"
+                  className={item.className}
+                >
+                  {item.category}: {item.available}/{item.safetyStock}
+                </Badge>
+              ))}
+              {lowStockCategories.length > 5 && (
+                <Badge variant="outline">
+                  +{lowStockCategories.length - 5} kategori
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 
@@ -706,30 +912,39 @@ export default function DataBarangPage() {
           <TableHeader className="sticky top-0 z-10 bg-muted">
             <TableRow>
               <TableHead className="w-[50px] text-center">No.</TableHead>
-              <TableHead className="w-[50px] text-center">
-                <Checkbox
-                  checked={
-                    paginatedBarang.length > 0 &&
-                    paginatedBarang.every(item => selectedIds.includes(item.id))
-                  }
-                  onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
-                  aria-label="Pilih semua"
-                />
-              </TableHead>
+              {user?.role === "admin" && (
+                <TableHead className="w-[50px] text-center">
+                  <Checkbox
+                    checked={
+                      paginatedBarang.length > 0 &&
+                      paginatedBarang.every(item => selectedIds.includes(item.id))
+                    }
+                    onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
+                    aria-label="Pilih semua"
+                  />
+                </TableHead>
+              )}
               <TableHead className="w-[170px]">Serial Number (SN)</TableHead>
               <TableHead className="w-[140px]">Merek</TableHead>
               <TableHead className="w-[140px]">Kategori</TableHead>
               <TableHead className="text-center w-[120px]">Status</TableHead>
+              <TableHead className="w-[160px]">Safety Stock</TableHead>
               <TableHead>Lokasi Penyimpanan</TableHead>
+              {user?.role === "admin" && (
+                <TableHead className="w-[150px]">Tempat / Pemilik</TableHead>
+              )}
               <TableHead className="hidden md:table-cell w-[130px]">Tanggal Masuk</TableHead>
               <TableHead className="hidden lg:table-cell w-[130px]">Tanggal Keluar</TableHead>
-              <TableHead className="w-[60px] text-right"></TableHead>
+              {user?.role === "admin" && (
+                <TableHead className="w-[60px] text-right"></TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedBarang.length > 0 ? (
               paginatedBarang.map((item, index) => {
                 const badge = getStatusBadgeProps(item.status)
+                const safetyStock = getSafetyStockInfo(item.kategori)
                 return (
                   <TableRow
                     key={item.id}
@@ -740,13 +955,15 @@ export default function DataBarangPage() {
                     <TableCell className="text-center font-medium">
                       {(currentPage - 1) * pageSize + index + 1}
                     </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()} className="text-center">
-                      <Checkbox
-                        checked={selectedIds.includes(item.id)}
-                        onCheckedChange={(checked) => handleSelectRow(checked as boolean, item.id)}
-                        aria-label={`Pilih ${item.serialNumber}`}
-                      />
-                    </TableCell>
+                    {user?.role === "admin" && (
+                      <TableCell onClick={(e) => e.stopPropagation()} className="text-center">
+                        <Checkbox
+                          checked={selectedIds.includes(item.id)}
+                          onCheckedChange={(checked) => handleSelectRow(checked as boolean, item.id)}
+                          aria-label={`Pilih ${item.serialNumber}`}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell>
                       {item.serialNumber}
                     </TableCell>
@@ -763,14 +980,35 @@ export default function DataBarangPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={safetyStock.className}
+                        title={`Stok tersedia ${safetyStock.available} unit, batas minimum ${safetyStock.safetyStock} unit`}
+                      >
+                        {safetyStock.label} · {safetyStock.available}/
+                        {safetyStock.safetyStock}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
                       {item.lokasiPenyimpanan}
                     </TableCell>
+                    {user?.role === "admin" && (
+                      <TableCell>
+                        <Badge
+                          variant={item.mitra === ADMIN_LOCATION ? "default" : "outline"}
+                          className="font-normal"
+                        >
+                          {item.mitra || ADMIN_LOCATION}
+                        </Badge>
+                      </TableCell>
+                    )}
                     <TableCell className="hidden md:table-cell">
                       {formatTanggal(item.tanggalMasuk)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       {formatTanggal(item.tanggalKeluar || "")}
                     </TableCell>
+                    {user?.role === "admin" && (
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -795,12 +1033,13 @@ export default function DataBarangPage() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
+                    )}
                   </TableRow>
                 )
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={10} className="p-0">
+                <TableCell colSpan={user?.role === "admin" ? 12 : 9} className="p-0">
                   <EmptyBarangTableState isFiltered={hasActiveFilter} />
                 </TableCell>
               </TableRow>
@@ -1017,8 +1256,10 @@ export default function DataBarangPage() {
                       {formData.status === "Keluar" && (
                         <SelectItem value="Keluar">Keluar</SelectItem>
                       )}
-                      {dbLocations.map((loc) => (
-                        <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                      {availableFormLocations.map((loc) => (
+                        <SelectItem key={`${loc.owner}-${loc.name}`} value={loc.name}>
+                          {loc.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1087,9 +1328,37 @@ export default function DataBarangPage() {
                   </div>
 
                   <div className="flex flex-col gap-3">
+                    <Label>Indikator Safety Stock</Label>
+                    <div className="flex h-9 items-center">
+                      {(() => {
+                        const safetyStock = getSafetyStockInfo(detailBarang.kategori)
+                        return (
+                          <Badge
+                            variant="outline"
+                            className={safetyStock.className}
+                          >
+                            {safetyStock.label} · tersedia {safetyStock.available},
+                            minimum {safetyStock.safetyStock}
+                          </Badge>
+                        )
+                      })()}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
                     <Label>Lokasi Aktif</Label>
                     <Input readOnly defaultValue={detailBarang.lokasiPenyimpanan} />
                   </div>
+
+                  {user?.role === "admin" && (
+                    <div className="flex flex-col gap-3">
+                      <Label>Tempat / Pemilik</Label>
+                      <Input
+                        readOnly
+                        defaultValue={detailBarang.mitra || ADMIN_LOCATION}
+                      />
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex flex-col gap-3">

@@ -87,6 +87,7 @@ export const schema = z.object({
   asal: z.string().optional(),
   tujuan: z.string().optional(),
   mitra: z.string().optional(),
+  keterangan: z.string().optional(),
 })
 
 const columns: ColumnDef<z.infer<typeof schema>>[] = [
@@ -208,6 +209,15 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
     ),
   },
   {
+    accessorKey: "keterangan",
+    header: "PA / Keterangan",
+    cell: ({ row }) => (
+      <div className="max-w-60 truncate text-foreground" title={row.original.keterangan}>
+        {row.original.keterangan || "-"}
+      </div>
+    ),
+  },
+  {
     accessorKey: "status",
     header: "Status",
     cell: ({ row }) => {
@@ -316,6 +326,7 @@ function EmptyTableState({
 export function DataTable({
   data: initialData,
   showSelection = true,
+  showActions = true,
   showPagination = true,
   isFiltered = false,
   resetPaginationKey,
@@ -326,6 +337,7 @@ export function DataTable({
   showTitle?: boolean
   showViewButton?: boolean
   showSelection?: boolean
+  showActions?: boolean
   showPagination?: boolean
   isFiltered?: boolean
   resetPaginationKey?: string
@@ -347,6 +359,7 @@ export function DataTable({
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({
       select: showSelection,
+      actions: showActions,
     })
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
