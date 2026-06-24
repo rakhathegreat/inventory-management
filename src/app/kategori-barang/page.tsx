@@ -4,7 +4,22 @@ import { useState, useMemo, useEffect } from "react";
 import {
   Plus, Edit, Trash2, Search, Shapes, MoreVertical, ShieldAlert
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+
+const getBaseUrl = () => {
+  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+};
+
+const getHeaders = () => {
+  const token = localStorage.getItem("arxiva-auth-token");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `${token}`;
+  }
+  return headers;
+};
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,10 +67,26 @@ export default function KategoriBarangPage() {
 
   const loadCategories = async () => {
     try {
-      const data = await invoke<Kategori[]>("get_categories");
-      setCategories(data);
+      const response = await fetch(`${getBaseUrl()}/categories`, {
+        method: "GET",
+        headers: getHeaders(),
+      });
+      if (!response.ok) {
+        throw new Error("Gagal mengambil data kategori");
+      }
+      const data = await response.json();
+      const categoriesList = data.data || data.categories || data;
+      setCategories(Array.isArray(categoriesList) ? categoriesList.map((c: any) => ({
+        ...c,
+        id: String(c.id),
+        name: c.nama || c.name || "",
+        description: c.deskripsi || c.description || "",
+        totalItems: c.totalItems !== undefined ? c.totalItems : (c.total_items || 0),
+        safetyStock: c.safetyStock !== undefined ? c.safetyStock : (c.safety_stock || 5),
+      })) : []);
     } catch (error) {
       console.error("Failed to fetch categories:", error);
+      toast.error("Gagal mengambil data kategori dari server.");
     }
   };
 
@@ -117,32 +148,48 @@ export default function KategoriBarangPage() {
     try {
       if (editId) {
         const cat = categories.find(c => c.id === editId);
-        await invoke("update_category", {
-          category: {
-            id: editId,
+        const response = await fetch(`${getBaseUrl()}/categories/${editId}`, {
+          method: "PUT",
+          headers: getHeaders(),
+          body: JSON.stringify({
+            nama: normalizedName,
             name: normalizedName,
+            deskripsi: description.trim() || "-",
             description: description.trim() || "-",
             totalItems: cat?.totalItems || 0,
             safetyStock,
-          }
+          }),
         });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.message || errData.error || "Gagal memperbarui kategori");
+        }
       } else {
-        await invoke("add_category", {
-          category: {
-            id: `kat-${Date.now()}`,
+        const response = await fetch(`${getBaseUrl()}/categories`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({
+            nama: normalizedName,
             name: normalizedName,
+            deskripsi: description.trim() || "-",
             description: description.trim() || "-",
             totalItems: 0,
             safetyStock,
-          }
+          }),
         });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.message || errData.error || "Gagal menambahkan kategori");
+        }
       }
       await loadCategories();
       setIsSheetOpen(false);
       toast.success(`Berhasil ${editId ? "menyimpan perubahan" : "menambahkan"} data kategori`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save category:", error);
-      toast.error(typeof error === "string" ? error : "Gagal menyimpan kategori.");
+      toast.error(error.message || (typeof error === "string" ? error : "Gagal menyimpan kategori."));
     }
   };
 
@@ -155,16 +202,26 @@ export default function KategoriBarangPage() {
     if (!id) return;
 
     try {
-      await invoke("delete_category", { id });
+      const response = await fetch(`${getBaseUrl()}/categories/${id}`, {
+        method: "DELETE",
+        headers: getHeaders(),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.message || errData.error || "Gagal menghapus kategori");
+      }
+
       await loadCategories();
       toast.success("Berhasil menghapus kategori");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to delete category:", error);
-      toast.error("Gagal menghapus kategori.");
+      toast.error(error.message || "Gagal menghapus kategori.");
     } finally {
       setDeleteAlertData({ isOpen: false, id: "", name: "" });
     }
   };
+
 
   return (
     <div className="p-6 h-full flex flex-col gap-6 text-neutral-100 mx-auto w-full">

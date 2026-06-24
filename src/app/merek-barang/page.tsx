@@ -4,7 +4,21 @@ import { useState, useMemo, useEffect } from "react";
 import {
   Plus, Edit, Trash2, Search, CircleStar, MoreVertical
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+const getBaseUrl = () => {
+  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+};
+
+const getHeaders = () => {
+  const token = localStorage.getItem("arxiva-auth-token");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `${token}`;
+  }
+  return headers;
+};
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,10 +37,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Merek = {
   id: string;
-  name: string;
+  nama: string;
   identifier: string;
   origin: string;
   totalItems: number;
@@ -48,23 +63,64 @@ export default function MerekBarangPage() {
   const [identifier, setIdentifier] = useState("");
   const [origin, setOrigin] = useState("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [categories, setCategories] = useState<any[]>([]);
+  const [categoryId, setCategoryId] = useState("");
+
+  const loadCategories = async () => {
+    try {
+      const response = await fetch(`${getBaseUrl()}/categories`, {
+        method: "GET",
+        headers: getHeaders(),
+      });
+      if (!response.ok) {
+        throw new Error("Gagal mengambil data kategori");
+      }
+      const data = await response.json();
+      const categoriesList = data.data || data.categories || data;
+      setCategories(Array.isArray(categoriesList) ? categoriesList.map((c: any) => ({
+        ...c,
+        id: String(c.id),
+        name: c.nama || c.name || "",
+        description: c.deskripsi || c.description || "",
+        totalItems: c.totalItems !== undefined ? c.totalItems : (c.total_items || 0),
+        safetyStock: c.safetyStock !== undefined ? c.safetyStock : (c.safety_stock || 5),
+      })) : []);
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
+      toast.error("Gagal mengambil data kategori dari server.");
+    }
+  };
 
   const loadBrands = async () => {
     try {
-      const data = await invoke<Merek[]>("get_brands");
-      setBrands(data);
+      const response = await fetch(`${getBaseUrl()}/brands`, {
+        method: "GET",
+        headers: getHeaders(),
+      });
+      if (!response.ok) {
+        throw new Error("Gagal mengambil data merek");
+      }
+      const data = await response.json();
+      const brandsList = data.data || data.brands || data;
+      setBrands(Array.isArray(brandsList) ? brandsList.map((b: any) => ({
+        ...b,
+        id: String(b.id),
+        totalItems: b.totalItems !== undefined ? b.totalItems : (b.total_items || 0)
+      })) : []);
     } catch (error) {
       console.error("Failed to fetch brands:", error);
+      toast.error("Gagal mengambil data merek dari server.");
     }
   };
 
   useEffect(() => {
     loadBrands();
+    loadCategories();
   }, []);
 
   const filteredBrands = useMemo(() => {
     return brands.filter(brand =>
-      brand.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      brand.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
       brand.identifier.toLowerCase().includes(searchQuery.toLowerCase()) ||
       brand.origin.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -74,7 +130,7 @@ export default function MerekBarangPage() {
     if (id) {
       const brand = brands.find(b => b.id === id);
       if (brand) {
-        setName(brand.name);
+        setName(brand.nama);
         setIdentifier(brand.identifier);
         setOrigin(brand.origin);
         setEditId(id);
@@ -106,7 +162,7 @@ export default function MerekBarangPage() {
     const duplicateName = brands.some(
       (brand) =>
         brand.id !== editId &&
-        brand.name.trim().toLowerCase() === trimmedName.toLowerCase()
+        brand.nama.trim().toLowerCase() === trimmedName.toLowerCase()
     );
     if (duplicateName) {
       errors.name = "Nama merek sudah terdaftar.";
@@ -130,32 +186,44 @@ export default function MerekBarangPage() {
     try {
       if (editId) {
         const brand = brands.find(b => b.id === editId);
-        await invoke("update_brand", {
-          brand: {
-            id: editId,
+        const response = await fetch(`${getBaseUrl()}/brands/${editId}`, {
+          method: "PUT",
+          headers: getHeaders(),
+          body: JSON.stringify({
             name: trimmedName,
             identifier: normalizedIdentifier,
             origin: origin.trim() || "-",
             totalItems: brand?.totalItems || 0
-          }
+          }),
         });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.message || errData.error || "Gagal memperbarui merek");
+        }
       } else {
-        await invoke("add_brand", {
-          brand: {
-            id: `mrk-${Date.now()}`,
-            name: trimmedName,
+        const response = await fetch(`${getBaseUrl()}/brands`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({
+            nama: trimmedName,
             identifier: normalizedIdentifier,
             origin: origin.trim() || "-",
-            totalItems: 0
-          }
+            categoryId: parseInt(categoryId),
+          }),
         });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.message || errData.error || "Gagal menambahkan merek");
+        }
       }
       await loadBrands();
       setIsSheetOpen(false);
       toast.success(`Berhasil ${editId ? "menyimpan perubahan" : "menambahkan"} data merek`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save brand:", error);
-      toast.error(typeof error === "string" ? error : "Gagal menyimpan merek.");
+      toast.error(error.message || (typeof error === "string" ? error : "Gagal menyimpan merek."));
     }
   };
 
@@ -168,12 +236,21 @@ export default function MerekBarangPage() {
     if (!id) return;
 
     try {
-      await invoke("delete_brand", { id });
+      const response = await fetch(`${getBaseUrl()}/brands/${id}`, {
+        method: "DELETE",
+        headers: getHeaders(),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.message || errData.error || "Gagal menghapus merek");
+      }
+
       await loadBrands();
       toast.success("Berhasil menghapus merek");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to delete brand:", error);
-      toast.error("Gagal menghapus merek.");
+      toast.error(error.message || "Gagal menghapus merek.");
     } finally {
       setDeleteAlertData({ isOpen: false, id: "", name: "" });
     }
@@ -216,7 +293,7 @@ export default function MerekBarangPage() {
                     <DropdownMenuItem className="cursor-pointer focus:bg-neutral-800" onClick={() => handleOpenSheet(brand.id)}>
                       <Edit className="w-4 h-4 mr-2" /> Edit Merek
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDelete(brand.id, brand.name)}>
+                    <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDelete(brand.id, brand.nama)}>
                       <Trash2 className="w-4 h-4 mr-2" /> Hapus Merek
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -224,7 +301,7 @@ export default function MerekBarangPage() {
               </div>
 
               <div>
-                <h3 className="font-semibold text-lg text-neutral-100 mb-1">{brand.name}</h3>
+                <h3 className="font-semibold text-lg text-neutral-100 mb-1">{brand.nama}</h3>
                 <p className="text-sm text-neutral-500 line-clamp-1">{brand.identifier}</p>
               </div>
 
@@ -288,7 +365,28 @@ export default function MerekBarangPage() {
                 )}
               </div>
               <div className="space-y-2">
-                <Label>Asal / Deskripsi</Label>
+                <Label>Kategori</Label>
+                <Select
+                  value={categoryId}
+                  onValueChange={(value) => {
+                    setCategoryId(value)
+                    setFormErrors(current => ({ ...current, category: "" }))
+                  }}
+                >
+                  <SelectTrigger className="bg-neutral-900 border-neutral-800">
+                    <SelectValue placeholder="Pilih Kategori" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-neutral-900 border-neutral-800">
+                    {categories.map(category => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Asal</Label>
                 <Input value={origin} onChange={e => setOrigin(e.target.value)} placeholder="Contoh: Amerika Serikat" className="bg-neutral-900 border-neutral-800" />
               </div>
             </div>
