@@ -26,10 +26,27 @@ type AuthContextValue = {
 const AUTH_STORAGE_KEY = "arxiva-auth-user"
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+function normalizeAuthUser(rawUser: any): AuthUser {
+  const rawRole = typeof rawUser?.role === "string" ? rawUser.role.toLowerCase() : ""
+  // Format role eksternal ('user' / 'mitra' / lainnya) menjadi 'mitra' sesuai kebutuhan sistem
+  const role: UserRole = rawRole === "admin" ? "admin" : "mitra"
+
+  return {
+    id: String(rawUser?.id || rawUser?.userId || ""),
+    username: rawUser?.username || rawUser?.email || "",
+    displayName: rawUser?.displayName || rawUser?.name || rawUser?.full_name || rawUser?.username || "User",
+    role,
+    partnerId: rawUser?.partnerId !== undefined ? rawUser.partnerId : (rawUser?.partner_id || null),
+    identityCode: rawUser?.identityCode || rawUser?.identity_code || (role === "admin" ? "ADM" : "MTR"),
+  }
+}
+
 function readStoredUser(): AuthUser | null {
   try {
     const storedUser = localStorage.getItem(AUTH_STORAGE_KEY)
-    return storedUser ? (JSON.parse(storedUser) as AuthUser) : null
+    if (!storedUser) return null
+    const parsed = JSON.parse(storedUser)
+    return normalizeAuthUser(parsed)
   } catch {
     localStorage.removeItem(AUTH_STORAGE_KEY)
     return null
@@ -66,7 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const data = await response.json()
-        const authenticatedUser = (data.user || data.data || data) as AuthUser
+        const rawUser = data.user || data.data || data
+        const authenticatedUser = normalizeAuthUser(rawUser)
 
         if (data.token) {
           localStorage.setItem("arxiva-auth-token", data.token)

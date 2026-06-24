@@ -39,6 +39,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { useNavigate } from "react-router-dom"
+import { NavUser } from "./nav-user"
 
 const data = {
   navMain: [
@@ -149,11 +150,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const visibleNavMain = isAdmin
     ? data.navMain
     : data.navMain
-        .map((group) => ({
-          ...group,
-          items: group.items.filter((item) => mitraAllowedUrls.has(item.url)),
-        }))
-        .filter((group) => group.items.length > 0)
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => mitraAllowedUrls.has(item.url)),
+      }))
+      .filter((group) => group.items.length > 0)
 
   const handleLogout = () => {
     logout()
@@ -175,7 +176,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <Zap className="size-4" fill="currentColor" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">Arxiva</span>
+                <span className="truncate font-semibold">PT ICON Plus Tasikmalaya</span>
                 <span className="truncate text-xs">Inventory Management</span>
               </div>
             </SidebarMenuButton>
@@ -187,19 +188,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain items={visibleNavMain} />
       </SidebarContent>
       <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              tooltip="Keluar"
-              onClick={() => setIsLogoutDialogOpen(true)}
-              aria-label="Keluar dari akun"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            >
-              <LogOut />
-              <span>Keluar</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <NavUser
+          user={{
+            name: user?.displayName || user?.username || "User",
+            email: user?.username || "",
+            avatar: "",
+          }}
+          onLogout={() => setIsLogoutDialogOpen(true)}
+        />
       </SidebarFooter>
       <SidebarRail />
       <AlertDialog

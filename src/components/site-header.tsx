@@ -73,19 +73,6 @@ export function SiteHeader() {
                         </BreadcrumbItem>
                     </BreadcrumbList>
                 </Breadcrumb>
-                <div className="hidden items-center gap-2 sm:flex">
-                    <div className="text-right leading-tight">
-                        <p className="max-w-40 truncate text-sm font-medium">
-                            {user?.displayName}
-                        </p>
-                        <p className="max-w-40 truncate text-xs text-muted-foreground">
-                            @{user?.username}
-                        </p>
-                    </div>
-                    <Badge variant="secondary" className="capitalize">
-                        {userBadgeLabel}
-                    </Badge>
-                </div>
             </div>
         </header>
     )
