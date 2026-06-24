@@ -120,13 +120,8 @@ export default function BarangKeluarPage() {
         );
 
         if (user?.role === "mitra") {
-          const ownPartner = {
-            id: user.partnerId || `mitra-${user.id}`,
-            name: user.displayName,
-            isActive: true,
-          };
-          setDbPartners([ownPartner]);
-          setSelectedPartnerId(ownPartner.id);
+          setDbPartners([]);
+          setSelectedPartnerId("");
         } else {
           const partners = await invoke<Partner[]>("get_partners");
           const activePartners = partners.filter((partner) => partner.isActive);
@@ -190,11 +185,14 @@ export default function BarangKeluarPage() {
     const trimmedKode = kodeOverride.trim();
     if (!trimmedKode) return;
 
-    const selectedPartner = dbPartners.find(
-      (partner) => partner.id === selectedPartnerId
-    );
+    const selectedPartner =
+      user?.role === "mitra"
+        ? null
+        : dbPartners.find((partner) => partner.id === selectedPartnerId);
+    const targetMitraName =
+      user?.role === "mitra" ? user.displayName : selectedPartner?.name;
 
-    if (!selectedPartner) {
+    if (!targetMitraName) {
       toast.error("Pilih mitra tujuan sebelum menambahkan barang keluar.");
       focusKodeBarangInput();
       return;
@@ -250,7 +248,7 @@ export default function BarangKeluarPage() {
       merek: matchedItem.merek || "-",
       kategori: matchedItem.kategori || "-",
       lokasi: originalLoc as LokasiOption,
-      mitra: selectedPartner.name,
+      mitra: targetMitraName,
       keterangan: user?.role === "mitra" ? keterangan.trim() : "",
       status: "Valid",
     };
@@ -524,16 +522,9 @@ export default function BarangKeluarPage() {
             </CardHeader>
 
             <CardContent className="flex flex-1 flex-col gap-4">
-              <div className="flex flex-col gap-3">
-                <Label htmlFor="mitra-tujuan">Mitra Tujuan</Label>
-                {user?.role === "mitra" ? (
-                  <div
-                    id="mitra-tujuan"
-                    className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm"
-                  >
-                    {user.displayName}
-                  </div>
-                ) : (
+              {user?.role !== "mitra" && (
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="mitra-tujuan">Mitra Tujuan</Label>
                   <Select
                     value={selectedPartnerId}
                     onValueChange={(value) => {
@@ -552,13 +543,13 @@ export default function BarangKeluarPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                )}
-                {dbPartners.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Belum ada mitra aktif. Tambahkan atau aktifkan mitra terlebih dahulu.
-                  </p>
-                )}
-              </div>
+                  {dbPartners.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Belum ada mitra aktif. Tambahkan atau aktifkan mitra terlebih dahulu.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {user?.role === "mitra" && (
                 <div className="flex flex-col gap-3">
@@ -669,11 +660,15 @@ export default function BarangKeluarPage() {
                     <TableHead>Merek</TableHead>
                     <TableHead>Kategori</TableHead>
                     <TableHead>Asal Lokasi</TableHead>
-                    <TableHead>Mitra</TableHead>
+                    {user?.role !== "mitra" && (
+                      <TableHead>Mitra</TableHead>
+                    )}
                     {user?.role === "mitra" && (
                       <TableHead>PA / Keterangan</TableHead>
                     )}
-                    <TableHead>Status Validasi</TableHead>
+                    <TableHead>
+                      {user?.role === "mitra" ? "Status" : "Status Validasi"}
+                    </TableHead>
                     <TableHead className="w-16 text-center">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -681,7 +676,7 @@ export default function BarangKeluarPage() {
                   {barangKeluar.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={user?.role === "mitra" ? 9 : 8}
+                        colSpan={8}
                         className="p-0"
                       >
                         <EmptyScanTableState />
@@ -699,14 +694,20 @@ export default function BarangKeluarPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>{item.lokasi}</TableCell>
-                        <TableCell>{item.mitra}</TableCell>
+                        {user?.role !== "mitra" && (
+                          <TableCell>{item.mitra}</TableCell>
+                        )}
                         {user?.role === "mitra" && (
                           <TableCell>{item.keterangan}</TableCell>
                         )}
                         <TableCell>
                           <Badge variant="secondary" className="font-normal gap-1.5 px-2.5 py-0.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            {item.status}
+                            <div
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                user?.role === "mitra" ? "bg-sky-500" : "bg-emerald-500"
+                              }`}
+                            />
+                            {user?.role === "mitra" ? "Keluar" : item.status}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">

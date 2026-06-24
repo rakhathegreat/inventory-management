@@ -90,7 +90,11 @@ function App() {
                 />
                 <Route
                   path="lokasi-barang"
-                  element={<LokasiBarangPage />}
+                  element={
+                    <ProtectedRoute adminOnly>
+                      <LokasiBarangPage />
+                    </ProtectedRoute>
+                  }
                 />
                 <Route
                   path="kategori-barang"

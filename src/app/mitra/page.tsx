@@ -6,15 +6,10 @@ import {
   Building2,
   Edit,
   Fingerprint,
-  KeyRound,
-  Mail,
-  MapPin,
   MoreVertical,
-  Phone,
   Plus,
   Search,
   Trash2,
-  UserRound,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -23,6 +18,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import {
   Select,
   SelectContent,
@@ -425,99 +428,127 @@ export default function MitraPage() {
         </div>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filteredPartners.map((partner) => (
-          <Card key={partner.id} className="group overflow-hidden">
-            <CardContent className="flex h-full flex-col gap-5 px-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Building2 className="size-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="truncate font-semibold">{partner.name}</h3>
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      <Badge className="font-mono">{partner.code}</Badge>
-                      <Badge variant="secondary">{partner.partnerType}</Badge>
-                      <Badge
-                        variant="outline"
-                        className={partner.isActive ? "text-emerald-500" : "text-muted-foreground"}
-                      >
-                        {partner.isActive ? "Aktif" : "Nonaktif"}
-                      </Badge>
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <Table className="min-w-[980px]">
+          <TableHeader className="bg-muted/60">
+            <TableRow>
+              <TableHead className="w-[60px] text-center">No.</TableHead>
+              <TableHead className="w-[200px]">Mitra</TableHead>
+              <TableHead className="w-[120px]">Jenis</TableHead>
+              <TableHead className="w-[180px]">PIC</TableHead>
+              <TableHead className="w-[170px]">Akun</TableHead>
+              <TableHead className="w-[220px]">Kontak</TableHead>
+              <TableHead className="w-[220px]">Alamat</TableHead>
+              <TableHead className="w-[120px] text-center">Status</TableHead>
+              <TableHead className="w-[60px] text-right"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredPartners.length > 0 ? (
+              filteredPartners.map((partner, index) => (
+                <TableRow key={partner.id}>
+                  <TableCell className="text-center font-medium">
+                    {index + 1}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Building2 className="size-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{partner.name}</p>
+                        <Badge variant="outline" className="mt-1 font-mono">
+                          {partner.code}
+                        </Badge>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{partner.partnerType}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <span className="block max-w-[160px] truncate">
+                      {partner.contactPerson}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="block max-w-[150px] truncate font-mono text-xs">
+                      {partner.username ? `@${partner.username}` : "Belum dibuat"}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <p className="max-w-[200px] truncate">{partner.phone}</p>
+                      <p className="max-w-[200px] truncate text-xs text-muted-foreground">
+                        {partner.email}
+                      </p>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className="block max-w-[260px] truncate text-muted-foreground">
+                      {partner.address}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Badge
+                      variant="outline"
+                      className={
+                        partner.isActive
+                          ? "border-emerald-500/30 text-emerald-500"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      {partner.isActive ? "Aktif" : "Nonaktif"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon-sm">
+                          <MoreVertical className="size-4" />
+                          <span className="sr-only">Menu mitra</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEditSheet(partner)}>
+                          <Edit className="size-4" />
+                          Edit Mitra
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleToggleStatus(partner)}>
+                          {partner.isActive ? "Nonaktifkan" : "Aktifkan"}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => setDeleteTarget(partner)}
+                        >
+                          <Trash2 className="size-4" />
+                          Hapus Mitra
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={9} className="h-72">
+                  <div className="flex flex-col items-center justify-center gap-4 text-center">
+                    <div className="flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                      <Building2 className="size-7" />
+                    </div>
+                    <div>
+                      <p className="font-semibold">Mitra tidak ditemukan</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Ubah filter pencarian atau tambahkan mitra baru.
+                      </p>
                     </div>
                   </div>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon-sm">
-                      <MoreVertical className="size-4" />
-                      <span className="sr-only">Menu mitra</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => openEditSheet(partner)}>
-                      <Edit className="size-4" />
-                      Edit Mitra
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleToggleStatus(partner)}>
-                      {partner.isActive ? "Nonaktifkan" : "Aktifkan"}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onClick={() => setDeleteTarget(partner)}
-                    >
-                      <Trash2 className="size-4" />
-                      Hapus Mitra
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              <div className="space-y-3 text-sm">
-                <div className="flex items-start gap-3">
-                  <UserRound className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span>{partner.contactPerson}</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <KeyRound className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span>
-                    {partner.username ? `@${partner.username}` : "Akun belum dibuat"}
-                  </span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Phone className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span>{partner.phone}</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Mail className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span className="break-all">{partner.email}</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span className="line-clamp-2">{partner.address}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-
-        {filteredPartners.length === 0 && (
-          <Card className="col-span-full border-dashed">
-            <CardContent className="flex min-h-72 flex-col items-center justify-center gap-4 text-center">
-              <div className="flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Building2 className="size-7" />
-              </div>
-              <div>
-                <p className="font-semibold">Mitra tidak ditemukan</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Ubah filter pencarian atau tambahkan mitra baru.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
@@ -674,6 +705,12 @@ export default function MitraPage() {
                 }
                 placeholder="Alamat kantor mitra"
               />
+            </div>
+
+            <div className="border-t pt-5">
+              <div>
+                
+              </div>
             </div>
 
             <div className="border-t pt-5">

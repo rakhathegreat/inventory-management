@@ -8,29 +8,16 @@ import {
     BreadcrumbPage,
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-import { LogOut } from "lucide-react"
-import { useLocation, useNavigate } from "react-router-dom"
-import { useState } from "react"
+import { useLocation } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth"
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 
 export function SiteHeader() {
     const location = useLocation()
-    const navigate = useNavigate()
-    const { user, logout } = useAuth()
-    const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false)
+    const { user } = useAuth()
     const path = location.pathname
+    const userBadgeLabel =
+        user?.role === "admin" ? user?.identityCode || "Admin" : "Mitra"
 
     // Determine breadcrumbs based on route
     let parent = "Menu Utama"
@@ -65,12 +52,6 @@ export function SiteHeader() {
         pageName = "Mitra"
     }
 
-    const handleLogout = () => {
-        logout()
-        setIsLogoutDialogOpen(false)
-        navigate("/login", { replace: true })
-    }
-
     return (
         <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
             <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
@@ -102,40 +83,10 @@ export function SiteHeader() {
                         </p>
                     </div>
                     <Badge variant="secondary" className="capitalize">
-                        {user?.identityCode || user?.role}
+                        {userBadgeLabel}
                     </Badge>
                 </div>
-                <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setIsLogoutDialogOpen(true)}
-                    aria-label="Keluar dari akun"
-                    title="Keluar"
-                >
-                    <LogOut className="size-4" />
-                </Button>
             </div>
-
-            <AlertDialog
-                open={isLogoutDialogOpen}
-                onOpenChange={setIsLogoutDialogOpen}
-            >
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Konfirmasi logout</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Apakah Anda yakin ingin keluar dari akun {user?.displayName}?
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Batal</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleLogout}>
-                            <LogOut className="size-4" />
-                            Ya, Keluar
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </header>
     )
 }
