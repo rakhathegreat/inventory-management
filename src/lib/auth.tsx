@@ -5,7 +5,6 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { invoke } from "@tauri-apps/api/core"
 
 export type UserRole = "admin" | "mitra"
 
@@ -44,10 +43,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       login: async (username: string, password: string) => {
-        const authenticatedUser = await invoke<AuthUser>("login", {
-          username,
-          password,
+        const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/"
+        const endpoint = baseUrl.endsWith("/") ? `${baseUrl}auth/login` : `${baseUrl}/auth/login`
+
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ username, password }),
         })
+
+        if (!response.ok) {
+          let errorMessage = "Login gagal. Periksa kembali username dan password."
+          try {
+            const errorData = await response.json()
+            errorMessage = errorData.message || errorData.error || errorMessage
+          } catch {
+            // fallback
+          }
+          throw errorMessage
+        }
+
+        const data = await response.json()
+        const authenticatedUser = (data.user || data.data || data) as AuthUser
+
+        if (data.token) {
+          localStorage.setItem("arxiva-auth-token", data.token)
+        }
+
         localStorage.setItem(
           AUTH_STORAGE_KEY,
           JSON.stringify(authenticatedUser)
@@ -57,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       logout: () => {
         localStorage.removeItem(AUTH_STORAGE_KEY)
+        localStorage.removeItem("arxiva-auth-token")
         setUser(null)
       },
     }),
