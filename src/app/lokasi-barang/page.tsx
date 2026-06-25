@@ -522,23 +522,6 @@ export default function LokasiBarangPage() {
 
   return (
     <div className="p-6 h-full flex flex-col gap-6 text-neutral-100 mx-auto w-full">
-      {(
-        <Card className="border-blue-500/30 bg-blue-500/5">
-          <CardContent className="flex items-center gap-3 px-4">
-            <div className="rounded-lg bg-blue-500/10 p-2 text-blue-400">
-              <Archive className="size-5" />
-            </div>
-            <div>
-              <p className="font-semibold">Lokasi penyimpanan {currentOwner}</p>
-              <p className="text-sm text-muted-foreground">
-                Semua rak dan kardus pada halaman ini hanya dapat dilihat dan
-                dikelola oleh pemiliknya.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs md:grid-cols-2 xl:grid-cols-4 dark:*:data-[slot=card]:bg-card">
         <Card className="@container/card relative">
           <div className="flex flex-row items-center">

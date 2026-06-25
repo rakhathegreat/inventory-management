@@ -67,6 +67,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
+const getBaseUrl = () => {
+  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+};
+
+const getHeaders = () => {
+  const token = localStorage.getItem("arxiva-auth-token");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `${token}`;
+  }
+  return headers;
+};
+
 type PartnerType = "Supplier" | "Vendor" | "Jasa" | "Lainnya"
 
 type Partner = {
@@ -120,8 +136,28 @@ export default function MitraPage() {
 
   const loadPartners = async () => {
     try {
-      const data = await invoke<Partner[]>("get_partners")
-      setPartners(data)
+      const response = await fetch(`${getBaseUrl()}/users`, {
+        method: "GET",
+        headers: getHeaders(),
+      })
+      if (!response.ok) {
+        throw new Error("Gagal memuat data mitra")
+      }
+      const data = await response.json()
+      const usersList = data.data || data.users || data
+      const partnersList: Partner[] = (Array.isArray(usersList) ? usersList : []).filter((u: any) => u.role === "MITRA").map((u: any) => ({
+        id: String(u.id),
+        code: u.profile?.code || u.code || "-",
+        name: u.profile?.nama || u.profile?.name || u.name || u.username || "",
+        partnerType: (u.profile?.partnerType || u.partnerType || "Supplier") as PartnerType,
+        contactPerson: u.profile?.contactPerson || u.contactPerson || "-",
+        phone: u.profile?.telepon || u.profile?.phone || u.phone || "-",
+        email: u.profile?.email || u.email || "-",
+        address: u.profile?.alamat || u.profile?.address || u.address || "-",
+        isActive: u.isAktif !== undefined ? u.isAktif : (u.isActive !== undefined ? u.isActive : true),
+        username: u.username || null,
+      }))
+      setPartners(partnersList)
     } catch (error) {
       console.error("Gagal memuat data mitra:", error)
       toast.error("Gagal memuat data mitra.")
@@ -243,7 +279,7 @@ export default function MitraPage() {
     const hasDuplicateUsername = partners.some(
       (partner) =>
         partner.username?.trim().toLowerCase() ===
-          normalizedUsername.toLowerCase() && partner.id !== editId
+        normalizedUsername.toLowerCase() && partner.id !== editId
     )
     if (hasDuplicateUsername) {
       errors.username = "Username sudah digunakan."
@@ -254,42 +290,67 @@ export default function MitraPage() {
       return
     }
 
-    const partner: Partner = {
-      id: editId || `mitra-${Date.now()}`,
-      code: normalizedCode,
-      name: normalizedName,
-      partnerType: formData.partnerType,
-      contactPerson: formData.contactPerson.trim() || "-",
-      phone: formData.phone.trim() || "-",
-      email: normalizedEmail || "-",
-      address: formData.address.trim() || "-",
-      isActive: formData.isActive,
-      username: normalizedUsername,
-    }
-
     try {
       if (editId) {
-        await invoke("update_partner_account", {
-          partner,
+        const bodyData: any = {
+          name: normalizedName,
+          code: normalizedCode,
+          partnerType: formData.partnerType,
+          contactPerson: formData.contactPerson.trim() || "-",
+          phone: formData.phone.trim() || "-",
+          email: normalizedEmail || "-",
+          address: formData.address.trim() || "-",
+          isActive: formData.isActive,
           username: normalizedUsername,
-          password: formData.password || null,
+          role: "MITRA",
+        }
+        if (formData.password) {
+          bodyData.password = formData.password
+        }
+
+        const response = await fetch(`${getBaseUrl()}/users/${editId}`, {
+          method: "PUT",
+          headers: getHeaders(),
+          body: JSON.stringify(bodyData),
         })
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}))
+          throw new Error(errData.message || errData.error || "Gagal memperbarui data mitra.")
+        }
       } else {
-        await invoke("add_partner_account", {
-          partner,
-          username: normalizedUsername,
-          password: formData.password,
+        const response = await fetch(`${getBaseUrl()}/users`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({
+            name: normalizedName,
+            code: normalizedCode,
+            partnerType: formData.partnerType,
+            contactPerson: formData.contactPerson.trim() || "-",
+            phone: formData.phone.trim() || "-",
+            email: normalizedEmail || "-",
+            address: formData.address.trim() || "-",
+            isActive: formData.isActive,
+            username: normalizedUsername,
+            password: formData.password,
+            role: "MITRA",
+          }),
         })
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}))
+          throw new Error(errData.message || errData.error || "Gagal menambahkan mitra baru.")
+        }
       }
       await loadPartners()
       setIsSheetOpen(false)
       toast.success(
         editId ? "Data mitra berhasil diperbarui." : "Mitra baru berhasil ditambahkan."
       )
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gagal menyimpan data mitra:", error)
       toast.error(
-        typeof error === "string" ? error : "Gagal menyimpan data mitra."
+        error.message || (typeof error === "string" ? error : "Gagal menyimpan data mitra.")
       )
     }
   }
@@ -323,19 +384,26 @@ export default function MitraPage() {
 
   const handleToggleStatus = async (partner: Partner) => {
     try {
-      await invoke("update_partner", {
-        partner: {
-          ...partner,
+      const response = await fetch(`${getBaseUrl()}/users/${partner.id}`, {
+        method: "PUT",
+        headers: getHeaders(),
+        body: JSON.stringify({
           isActive: !partner.isActive,
-        },
+        }),
       })
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.message || errData.error || "Gagal mengubah status mitra.")
+      }
+
       await loadPartners()
       toast.success(
         `Mitra berhasil ${partner.isActive ? "dinonaktifkan" : "diaktifkan"}.`
       )
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gagal mengubah status mitra:", error)
-      toast.error("Gagal mengubah status mitra.")
+      toast.error(error.message || "Gagal mengubah status mitra.")
     }
   }
 
@@ -343,46 +411,27 @@ export default function MitraPage() {
     if (!deleteTarget) return
 
     try {
-      await invoke("delete_partner", { id: deleteTarget.id })
+      const response = await fetch(`${getBaseUrl()}/users/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: getHeaders(),
+      })
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.message || errData.error || "Gagal menghapus mitra.")
+      }
+
       await loadPartners()
       setDeleteTarget(null)
       toast.success("Mitra berhasil dihapus.")
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gagal menghapus mitra:", error)
-      toast.error("Gagal menghapus mitra.")
+      toast.error(error.message || "Gagal menghapus mitra.")
     }
   }
 
   return (
     <div className="flex h-full flex-col gap-6 p-4 md:p-6 lg:p-8">
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="flex flex-col gap-4 px-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Fingerprint className="size-5" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Identitas KP</p>
-              <div className="mt-1 flex items-center gap-2">
-                <p className="text-xl font-semibold">{kpCode}</p>
-                <Badge variant="secondary">Admin</Badge>
-              </div>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setKpCodeDraft(kpCode)
-              setKpCodeError("")
-              setIsKpCodeDialogOpen(true)
-            }}
-          >
-            <Edit className="size-4" />
-            Ubah Kode KP
-          </Button>
-        </CardContent>
-      </Card>
-
       <Card className="p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -573,9 +622,8 @@ export default function MitraPage() {
                   setFormErrors((current) => ({ ...current, code: "" }))
                 }}
                 placeholder="Contoh: MTR-001"
-                className={`font-mono ${
-                  formErrors.code ? "border-destructive" : ""
-                }`}
+                className={`font-mono ${formErrors.code ? "border-destructive" : ""
+                  }`}
               />
               <p className="text-xs text-muted-foreground">
                 Kode digunakan sebagai identitas Mitra dan boleh sama dengan
@@ -709,7 +757,7 @@ export default function MitraPage() {
 
             <div className="border-t pt-5">
               <div>
-                
+
               </div>
             </div>
 
@@ -860,9 +908,8 @@ export default function MitraPage() {
                 setKpCodeDraft(event.target.value.toUpperCase())
                 setKpCodeError("")
               }}
-              className={`font-mono ${
-                kpCodeError ? "border-destructive" : ""
-              }`}
+              className={`font-mono ${kpCodeError ? "border-destructive" : ""
+                }`}
               placeholder="Contoh: KP-TSM"
             />
             {kpCodeError && (
