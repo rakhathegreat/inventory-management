@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { BadgeCheck, Boxes, PackagePlus, ScanLine, X } from "lucide-react";
+import { BadgeCheck, Boxes, PackagePlus, ScanLine, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -33,43 +32,26 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
+import type { BrandOption, BrandDefinition, KategoriOption, LokasiOption, LocationDefinition, InventoryItem, KodeBarangUpdate } from "@/types/inventory";
+import type { BarangMasukItem } from "@/types/transaction";
+import type { Partner } from "@/types/partner";
 
-type BrandOption = string;
-type BrandDefinition = {
-  name: string;
-  identifier: string;
-};
-type KategoriOption = string;
-type LokasiOption = string;
-type LocationDefinition = {
-  name: LokasiOption;
-  brandRule: BrandOption;
+const getBaseUrl = () => {
+  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 };
 
-type InventoryItem = {
-  id: string;
-  serialNumber: string;
-  kategori: string;
-  merek: string;
-  status: string;
-  lokasiPenyimpanan: string;
-  tanggalMasuk: string;
-  tanggalKeluar?: string;
-  mitra?: string | null;
+const getHeaders = () => {
+  const token = localStorage.getItem("arxiva-auth-token");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `${token}`;
+  }
+  return headers;
 };
 
-type BarangMasukItem = {
-  id: number;
-  nomor: string;
-  merek: string;
-  kategori: KategoriOption;
-  lokasi: LokasiOption;
-  status: "Valid" | "Invalid";
-  existingItemId?: string;
-  source: "KP" | "Mitra" | "Baru";
-};
-
-type KodeBarangUpdate = string | ((current: string) => string);
 const ADMIN_LOCATION = "KP";
 
 const detectBrandFromCode = (code: string, brands: BrandDefinition[]): BrandOption => {
@@ -169,36 +151,65 @@ export default function BarangMasukPage() {
   const [dbCategories, setDbCategories] = useState<string[]>([]);
   const [dbLocations, setDbLocations] = useState<LocationDefinition[]>([]);
   const [dbItems, setDbItems] = useState<InventoryItem[]>([]);
+  const [dbPartners, setDbPartners] = useState<Partner[]>([]);
+  const [asalBarang, setAsalBarang] = useState<string>("SBU Regional Jawa Barat");
+  const [kondisiBarang, setKondisiBarang] = useState<string>("Baru");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Fetch brands, categories, and locations from database
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const brands = await invoke<any[]>("get_brands");
-        const brandDefinitions = brands.map((brand: any) => ({
-          name: brand.name,
+        const resPartners = await fetch(`${getBaseUrl()}/users`, { method: "GET", headers: getHeaders() });
+        const rawPartners = await resPartners.json();
+        const usersList = rawPartners.data || rawPartners.users || rawPartners;
+        const partners: Partner[] = (Array.isArray(usersList) ? usersList : []).filter((u: any) => u.role === "MITRA").map((u: any) => ({
+          id: String(u.id),
+          code: u.profile?.code || u.code || "-",
+          name: u.profile?.nama || u.profile?.name || u.name || u.username || "",
+          partnerType: u.profile?.partnerType || u.partnerType || "Supplier",
+          contactPerson: u.profile?.contactPerson || u.contactPerson || "-",
+          phone: u.profile?.telepon || u.profile?.phone || u.phone || "-",
+          email: u.profile?.email || u.email || "-",
+          address: u.profile?.alamat || u.profile?.address || u.address || "-",
+          isActive: u.isAktif !== undefined ? u.isAktif : (u.isActive !== undefined ? u.isActive : true),
+          username: u.username || null,
+        }));
+        setDbPartners(partners.filter((partner) => partner.isActive));
+
+        const resBrands = await fetch(`${getBaseUrl()}/brands`, { method: "GET", headers: getHeaders() });
+        const rawBrands = await resBrands.json();
+        const brands = rawBrands.data || rawBrands;
+        const brandDefinitions = (Array.isArray(brands) ? brands : []).map((brand: any) => ({
+          name: brand.name || brand.nama || "",
           identifier: brand.identifier || "",
         }));
         setDbBrands(brandDefinitions);
 
-        const categories = await invoke<any[]>("get_categories");
-        const categoryNames = categories.map((c: any) => c.name);
+        const resCat = await fetch(`${getBaseUrl()}/categories`, { method: "GET", headers: getHeaders() });
+        const rawCat = await resCat.json();
+        const categories = rawCat.data || rawCat;
+        const categoryNames = (Array.isArray(categories) ? categories : []).map((c: any) => c.name || c.nama || "");
         setDbCategories(categoryNames);
 
         if (categoryNames.length > 0) {
           setKategoriBarang(categoryNames[0]);
         }
 
-        const items = await invoke<InventoryItem[]>("get_items");
-        setDbItems(items);
+        const resItems = await fetch(`${getBaseUrl()}/items`, { method: "GET", headers: getHeaders() });
+        const rawItems = await resItems.json();
+        const items = rawItems.data || rawItems;
+        setDbItems(Array.isArray(items) ? items : []);
 
-        const locationsData = await invoke<any[]>("get_locations");
+        const resLoc = await fetch(`${getBaseUrl()}/locations`, { method: "GET", headers: getHeaders() });
+        const rawLoc = await resLoc.json();
+        const locationsData = rawLoc.data || rawLoc;
         const locs: LocationDefinition[] = [];
         const newKuota: Record<string, number> = {};
         const locationOwner =
           user?.role === "mitra" ? user.displayName : ADMIN_LOCATION;
 
-        locationsData.forEach(loc => {
+        (Array.isArray(locationsData) ? locationsData : []).forEach((loc: any) => {
           if (loc.isActive === false) return;
           if (
             normalizeOwner(loc.owner || ADMIN_LOCATION) !==
@@ -356,6 +367,8 @@ export default function BarangMasukPage() {
           : existingItem
             ? "Mitra"
             : "Baru",
+      asal: asalBarang,
+      kondisi: kondisiBarang,
     };
 
     // Add to local UI list
@@ -384,6 +397,8 @@ export default function BarangMasukPage() {
     merekFallback,
     updateKodeBarang,
     user,
+    asalBarang,
+    kondisiBarang,
   ]);
 
   // Arahkan input keyboard/scanner ke field Kode/SN walaupun fokus sedang di area lain.
@@ -469,14 +484,18 @@ export default function BarangMasukPage() {
   };
 
   const handleValidateAll = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       const sessionDate = new Date().toISOString().slice(0, 10);
       const dateStr = sessionDate.replace(/-/g, "");
 
-      const txs = await invoke<any[]>("get_transactions");
+      const resTrx = await fetch(`${getBaseUrl()}/transactions`, { method: "GET", headers: getHeaders() });
+      const rawTrx = await resTrx.json();
+      const txs = rawTrx.data || rawTrx;
       const prefix = `IN-${dateStr}-`;
       let maxNum = 0;
-      txs.forEach(t => {
+      (Array.isArray(txs) ? txs : []).forEach((t: any) => {
         if (t.nomor && t.nomor.startsWith(prefix)) {
           const numStr = t.nomor.slice(prefix.length);
           const num = parseInt(numStr, 10);
@@ -484,7 +503,9 @@ export default function BarangMasukPage() {
         }
       });
       const sessionNomor = `${prefix}${(maxNum + 1).toString().padStart(4, '0')}`;
-      const latestItems = await invoke<InventoryItem[]>("get_items");
+      const resLatestItems = await fetch(`${getBaseUrl()}/items`, { method: "GET", headers: getHeaders() });
+      const rawLatestItems = await resLatestItems.json();
+      const latestItems: InventoryItem[] = Array.isArray(rawLatestItems.data || rawLatestItems) ? (rawLatestItems.data || rawLatestItems) : [];
 
       const invalidItem = barangMasuk.find((item) => {
         const existingItem = latestItems.find(
@@ -548,7 +569,7 @@ export default function BarangMasukPage() {
             serialNumber: item.nomor,
             kategori: item.kategori,
             merek: item.merek,
-            status: "Masuk",
+            status: "Tersedia",
             lokasiPenyimpanan: item.lokasi,
             tanggalMasuk: sessionDate,
             tanggalKeluar: undefined,
@@ -557,14 +578,19 @@ export default function BarangMasukPage() {
                 ? user.displayName
                 : existingItem.mitra || ADMIN_LOCATION,
           };
-          await invoke("update_item", { item: updatedItem });
+          const resUp = await fetch(`${getBaseUrl()}/items/${updatedItem.id}`, {
+            method: "PUT",
+            headers: getHeaders(),
+            body: JSON.stringify(updatedItem),
+          });
+          if (!resUp.ok) throw new Error(`Gagal update item ${item.nomor}`);
         } else {
           const newItem: InventoryItem = {
-            id: `UNIT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            id: crypto.randomUUID(),
             serialNumber: item.nomor,
             kategori: item.kategori,
             merek: item.merek,
-            status: "Masuk",
+            status: "Tersedia",
             lokasiPenyimpanan: item.lokasi,
             tanggalMasuk: sessionDate,
             mitra:
@@ -572,7 +598,12 @@ export default function BarangMasukPage() {
                 ? user.displayName
                 : ADMIN_LOCATION,
           };
-          await invoke("add_item", { item: newItem });
+          const resAdd = await fetch(`${getBaseUrl()}/items`, {
+            method: "POST",
+            headers: getHeaders(),
+            body: JSON.stringify(newItem),
+          });
+          if (!resAdd.ok) throw new Error(`Gagal menambah item ${item.nomor}`);
         }
 
         const newTransaction = {
@@ -583,28 +614,32 @@ export default function BarangMasukPage() {
           status: "Selesai",
           sn: item.nomor,
           merek: item.merek,
-          asal:
-            user?.role === "mitra" &&
-            normalizeOwner(existingItem?.mitra) === normalizeOwner(ADMIN_LOCATION)
-              ? ADMIN_LOCATION
-              : "Keluar",
+          asal: item.asal || asalBarang,
           tujuan: item.lokasi,
           mitra:
             user?.role === "mitra"
               ? user.displayName
               : existingItem?.mitra || ADMIN_LOCATION,
-          keterangan: null,
+          keterangan: item.kondisi || kondisiBarang,
         };
-        await invoke("add_transaction", { transaction: newTransaction });
+        const resAddTrx = await fetch(`${getBaseUrl()}/transactions`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify(newTransaction),
+        });
+        if (!resAddTrx.ok) throw new Error(`Gagal mencatat transaksi ${item.nomor}`);
       }
       toast.success(`${barangMasuk.length} barang masuk berhasil disimpan.`);
       setBarangMasuk([]); // Clear local state after saving
 
-      const items = await invoke<InventoryItem[]>("get_items");
-      setDbItems(items);
+      const resRefresh = await fetch(`${getBaseUrl()}/items`, { method: "GET", headers: getHeaders() });
+      const rawRefresh = await resRefresh.json();
+      setDbItems(Array.isArray(rawRefresh.data || rawRefresh) ? (rawRefresh.data || rawRefresh) : []);
     } catch (error) {
       console.error("Gagal menyimpan ke database:", error);
       toast.error("Gagal menyimpan barang masuk ke database.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -700,6 +735,48 @@ export default function BarangMasukPage() {
                   dapat didaftarkan oleh Admin.
                 </div>
               )}
+
+              <div className="flex flex-col gap-3">
+                <Label htmlFor="asal-barang">Asal Barang</Label>
+                <Select
+                  value={asalBarang}
+                  onValueChange={(value) => {
+                    setAsalBarang(value);
+                    focusKodeBarangInput();
+                  }}
+                >
+                  <SelectTrigger id="asal-barang" className="w-full">
+                    <SelectValue placeholder="Pilih asal barang..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SBU Regional Jawa Barat">SBU Regional Jawa Barat</SelectItem>
+                    {dbPartners.map((partner) => (
+                      <SelectItem key={partner.id} value={partner.name}>
+                        {partner.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <Label htmlFor="kondisi-barang">Kategori / Kondisi</Label>
+                <Select
+                  value={kondisiBarang}
+                  onValueChange={(value) => {
+                    setKondisiBarang(value);
+                    focusKodeBarangInput();
+                  }}
+                >
+                  <SelectTrigger id="kondisi-barang" className="w-full">
+                    <SelectValue placeholder="Pilih kondisi barang..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Baru">Baru</SelectItem>
+                    <SelectItem value="Dismantle">Dismantle</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
               <TabsContent value="auto" className="mt-0 flex flex-1 flex-col">
                 <Input
@@ -834,6 +911,8 @@ export default function BarangMasukPage() {
                     <TableHead>Serial Number</TableHead>
                     <TableHead>Merek</TableHead>
                     <TableHead>Kategori</TableHead>
+                    <TableHead>Asal</TableHead>
+                    <TableHead>Kondisi</TableHead>
                     <TableHead>Rekomendasi Lokasi</TableHead>
                     <TableHead>Status Validasi</TableHead>
                     <TableHead className="w-16 text-center">Aksi</TableHead>
@@ -842,7 +921,7 @@ export default function BarangMasukPage() {
                 <TableBody>
                   {barangMasuk.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="p-0">
+                      <TableCell colSpan={9} className="p-0">
                         <EmptyScanTableState />
                       </TableCell>
                     </TableRow>
@@ -855,6 +934,12 @@ export default function BarangMasukPage() {
                         <TableCell>
                           <Badge variant="secondary" className="font-normal px-2.5 py-0.5">
                             {item.kategori}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{item.asal || asalBarang}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-normal px-2.5 py-0.5 border-primary/30 bg-primary/5 text-primary">
+                            {item.kondisi || kondisiBarang}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -928,8 +1013,9 @@ export default function BarangMasukPage() {
               className="w-full gap-2 sm:w-auto"
               size="lg"
               onClick={handleValidateAll}
-              disabled={barangMasuk.length === 0}
+              disabled={barangMasuk.length === 0 || isSaving}
             >
+              {isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
               Simpan Semua
             </Button>
           </CardFooter>

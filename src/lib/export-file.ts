@@ -1,12 +1,8 @@
 import { invoke, isTauri } from "@tauri-apps/api/core"
-import { dirname, join } from "@tauri-apps/api/path"
-import { save } from "@tauri-apps/plugin-dialog"
-
-const EXPORT_DIRECTORY_STORAGE_KEY = "arxiva.export.directory"
 
 type SaveExportFileOptions = {
   fileName: string
-  contents: string
+  contents: string | number[] | Uint8Array | ArrayBuffer
 }
 
 type SaveExportFileResult = {
@@ -14,9 +10,11 @@ type SaveExportFileResult = {
   path?: string
 }
 
-const downloadInBrowser = (fileName: string, contents: string) => {
-  const blob = new Blob([contents], {
-    type: "text/csv;charset=utf-8",
+const downloadInBrowser = (fileName: string, contents: string | number[] | Uint8Array | ArrayBuffer) => {
+  const isXlsx = fileName.endsWith(".xlsx");
+  const blobData = Array.isArray(contents) ? new Uint8Array(contents) : contents;
+  const blob = new Blob([blobData], {
+    type: isXlsx ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "text/csv;charset=utf-8",
   })
   const downloadUrl = URL.createObjectURL(blob)
   const downloadLink = document.createElement("a")
@@ -29,9 +27,6 @@ const downloadInBrowser = (fileName: string, contents: string) => {
   window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000)
 }
 
-const writeExportFile = (path: string, contents: string) =>
-  invoke("save_export_file", { path, contents })
-
 export async function saveExportFile({
   fileName,
   contents,
@@ -41,39 +36,26 @@ export async function saveExportFile({
     return { saved: true }
   }
 
-  const rememberedDirectory = localStorage.getItem(EXPORT_DIRECTORY_STORAGE_KEY)
-
-  if (rememberedDirectory) {
-    try {
-      const exportPath = await join(rememberedDirectory, fileName)
-      await writeExportFile(exportPath, contents)
-      return { saved: true, path: exportPath }
-    } catch (error) {
-      console.warn("Folder ekspor tersimpan tidak dapat digunakan:", error)
-      localStorage.removeItem(EXPORT_DIRECTORY_STORAGE_KEY)
+  try {
+    let data: number[];
+    if (typeof contents === "string") {
+      data = Array.from(new TextEncoder().encode(contents));
+    } else if (contents instanceof ArrayBuffer) {
+      data = Array.from(new Uint8Array(contents));
+    } else if (contents instanceof Uint8Array) {
+      data = Array.from(contents);
+    } else {
+      data = contents;
     }
+
+    const path = await invoke<string>("save_arxiva_file", {
+      subfolder: "excel",
+      filename: fileName,
+      data,
+    });
+    return { saved: true, path };
+  } catch (error) {
+    console.error("Gagal menyimpan file ekspor ke folder arxiva/excel:", error);
+    return { saved: false };
   }
-
-  const selectedPath = await save({
-    title: "Pilih lokasi penyimpanan hasil export",
-    defaultPath: fileName,
-    filters: [
-      {
-        name: "Excel CSV",
-        extensions: ["csv"],
-      },
-    ],
-  })
-
-  if (!selectedPath) {
-    return { saved: false }
-  }
-
-  await writeExportFile(selectedPath, contents)
-  localStorage.setItem(
-    EXPORT_DIRECTORY_STORAGE_KEY,
-    await dirname(selectedPath)
-  )
-
-  return { saved: true, path: selectedPath }
 }

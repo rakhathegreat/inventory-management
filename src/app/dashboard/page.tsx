@@ -1,59 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { invoke } from "@tauri-apps/api/core"
 import { ChartAreaInteractive } from "@/components/chart-area-interactive"
 import { DataTable } from "@/components/data-table"
-import {
-    SectionCards,
-    type InventoryStats,
-} from "@/components/section-cards"
-import {
-    SectionCharts,
-    type SafetyStockAlert,
-} from "@/components/section-charts"
+import { SectionCards } from "@/components/section-cards"
+import { SectionCharts } from "@/components/section-charts"
 import { useAuth } from "@/lib/auth"
+import type { Transaction, DashboardTransaction } from "@/types/transaction"
+import type { InventoryItem, Category } from "@/types/inventory"
+import type { InventoryStats, SafetyStockAlert } from "@/types/dashboard"
 
-type Transaction = {
-    id: string;
-    tanggal: string;
-    nomor: string;
-    kategori: string;
-    status: string;
-    sn: string;
-    merek: string;
-    asal: string | null;
-    tujuan: string | null;
-    mitra?: string | null;
-    keterangan?: string | null;
+const getBaseUrl = () => {
+    const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+    return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 };
 
-type InventoryItem = {
-    id: string
-    status: string
-    kategori: string
-    mitra?: string | null
-}
-
-type Category = {
-    name: string
-    safetyStock: number
-}
+const getHeaders = () => {
+    const token = localStorage.getItem("arxiva-auth-token");
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+    };
+    if (token) {
+        headers["Authorization"] = `${token}`;
+    }
+    return headers;
+};
 
 const DASHBOARD_TRANSACTION_LIMIT = 6
 const DASHBOARD_REFRESH_INTERVAL = 5000
-
-type DashboardTransaction = {
-    id: string
-    tanggal: string
-    nomor: string
-    kategori: string
-    status: string
-    sn: string
-    merek: string
-    asal: string
-    tujuan: string
-    mitra: string
-    keterangan: string
-}
 
 export default function DashboardPage() {
     const { user } = useAuth()
@@ -63,8 +35,9 @@ export default function DashboardPage() {
     const [inventoryStats, setInventoryStats] = useState<InventoryStats>({
         totalItems: 0,
         tersedia: 0,
-        keluar: 0,
+        diluar: 0,
         rusak: 0,
+        hilang: 0,
     })
     const isFetchingRef = useRef(false)
 
@@ -73,22 +46,33 @@ export default function DashboardPage() {
 
         isFetchingRef.current = true
         try {
-            const [transactionData, itemData, categoryData] = await Promise.all([
-                invoke<Transaction[]>("get_transactions"),
-                invoke<InventoryItem[]>("get_items"),
-                invoke<Category[]>("get_categories"),
+            const [resTrx, resItems, resCat] = await Promise.all([
+                fetch(`${getBaseUrl()}/transactions`, { method: "GET", headers: getHeaders() }),
+                fetch(`${getBaseUrl()}/items`, { method: "GET", headers: getHeaders() }),
+                fetch(`${getBaseUrl()}/categories`, { method: "GET", headers: getHeaders() }),
             ])
+            const rawTrx = await resTrx.json()
+            const rawItems = await resItems.json()
+            const rawCat = await resCat.json()
+            const transactionData: Transaction[] = Array.isArray(rawTrx.data || rawTrx) ? (rawTrx.data || rawTrx) : []
+            const itemData: InventoryItem[] = Array.isArray(rawItems.data || rawItems) ? (rawItems.data || rawItems) : []
+            const categoriesList = Array.isArray(rawCat.data || rawCat) ? (rawCat.data || rawCat) : []
+            const categoryData: Category[] = categoriesList.map((c: any) => ({
+                ...c,
+                name: c.nama || c.name || "",
+                safetyStock: c.safetyStock !== undefined ? c.safetyStock : (c.safety_stock || 5),
+            }))
             const visibleTransactions = transactionData.filter(
                 (transaction) =>
                     user?.role !== "mitra" ||
                     transaction.mitra?.trim().toLowerCase() ===
-                        user.displayName.trim().toLowerCase()
+                    user.displayName.trim().toLowerCase()
             )
             const visibleItems = itemData.filter(
                 (item) =>
                     user?.role !== "mitra" ||
                     item.mitra?.trim().toLowerCase() ===
-                        user.displayName.trim().toLowerCase()
+                    user.displayName.trim().toLowerCase()
             )
             const flattened = visibleTransactions
                 .slice(0, DASHBOARD_TRANSACTION_LIMIT)
@@ -110,13 +94,16 @@ export default function DashboardPage() {
             setInventoryStats({
                 totalItems: visibleItems.length,
                 tersedia: visibleItems.filter(
-                    (item) => item.status.trim().toLowerCase() === "masuk"
+                    (item) => item.status.trim().toLowerCase() === "tersedia"
                 ).length,
-                keluar: visibleItems.filter(
-                    (item) => item.status.trim().toLowerCase() === "keluar"
+                diluar: visibleItems.filter(
+                    (item) => item.status.trim().toLowerCase() === "diluar"
                 ).length,
                 rusak: visibleItems.filter(
                     (item) => item.status.trim().toLowerCase() === "rusak"
+                ).length,
+                hilang: visibleItems.filter(
+                    (item) => item.status.trim().toLowerCase() === "hilang"
                 ).length,
             })
 
@@ -126,7 +113,7 @@ export default function DashboardPage() {
                 const categoryKey = item.kategori.trim().toLowerCase()
                 ownedCategories.add(categoryKey)
 
-                if (item.status.trim().toLowerCase() === "masuk") {
+                if (item.status.trim().toLowerCase() === "tersedia") {
                     availableByCategory.set(
                         categoryKey,
                         (availableByCategory.get(categoryKey) || 0) + 1
@@ -205,8 +192,8 @@ export default function DashboardPage() {
                 stats={inventoryStats}
                 totalLabel={
                     user?.role === "mitra"
-                        ? "Total Barang Mitra"
-                        : "Total Semua Barang"
+                        ? "Total"
+                        : "Total"
                 }
             />
             <SectionCharts

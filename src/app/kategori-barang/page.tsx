@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import {
-  Plus, Edit, Trash2, Search, Shapes, MoreVertical, ShieldAlert
+  Plus, Edit, Trash2, Search, Shapes, MoreVertical, ShieldAlert, Loader2
 } from "lucide-react";
 
 const getBaseUrl = () => {
@@ -39,13 +39,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
-type Kategori = {
-  id: string;
-  name: string;
-  description: string;
-  totalItems: number;
-  safetyStock: number;
-};
+import type { Kategori } from "@/types/inventory";
 
 export default function KategoriBarangPage() {
   const [categories, setCategories] = useState<Kategori[]>([]);
@@ -57,6 +51,8 @@ export default function KategoriBarangPage() {
 
   // Alert state
   const [deleteAlertData, setDeleteAlertData] = useState<{ isOpen: boolean; id: string; name: string }>({ isOpen: false, id: "", name: "" });
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form state
   const [name, setName] = useState("");
@@ -122,6 +118,7 @@ export default function KategoriBarangPage() {
   };
 
   const handleSave = async () => {
+    if (isSaving) return;
     const normalizedName = name.trim();
     if (!normalizedName) {
       setNameError("Nama kategori wajib diisi.");
@@ -145,6 +142,7 @@ export default function KategoriBarangPage() {
       return;
     }
 
+    setIsSaving(true);
     try {
       if (editId) {
         const cat = categories.find(c => c.id === editId);
@@ -190,6 +188,8 @@ export default function KategoriBarangPage() {
     } catch (error: any) {
       console.error("Failed to save category:", error);
       toast.error(error.message || (typeof error === "string" ? error : "Gagal menyimpan kategori."));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -198,9 +198,11 @@ export default function KategoriBarangPage() {
   };
 
   const confirmDelete = async () => {
+    if (isDeleting) return;
     const { id } = deleteAlertData;
     if (!id) return;
 
+    setIsDeleting(true);
     try {
       const response = await fetch(`${getBaseUrl()}/categories/${id}`, {
         method: "DELETE",
@@ -218,6 +220,7 @@ export default function KategoriBarangPage() {
       console.error("Failed to delete category:", error);
       toast.error(error.message || "Gagal menghapus kategori.");
     } finally {
+      setIsDeleting(false);
       setDeleteAlertData({ isOpen: false, id: "", name: "" });
     }
   };
@@ -350,13 +353,16 @@ export default function KategoriBarangPage() {
             </div>
           </div>
           <SheetFooter className="p-6 border-t border-neutral-800/60 bg-neutral-900/20 flex sm:justify-end gap-3 sm:gap-2">
-            <Button variant="outline" onClick={() => setIsSheetOpen(false)} className="hover:bg-neutral-800 text-neutral-300">Batal</Button>
-            <Button onClick={handleSave}>Simpan Perubahan</Button>
+            <Button variant="outline" onClick={() => setIsSheetOpen(false)} className="hover:bg-neutral-800 text-neutral-300" disabled={isSaving}>Batal</Button>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Simpan Perubahan
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
 
-      <AlertDialog open={deleteAlertData.isOpen} onOpenChange={(open) => !open && setDeleteAlertData({ ...deleteAlertData, isOpen: false })}>
+      <AlertDialog open={deleteAlertData.isOpen} onOpenChange={(open) => !open && !isDeleting && setDeleteAlertData({ ...deleteAlertData, isOpen: false })}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Apakah Anda yakin?</AlertDialogTitle>
@@ -365,8 +371,11 @@ export default function KategoriBarangPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>Lanjutkan</AlertDialogAction>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={isDeleting}>
+              {isDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Lanjutkan
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

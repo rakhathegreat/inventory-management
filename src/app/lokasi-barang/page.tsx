@@ -3,9 +3,26 @@
 import { useState, useMemo, useEffect } from "react";
 import {
   Plus, Edit, Trash2, Power, Layers, Archive, MoreVertical,
-  Search, Box, AlignJustify
+  Search, Box, AlignJustify, Loader2, QrCode
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import QRCode from "qrcode";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+
+const getBaseUrl = () => {
+  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+};
+
+const getHeaders = () => {
+  const token = localStorage.getItem("arxiva-auth-token");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `${token}`;
+  }
+  return headers;
+};
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,39 +43,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { useAuth } from "@/lib/auth";
-
-// Types
-type BrandRule = string;
-
-type Level = {
-  id: string;
-  name: string;
-  capacity: number;
-  usedCapacity: number;
-  brandRule: BrandRule;
-  isActive: boolean;
-};
-
-type StorageLocation = {
-  id: string;
-  name: string;
-  type: "Rak" | "Kardus";
-  isActive: boolean;
-  levels?: Level[];
-  capacity?: number;
-  usedCapacity?: number;
-  brandRule?: BrandRule;
-  owner: string;
-};
-
-type SheetMode = "closed" | "add-rak" | "add-kardus" | "edit-rak" | "edit-kardus" | "add-level" | "edit-level";
-
+import type { StorageLocation } from "@/types/inventory";
+import type { SheetMode } from "@/types/ui";
 
 export default function LokasiBarangPage() {
-  const { user } = useAuth();
-  const isMitra = user?.role === "mitra";
-  const currentOwner = isMitra ? user.displayName : "KP";
   const [locations, setLocations] = useState<StorageLocation[]>([]);
   const [brands, setBrands] = useState<string[]>(["Campuran"]);
   const [sheetMode, setSheetMode] = useState<SheetMode>("closed");
@@ -82,16 +70,20 @@ export default function LokasiBarangPage() {
     id: string;
     name: string;
   }>({ isOpen: false, type: null, id: "", name: "" });
+  const [isSaving, setIsSaving] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadLocations = async () => {
     try {
-      const data = await invoke<StorageLocation[]>("get_locations");
+      const res = await fetch(`${getBaseUrl()}/locations`, {
+        method: "GET",
+        headers: getHeaders(),
+      });
+      if (!res.ok) throw new Error("Gagal mengambil data lokasi");
+      const data = await res.json();
       setLocations(
-        data.filter(
-          (location) =>
-            (location.owner || "KP").trim().toLowerCase() ===
-            currentOwner.trim().toLowerCase()
-        )
+        data.filter((loc: StorageLocation) => loc.name !== "Keluar" && loc.name !== "Diluar")
       );
     } catch (error) {
       console.error("Failed to load locations:", error);
@@ -100,8 +92,14 @@ export default function LokasiBarangPage() {
 
   const loadBrands = async () => {
     try {
-      const data = await invoke<{ name: string }[]>("get_brands");
-      const brandNames = ["Campuran", ...data.map(b => b.name)];
+      const res = await fetch(`${getBaseUrl()}/brands`, {
+        method: "GET",
+        headers: getHeaders(),
+      });
+      if (!res.ok) throw new Error("Gagal mengambil data merek");
+      const data = await res.json();
+      const brandsList = data.data || data.brands || data;
+      const brandNames = ["Campuran", ...brandsList.map((b: any) => b.nama || b.name)];
       setBrands(brandNames);
     } catch (error) {
       console.error("Failed to load brands:", error);
@@ -112,7 +110,7 @@ export default function LokasiBarangPage() {
   useEffect(() => {
     loadLocations();
     loadBrands();
-  }, [currentOwner, isMitra]);
+  }, []);
 
   const stats = useMemo(() => {
     let totalRak = 0;
@@ -140,9 +138,7 @@ export default function LokasiBarangPage() {
   const filteredLocations = useMemo(() => {
     return locations.filter(loc => {
       const matchesTab = loc.type.toLowerCase() === activeTab;
-      const matchesSearch =
-        loc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        loc.owner.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = loc.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesTab && matchesSearch;
     });
   }, [locations, activeTab, searchQuery]);
@@ -186,66 +182,91 @@ export default function LokasiBarangPage() {
   };
 
   const handleSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
-      const effectiveOwner = currentOwner;
-
       if (sheetMode === "add-rak") {
-        const newRak: StorageLocation = {
-          id: `rak-${Date.now()}`,
+        const payload = {
           name: locName || "Rak Baru",
           type: "Rak",
-          isActive: true,
-          owner: effectiveOwner,
           levels: Array.from({ length: parseInt(locLevelsCount) || 1 }).map((_, i) => ({
-            id: `lvl-${Date.now()}-${i}`,
             name: `Level ${i + 1}`,
             capacity: 0,
-            usedCapacity: 0,
-            brandRule: "Campuran",
-            isActive: true
+            brandRule: "Campuran"
           }))
         };
-        await invoke("save_location", { location: newRak });
+        const res = await fetch(`${getBaseUrl()}/locations`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || "Gagal menambahkan rak");
+        }
       } else if (sheetMode === "add-kardus") {
-        const newKardus: StorageLocation = {
-          id: `kar-${Date.now()}`,
+        const payload = {
           name: locName || "Kardus Baru",
           type: "Kardus",
-          isActive: true,
-          owner: effectiveOwner,
           capacity: parseInt(locCapacity) || 0,
-          usedCapacity: 0,
           brandRule: locBrand
         };
-        await invoke("save_location", { location: newKardus });
+        const res = await fetch(`${getBaseUrl()}/locations`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || "Gagal menambahkan kardus");
+        }
       } else if (sheetMode === "edit-rak" && activeItem?.parentId) {
-        const loc = locations.find(l => l.id === activeItem.parentId);
-        if (loc) {
-          const updated = { ...loc, name: locName, owner: effectiveOwner };
-          await invoke("save_location", { location: updated });
+        const res = await fetch(`${getBaseUrl()}/locations/${activeItem.parentId}`, {
+          method: "PUT",
+          headers: getHeaders(),
+          body: JSON.stringify({ name: locName }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || "Gagal memperbarui rak");
         }
       } else if (sheetMode === "edit-kardus" && activeItem?.parentId) {
-        const loc = locations.find(l => l.id === activeItem.parentId);
-        if (loc) {
-          const updated = { ...loc, name: locName, owner: effectiveOwner, capacity: parseInt(locCapacity) || 0, brandRule: locBrand };
-          await invoke("save_location", { location: updated });
+        const res = await fetch(`${getBaseUrl()}/locations/${activeItem.parentId}`, {
+          method: "PUT",
+          headers: getHeaders(),
+          body: JSON.stringify({ name: locName, capacity: parseInt(locCapacity) || 0, brandRule: locBrand }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || "Gagal memperbarui kardus");
         }
       } else if (sheetMode === "add-level" && activeItem?.parentId) {
-        const newLevel: Level = {
-          id: `lvl-${Date.now()}`,
-          name: levelName || "Level Baru",
-          capacity: parseInt(locCapacity) || 0,
-          usedCapacity: 0,
-          brandRule: locBrand,
-          isActive: true
-        };
-        await invoke("save_level", { level: newLevel, locationId: activeItem.parentId });
+        const res = await fetch(`${getBaseUrl()}/locations/${activeItem.parentId}/levels`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({
+            name: levelName || "Level Baru",
+            capacity: parseInt(locCapacity) || 0,
+            brandRule: locBrand
+          }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || "Gagal menambahkan level");
+        }
       } else if (sheetMode === "edit-level" && activeItem?.parentId && activeItem?.levelId) {
-        const loc = locations.find(l => l.id === activeItem.parentId);
-        const lvl = loc?.levels?.find(l => l.id === activeItem.levelId);
-        if (lvl) {
-          const updatedLevel = { ...lvl, name: levelName, capacity: parseInt(locCapacity) || 0, brandRule: locBrand };
-          await invoke("save_level", { level: updatedLevel, locationId: activeItem.parentId });
+        const res = await fetch(`${getBaseUrl()}/locations/${activeItem.parentId}/levels/${activeItem.levelId}`, {
+          method: "PUT",
+          headers: getHeaders(),
+          body: JSON.stringify({
+            name: levelName,
+            capacity: parseInt(locCapacity) || 0,
+            brandRule: locBrand
+          }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || "Gagal memperbarui level");
         }
       }
       await loadLocations();
@@ -257,38 +278,58 @@ export default function LokasiBarangPage() {
       }
 
       setSheetMode("closed");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save location data:", error);
-      toast.error("Gagal menyimpan data lokasi.");
+      toast.error(error.message || "Gagal menyimpan data lokasi.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleToggleLocation = async (id: string) => {
+    if (isToggling) return;
+    setIsToggling(true);
     try {
       const loc = locations.find(l => l.id === id);
       if (loc) {
-        await invoke("toggle_location_active", { id, isActive: !loc.isActive });
+        const res = await fetch(`${getBaseUrl()}/locations/${id}/toggle`, {
+          method: "PATCH",
+          headers: getHeaders(),
+          body: JSON.stringify({ isActive: !loc.isActive }),
+        });
+        if (!res.ok) throw new Error("Gagal mengubah status lokasi");
         await loadLocations();
         toast.success(`Berhasil ${!loc.isActive ? 'mengaktifkan' : 'menonaktifkan'} lokasi`);
       }
     } catch (error) {
       console.error("Failed to toggle location:", error);
       toast.error("Gagal mengubah status lokasi");
+    } finally {
+      setIsToggling(false);
     }
   };
 
   const handleToggleLevel = async (rakId: string, levelId: string) => {
+    if (isToggling) return;
+    setIsToggling(true);
     try {
       const loc = locations.find(l => l.id === rakId);
       const lvl = loc?.levels?.find(l => l.id === levelId);
       if (lvl) {
-        await invoke("toggle_level_active", { id: levelId, isActive: !lvl.isActive });
+        const res = await fetch(`${getBaseUrl()}/locations/${rakId}/levels/${levelId}/toggle`, {
+          method: "PATCH",
+          headers: getHeaders(),
+          body: JSON.stringify({ isActive: !lvl.isActive }),
+        });
+        if (!res.ok) throw new Error("Gagal mengubah status level");
         await loadLocations();
         toast.success(`Berhasil ${!lvl.isActive ? 'mengaktifkan' : 'menonaktifkan'} level`);
       }
     } catch (error) {
       console.error("Failed to toggle level:", error);
       toast.error("Gagal mengubah status level");
+    } finally {
+      setIsToggling(false);
     }
   };
 
@@ -300,23 +341,116 @@ export default function LokasiBarangPage() {
     setDeleteAlertData({ isOpen: true, type: "level", id: levelId, name });
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isDeleting) return;
     const { type, id } = deleteAlertData;
     if (!type || !id) return;
 
+    setIsDeleting(true);
     try {
       if (type === "location") {
-        await invoke("delete_location", { id });
+        const res = await fetch(`${getBaseUrl()}/locations/${id}`, {
+          method: "DELETE",
+          headers: getHeaders(),
+        });
+        if (!res.ok) throw new Error("Gagal menghapus lokasi");
       } else if (type === "level") {
-        await invoke("delete_level", { id });
+        const loc = locations.find(l => l.levels?.some(lvl => lvl.id === id));
+        const locId = loc ? loc.id : "default";
+        const res = await fetch(`${getBaseUrl()}/locations/${locId}/levels/${id}`, {
+          method: "DELETE",
+          headers: getHeaders(),
+        });
+        if (!res.ok) throw new Error("Gagal menghapus level");
       }
       await loadLocations();
       toast.success(`Berhasil menghapus ${type === "location" ? "lokasi" : "level"}`);
+      setDeleteAlertData({ isOpen: false, type: null, id: "", name: "" });
     } catch (error) {
       console.error("Failed to delete:", error);
       toast.error(`Gagal menghapus data`);
     } finally {
-      setDeleteAlertData({ isOpen: false, type: null, id: "", name: "" });
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDownloadQrCode = async (url: string | null | undefined, locationName: string) => {
+    if (!url) {
+      toast.error("Link spreadsheet belum tersedia untuk lokasi ini.");
+      return;
+    }
+
+    try {
+      // Generate QR Code data URL
+      const qrDataUrl = await QRCode.toDataURL(url, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: "#000000",
+          light: "#ffffff",
+        },
+      });
+
+      // Create an image object to load the QR code
+      const img = new Image();
+      img.src = qrDataUrl;
+      await new Promise((resolve) => {
+        img.onload = resolve;
+      });
+
+      // Create canvas with extra space for text
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d")!;
+      const width = 340;
+      const height = 380;
+      canvas.width = width;
+      canvas.height = height;
+
+      // Fill background
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+
+      // Draw QR Code
+      ctx.drawImage(img, 20, 20, 300, 300);
+
+      // Draw Location Name text
+      ctx.fillStyle = "#000000";
+      ctx.font = "bold 44px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(locationName, width / 2, 345);
+
+      // Create download link
+      const downloadUrl = canvas.toDataURL("image/png");
+      const filename = `${locationName.replace(/[^a-zA-Z0-9]/g, "_")}.png`;
+
+      if (isTauri()) {
+        const base64Data = downloadUrl.replace(/^data:image\/png;base64,/, "");
+        const binaryString = window.atob(base64Data);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const savedPath = await invoke<string>("save_arxiva_file", {
+          subfolder: "qr",
+          filename,
+          data: Array.from(bytes),
+        });
+        toast.success(`Berhasil menyimpan QR Code ke folder ${savedPath}`);
+      } else {
+        const link = document.createElement("a");
+        link.href = downloadUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success(`Berhasil menyimpan QR Code untuk ${locationName}`);
+      }
+    } catch (error) {
+      console.error("Gagal menyimpan QR Code:", error);
+      toast.error("Terjadi kesalahan saat membuat QR Code.");
     }
   };
 
@@ -424,20 +558,6 @@ export default function LokasiBarangPage() {
     );
   };
 
-  const renderOwnerInput = () => (
-    <div className="space-y-2">
-      <Label>Pemilik Lokasi</Label>
-      <div className="flex h-9 items-center rounded-md border border-neutral-800 bg-neutral-900 px-3 text-sm">
-        {currentOwner}
-      </div>
-      <p className="text-xs text-neutral-500">
-        {isMitra
-          ? "Lokasi ini hanya dapat digunakan oleh akun Mitra Anda."
-          : "Lokasi Admin selalu tersimpan sebagai milik KP."}
-      </p>
-    </div>
-  );
-
   const renderForm = () => {
     if (sheetMode === "add-rak" || sheetMode === "edit-rak") {
       return (
@@ -446,7 +566,6 @@ export default function LokasiBarangPage() {
             <Label>Nama Rak</Label>
             <Input value={locName} onChange={e => setLocName(e.target.value)} placeholder="Contoh: Rak A1" className="bg-neutral-900 border-neutral-800" />
           </div>
-          {renderOwnerInput()}
           {sheetMode === "add-rak" && (
             <div className="space-y-2">
               <Label>Jumlah Level Awal</Label>
@@ -464,7 +583,6 @@ export default function LokasiBarangPage() {
             <Label>Nama Kardus</Label>
             <Input value={locName} onChange={e => setLocName(e.target.value)} placeholder="Contoh: Kardus K-01" className="bg-neutral-900 border-neutral-800" />
           </div>
-          {renderOwnerInput()}
           {renderCapacityInput()}
           <div className="space-y-2">
             <Label>Merek</Label>
@@ -638,8 +756,6 @@ export default function LokasiBarangPage() {
                       </div>
                       <CardDescription className="flex items-center gap-2 text-xs font-medium">
                         <span className="text-neutral-400">{loc.levels?.length || 0} Level</span>
-                        <span className="text-neutral-600">•</span>
-                        <span className="text-blue-400">{loc.owner}</span>
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
@@ -657,10 +773,10 @@ export default function LokasiBarangPage() {
                             <Plus className="w-4 h-4 mr-2" /> Tambah Level
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-neutral-800" />
-                          <DropdownMenuItem className="cursor-pointer focus:bg-neutral-800" onClick={() => handleToggleLocation(loc.id)}>
+                          <DropdownMenuItem disabled={isToggling} className="cursor-pointer focus:bg-neutral-800" onClick={() => handleToggleLocation(loc.id)}>
                             <Power className="w-4 h-4 mr-2" /> {loc.isActive ? "Nonaktifkan Rak" : "Aktifkan Rak"}
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDeleteLocation(loc.id, loc.name)}>
+                          <DropdownMenuItem disabled={isDeleting} className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDeleteLocation(loc.id, loc.name)}>
                             <Trash2 className="w-4 h-4 mr-2" /> Hapus Rak
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -690,10 +806,13 @@ export default function LokasiBarangPage() {
                                   <DropdownMenuItem className="cursor-pointer focus:bg-neutral-800" onClick={() => handleOpenSheet("edit-level", { parentId: loc.id, levelId: lvl.id })}>
                                     <Edit className="w-4 h-4 mr-2" /> Edit Level
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem disabled={!loc.isActive} className="cursor-pointer focus:bg-neutral-800" onClick={() => handleToggleLevel(loc.id, lvl.id)}>
+                                  <DropdownMenuItem className="cursor-pointer focus:bg-neutral-800" onClick={() => handleDownloadQrCode(lvl.sheetUrl, `${loc.name} - ${lvl.name}`)}>
+                                    <QrCode className="w-4 h-4 mr-2" /> Simpan QR Code
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled={!loc.isActive || isToggling} className="cursor-pointer focus:bg-neutral-800" onClick={() => handleToggleLevel(loc.id, lvl.id)}>
                                     <Power className="w-4 h-4 mr-2" /> {lvl.isActive ? "Nonaktifkan Level" : "Aktifkan Level"}
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDeleteLevel(lvl.id, lvl.name)}>
+                                  <DropdownMenuItem disabled={isDeleting} className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDeleteLevel(lvl.id, lvl.name)}>
                                     <Trash2 className="w-4 h-4 mr-2" /> Hapus Level
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -739,7 +858,6 @@ export default function LokasiBarangPage() {
                       </div>
                       <div className="space-y-0.5">
                         <CardTitle className="text-base font-semibold tracking-tight text-neutral-100">{loc.name}</CardTitle>
-                        <p className="text-xs font-medium text-orange-400">{loc.owner}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -756,11 +874,14 @@ export default function LokasiBarangPage() {
                           <DropdownMenuItem className="cursor-pointer focus:bg-neutral-800" onClick={() => handleOpenSheet("edit-kardus", { parentId: loc.id })}>
                             <Edit className="w-4 h-4 mr-2" /> Edit Kardus
                           </DropdownMenuItem>
+                          <DropdownMenuItem className="cursor-pointer focus:bg-neutral-800" onClick={() => handleDownloadQrCode(loc.sheetUrl, loc.name)}>
+                            <QrCode className="w-4 h-4 mr-2" /> Simpan QR Code
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-neutral-800" />
-                          <DropdownMenuItem className="cursor-pointer focus:bg-neutral-800" onClick={() => handleToggleLocation(loc.id)}>
+                          <DropdownMenuItem disabled={isToggling} className="cursor-pointer focus:bg-neutral-800" onClick={() => handleToggleLocation(loc.id)}>
                             <Power className="w-4 h-4 mr-2" /> {loc.isActive ? "Nonaktifkan Kardus" : "Aktifkan Kardus"}
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDeleteLocation(loc.id, loc.name)}>
+                          <DropdownMenuItem disabled={isDeleting} className="text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => requestDeleteLocation(loc.id, loc.name)}>
                             <Trash2 className="w-4 h-4 mr-2" /> Hapus Kardus
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -810,8 +931,10 @@ export default function LokasiBarangPage() {
             </div>
           </div>
           <SheetFooter className="p-6 border-t border-neutral-800/60 bg-neutral-900/20 flex sm:justify-end gap-3 sm:gap-2">
-            <Button variant="outline" onClick={() => setSheetMode("closed")} className="hover:bg-neutral-800 text-neutral-300">Batal</Button>
-            <Button onClick={handleSave}>Simpan Perubahan</Button>
+            <Button variant="outline" onClick={() => setSheetMode("closed")} disabled={isSaving} className="hover:bg-neutral-800 text-neutral-300">Batal</Button>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menyimpan...</> : "Simpan Perubahan"}
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
@@ -825,8 +948,10 @@ export default function LokasiBarangPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>Lanjutkan</AlertDialogAction>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={isDeleting}>
+              {isDeleting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Menghapus...</> : "Lanjutkan"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

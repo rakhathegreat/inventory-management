@@ -9,15 +9,10 @@ import {
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { useLocation } from "react-router-dom"
-import { Badge } from "@/components/ui/badge"
-import { useAuth } from "@/lib/auth"
 
 export function SiteHeader() {
     const location = useLocation()
-    const { user } = useAuth()
     const path = location.pathname
-    const userBadgeLabel =
-        user?.role === "admin" ? user?.identityCode || "Admin" : "Mitra"
 
     // Determine breadcrumbs based on route
     let parent = "Menu Utama"

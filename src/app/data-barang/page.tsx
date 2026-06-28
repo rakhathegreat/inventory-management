@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
-import { invoke } from "@tauri-apps/api/core"
+import { useState, useMemo, useEffect, useRef } from "react"
 import {
   Boxes,
   Plus,
@@ -11,8 +10,7 @@ import {
   Edit,
   Download,
   ScanLine,
-  ShieldCheck,
-  TriangleAlert,
+  Loader2,
 } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
@@ -67,73 +65,35 @@ import {
 import { toast } from "sonner"
 import { Link } from "react-router-dom"
 import { saveExportFile } from "@/lib/export-file"
+import * as XLSX from "xlsx"
 import { useAuth } from "@/lib/auth"
 
-type StatusUnit = "Masuk" | "Keluar" | "Rusak"
+const getBaseUrl = () => {
+  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+};
 
-interface BarangUnit {
-  id: string;
-  serialNumber: string;
-  kategori: string;
-  merek: string;
-  status: StatusUnit;
-  lokasiPenyimpanan: string;
-  tanggalMasuk: string;
-  tanggalKeluar?: string;
-  mitra?: string | null;
-}
-
-interface RiwayatUnit {
-  tanggal: string;
-  tipe: string;
-  nomorSurat: string;
-  dariStatus: string;
-  keStatus: string;
-  lokasi: string;
-  catatan?: string;
-}
-
-interface Transaction {
-  id: string;
-  tanggal: string;
-  nomor: string;
-  kategori: string;
-  status: string;
-  sn: string;
-  merek: string;
-  asal: string | null;
-  tujuan: string | null;
-  mitra?: string | null;
-  keterangan?: string | null;
-}
-
-type CategoryDefinition = {
-  name: string
-  safetyStock: number
-}
-
-type StorageLocationOption = {
-  name: string
-  owner: string
-}
-
-type DeleteDialogState =
-  | {
-    type: "single"
-    ids: string[]
-    serialNumber: string
+const getHeaders = () => {
+  const token = localStorage.getItem("arxiva-auth-token");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `${token}`;
   }
-  | {
-    type: "bulk"
-    ids: string[]
-  }
+  return headers;
+};
 
-const STATUS_OPTIONS: StatusUnit[] = ["Masuk", "Keluar", "Rusak"]
+import type { StatusUnit, BarangUnit, RiwayatUnit, CategoryDefinition, StorageLocationOption } from "@/types/inventory"
+import type { Transaction } from "@/types/transaction"
+import type { DeleteDialogState } from "@/types/ui"
+
+const STATUS_OPTIONS: StatusUnit[] = ["Tersedia", "Diluar", "Rusak", "Hilang"]
 const ADMIN_LOCATION = "KP"
 const getLokasiPenyimpanan = (
   status: StatusUnit,
   lokasiPenyimpanan: string
-) => status === "Keluar" ? "Keluar" : lokasiPenyimpanan.trim()
+) => status === "Diluar" ? "Diluar" : lokasiPenyimpanan.trim()
 
 function EmptyBarangTableState({
   isFiltered,
@@ -141,7 +101,7 @@ function EmptyBarangTableState({
   isFiltered: boolean
 }) {
   return (
-    <div className="flex min-h-[300px] items-center justify-center px-6 py-12">
+    <div className="flex min-h-75 items-center justify-center px-6 py-12">
       <div className="flex max-w-md flex-col items-center gap-4 text-center">
         <div className="flex size-14 items-center justify-center rounded-full border bg-muted/40 text-muted-foreground">
           {isFiltered ? (
@@ -177,7 +137,11 @@ export default function DataBarangPage() {
 
   const loadData = async () => {
     try {
-      const data = await invoke<BarangUnit[]>("get_items")
+      const resItems = await fetch(`${getBaseUrl()}/items`, { method: "GET", headers: getHeaders() })
+      if (!resItems.ok) throw new Error("Gagal mengambil data barang")
+      const rawItems = await resItems.json()
+      const data: BarangUnit[] = rawItems.data || rawItems
+
       const visibleData =
         user?.role === "mitra"
           ? data.filter(
@@ -198,18 +162,20 @@ export default function DataBarangPage() {
 
       const legacyExitedItems = visibleData.filter(
         (item) =>
-          item.status === "Keluar" &&
-          item.lokasiPenyimpanan?.trim() !== "Keluar"
+          item.status === "Diluar" &&
+          item.lokasiPenyimpanan?.trim() !== "Diluar"
       )
 
       if (legacyExitedItems.length > 0) {
         const updateResults = await Promise.allSettled(
           legacyExitedItems.map((item) =>
-            invoke("update_item", {
-              item: {
+            fetch(`${getBaseUrl()}/items/${item.id}`, {
+              method: "PUT",
+              headers: getHeaders(),
+              body: JSON.stringify({
                 ...item,
-                lokasiPenyimpanan: "Keluar",
-              },
+                lokasiPenyimpanan: "Diluar",
+              }),
             })
           )
         )
@@ -219,7 +185,10 @@ export default function DataBarangPage() {
         }
       }
 
-      const transactionData = await invoke<Transaction[]>("get_transactions")
+      const resTrx = await fetch(`${getBaseUrl()}/transactions`, { method: "GET", headers: getHeaders() })
+      const rawTrx = await resTrx.json()
+      const transactionData: Transaction[] = rawTrx.data || rawTrx
+
       setTransactions(
         user?.role === "mitra"
           ? transactionData.filter(
@@ -230,7 +199,15 @@ export default function DataBarangPage() {
           : transactionData
       )
 
-      const categories = await invoke<any[]>("get_categories")
+      const resCat = await fetch(`${getBaseUrl()}/categories`, { method: "GET", headers: getHeaders() })
+      const rawCat = await resCat.json()
+      const categoriesList = rawCat.data || rawCat
+      const categories = (Array.isArray(categoriesList) ? categoriesList : []).map((c: any) => ({
+        ...c,
+        name: c.nama || c.name || "",
+        safetyStock: c.safetyStock !== undefined ? c.safetyStock : (c.safety_stock || 5),
+      }))
+
       setDbCategories(categories.map(c => c.name))
       setCategoryDefinitions(
         categories.map((category) => ({
@@ -239,9 +216,11 @@ export default function DataBarangPage() {
         }))
       )
 
-      const locationsData = await invoke<any[]>("get_locations")
+      const resLoc = await fetch(`${getBaseUrl()}/locations`, { method: "GET", headers: getHeaders() })
+      const rawLoc = await resLoc.json()
+      const locationsData = rawLoc.data || rawLoc
       const locs: StorageLocationOption[] = []
-      locationsData.forEach(loc => {
+      locationsData.forEach((loc: any) => {
         const owner = loc.owner || ADMIN_LOCATION
         if (loc.type === "Rak" && loc.levels) {
           loc.levels.forEach((lvl: any) =>
@@ -275,18 +254,21 @@ export default function DataBarangPage() {
     serialNumber: "",
     kategori: "",
     merek: "",
-    status: "Masuk" as StatusUnit,
+    status: "Tersedia" as StatusUnit,
     lokasiPenyimpanan: "",
     tanggalMasuk: "",
     tanggalKeluar: "",
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const isDetailOpenRef = useRef(false)
   const [detailBarang, setDetailBarang] = useState<BarangUnit | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const formLocationOwner =
     user?.role === "mitra"
@@ -305,7 +287,7 @@ export default function DataBarangPage() {
       serialNumber: "",
       kategori: "",
       merek: "",
-      status: "Masuk",
+      status: "Tersedia",
       lokasiPenyimpanan: "",
       tanggalMasuk: new Date().toISOString().slice(0, 10),
       tanggalKeluar: "",
@@ -334,8 +316,15 @@ export default function DataBarangPage() {
   }
 
   const handleOpenDetail = (barang: BarangUnit) => {
+    if (isDetailOpenRef.current) return;
+    isDetailOpenRef.current = true;
     setDetailBarang(barang)
     setIsDetailOpen(true)
+  }
+
+  const handleDetailOpenChange = (open: boolean) => {
+    isDetailOpenRef.current = open;
+    setIsDetailOpen(open);
   }
 
   const handleDelete = async (id: string) => {
@@ -349,12 +338,16 @@ export default function DataBarangPage() {
   }
 
   const confirmDelete = async () => {
-    if (!deleteDialog) return
+    if (!deleteDialog || isDeleting) return
     const idsToDelete = deleteDialog.ids
+    setIsDeleting(true)
 
     try {
       for (const id of idsToDelete) {
-        await invoke("delete_item", { id })
+        await fetch(`${getBaseUrl()}/items/${id}`, {
+          method: "DELETE",
+          headers: getHeaders(),
+        })
       }
 
       setBarangList(prev => prev.filter(b => !idsToDelete.includes(b.id)))
@@ -368,6 +361,8 @@ export default function DataBarangPage() {
       }
     } catch (error) {
       toast.error(deleteDialog.type === "single" ? "Gagal menghapus unit." : "Gagal menghapus beberapa unit.")
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -378,7 +373,9 @@ export default function DataBarangPage() {
     const transactionDate = new Date().toISOString().slice(0, 10)
     const dateCode = transactionDate.replace(/-/g, "")
     const prefix = `DMG-${dateCode}-`
-    const latestTransactions = await invoke<Transaction[]>("get_transactions")
+    const resTrx = await fetch(`${getBaseUrl()}/transactions`, { method: "GET", headers: getHeaders() })
+    const rawTrx = await resTrx.json()
+    const latestTransactions: Transaction[] = rawTrx.data || rawTrx
     let maxSequence = 0
 
     latestTransactions.forEach((transaction) => {
@@ -410,6 +407,7 @@ export default function DataBarangPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSaving) return
     const errors: Record<string, string> = {}
     const lokasiPenyimpanan = getLokasiPenyimpanan(
       formData.status,
@@ -420,10 +418,7 @@ export default function DataBarangPage() {
     if (!formData.merek.trim()) errors.merek = "Merek barang wajib diisi"
     if (!lokasiPenyimpanan) errors.lokasiPenyimpanan = "Lokasi penyimpanan wajib diisi"
     if (!formData.tanggalMasuk.trim()) errors.tanggalMasuk = "Tanggal masuk wajib diisi"
-    const isDuplicateSN = barangList.some(b =>
-      b.serialNumber.trim().toLowerCase() === formData.serialNumber.trim().toLowerCase() &&
-      (formMode === "add" || b.id !== selectedBarang?.id)
-    )
+    const isDuplicateSN = barangList.some(b => b.serialNumber.trim().toLowerCase() === formData.serialNumber.trim().toLowerCase() && (formMode === "add" || b.id !== selectedBarang?.id))
     if (isDuplicateSN) errors.serialNumber = "Serial number sudah terdaftar di sistem"
 
     if (Object.keys(errors).length > 0) {
@@ -432,115 +427,150 @@ export default function DataBarangPage() {
       return
     }
 
-    if (formMode === "add") {
-      const newBarang: BarangUnit = {
-        id: `UNIT-${Date.now()}`,
-        serialNumber: formData.serialNumber.toUpperCase(),
-        kategori: formData.kategori,
-        merek: formData.merek,
-        status: formData.status,
-        lokasiPenyimpanan,
-        tanggalMasuk: formData.tanggalMasuk,
-        tanggalKeluar: formData.tanggalKeluar || undefined,
-        mitra:
-          user?.role === "mitra"
-            ? user.displayName
-            : ADMIN_LOCATION,
-      }
-      try {
-        await invoke("add_item", { item: newBarang })
-
-        if (newBarang.status === "Rusak") {
-          let rusakTransaction: Transaction | null = null
-
-          try {
-            rusakTransaction = await buildRusakTransaction(
-              newBarang,
-              newBarang.lokasiPenyimpanan
-            )
-            await invoke("add_transaction", { transaction: rusakTransaction })
-            if (rusakTransaction) {
-              const savedTransaction = rusakTransaction
-              setTransactions(prev => [savedTransaction, ...prev])
-            }
-          } catch (transactionError) {
-            if (rusakTransaction) {
-              await invoke("delete_transaction", { id: rusakTransaction.id }).catch(() => undefined)
-            }
-            await invoke("delete_item", { id: newBarang.id })
-            throw transactionError
-          }
+    setIsSaving(true)
+    try {
+      if (formMode === "add") {
+        const newBarang: BarangUnit = {
+          id: crypto.randomUUID(),
+          serialNumber: formData.serialNumber.toUpperCase(),
+          kategori: formData.kategori,
+          merek: formData.merek,
+          status: formData.status,
+          lokasiPenyimpanan,
+          tanggalMasuk: formData.tanggalMasuk,
+          tanggalKeluar: formData.tanggalKeluar || undefined,
+          mitra:
+            user?.role === "mitra"
+              ? user.displayName
+              : ADMIN_LOCATION,
         }
-
-        setBarangList(prev => [newBarang, ...prev])
-        toast.success(`Unit baru dengan SN ${newBarang.serialNumber} berhasil didaftarkan!`)
-      } catch (error) {
-        toast.error("Gagal menyimpan unit.")
-        return
-      }
-    } else {
-      const originalBarang = selectedBarang!
-      const updatedBarang = {
-        ...originalBarang,
-        serialNumber: formData.serialNumber.toUpperCase(),
-        kategori: formData.kategori,
-        merek: formData.merek,
-        status: formData.status,
-        lokasiPenyimpanan,
-        tanggalMasuk: formData.tanggalMasuk,
-        tanggalKeluar: formData.tanggalKeluar || undefined,
-        mitra:
-          user?.role === "mitra"
-            ? user.displayName
-            : originalBarang.mitra || ADMIN_LOCATION,
-      }
-      const changedToRusak =
-        originalBarang.status !== "Rusak" && updatedBarang.status === "Rusak"
-
-      try {
-        await invoke("update_item", { item: updatedBarang })
-
-        if (changedToRusak) {
-          let rusakTransaction: Transaction | null = null
-
-          try {
-            rusakTransaction = await buildRusakTransaction(
-              updatedBarang,
-              originalBarang.lokasiPenyimpanan
-            )
-            await invoke("add_transaction", { transaction: rusakTransaction })
-            if (rusakTransaction) {
-              const savedTransaction = rusakTransaction
-              setTransactions(prev => [savedTransaction, ...prev])
-            }
-          } catch (transactionError) {
-            if (rusakTransaction) {
-              await invoke("delete_transaction", { id: rusakTransaction.id }).catch(() => undefined)
-            }
-            await invoke("update_item", { item: originalBarang })
-            throw transactionError
+        try {
+          const resAdd = await fetch(`${getBaseUrl()}/items`, {
+            method: "POST",
+            headers: getHeaders(),
+            body: JSON.stringify(newBarang),
+          })
+          if (!resAdd.ok) {
+            const err = await resAdd.json().catch(() => ({}))
+            throw new Error(err.message || "Gagal menyimpan unit.")
           }
-        }
 
-        setBarangList(prev => prev.map(b => b.id === originalBarang.id ? updatedBarang : b))
-        toast.success(
-          changedToRusak
-            ? `Unit dengan SN ${updatedBarang.serialNumber} ditandai Rusak dan dicatat ke riwayat.`
-            : `Unit dengan SN ${updatedBarang.serialNumber} berhasil diperbarui!`
-        )
-      } catch (error) {
-        console.error("Gagal memperbarui unit:", error)
-        toast.error(
-          changedToRusak
-            ? "Gagal menyimpan status Rusak ke data barang dan riwayat."
-            : "Gagal memperbarui unit."
-        )
-        return
+          if (newBarang.status === "Rusak") {
+            let rusakTransaction: Transaction | null = null
+
+            try {
+              rusakTransaction = await buildRusakTransaction(
+                newBarang,
+                newBarang.lokasiPenyimpanan
+              )
+              const resTrx = await fetch(`${getBaseUrl()}/transactions`, {
+                method: "POST",
+                headers: getHeaders(),
+                body: JSON.stringify(rusakTransaction),
+              })
+              if (!resTrx.ok) throw new Error("Gagal mencatat transaksi rusak")
+              if (rusakTransaction) {
+                const savedTransaction = rusakTransaction
+                setTransactions(prev => [savedTransaction, ...prev])
+              }
+            } catch (transactionError) {
+              if (rusakTransaction) {
+                await fetch(`${getBaseUrl()}/transactions/${rusakTransaction.id}`, { method: "DELETE", headers: getHeaders() }).catch(() => undefined)
+              }
+              await fetch(`${getBaseUrl()}/items/${newBarang.id}`, { method: "DELETE", headers: getHeaders() })
+              throw transactionError
+            }
+          }
+
+          setBarangList(prev => [newBarang, ...prev])
+          toast.success(`Unit baru dengan SN ${newBarang.serialNumber} berhasil didaftarkan!`)
+        } catch (error: any) {
+          toast.error(error.message || "Gagal menyimpan unit.")
+          return
+        }
+      } else {
+        const originalBarang = selectedBarang!
+        const updatedBarang = {
+          ...originalBarang,
+          serialNumber: formData.serialNumber.toUpperCase(),
+          kategori: formData.kategori,
+          merek: formData.merek,
+          status: formData.status,
+          lokasiPenyimpanan,
+          tanggalMasuk: formData.tanggalMasuk,
+          tanggalKeluar: formData.tanggalKeluar || undefined,
+          mitra:
+            user?.role === "mitra"
+              ? user.displayName
+              : originalBarang.mitra || ADMIN_LOCATION,
+        }
+        const changedToRusak =
+          originalBarang.status !== "Rusak" && updatedBarang.status === "Rusak"
+
+        try {
+          const resUpdate = await fetch(`${getBaseUrl()}/items/${updatedBarang.id}`, {
+            method: "PUT",
+            headers: getHeaders(),
+            body: JSON.stringify(updatedBarang),
+          })
+          if (!resUpdate.ok) {
+            const err = await resUpdate.json().catch(() => ({}))
+            throw new Error(err.message || "Gagal memperbarui unit.")
+          }
+
+          if (changedToRusak) {
+            let rusakTransaction: Transaction | null = null
+
+            try {
+              rusakTransaction = await buildRusakTransaction(
+                updatedBarang,
+                originalBarang.lokasiPenyimpanan
+              )
+              const resTrx = await fetch(`${getBaseUrl()}/transactions`, {
+                method: "POST",
+                headers: getHeaders(),
+                body: JSON.stringify(rusakTransaction),
+              })
+              if (!resTrx.ok) throw new Error("Gagal mencatat transaksi rusak")
+              if (rusakTransaction) {
+                const savedTransaction = rusakTransaction
+                setTransactions(prev => [savedTransaction, ...prev])
+              }
+            } catch (transactionError) {
+              if (rusakTransaction) {
+                await fetch(`${getBaseUrl()}/transactions/${rusakTransaction.id}`, { method: "DELETE", headers: getHeaders() }).catch(() => undefined)
+              }
+              await fetch(`${getBaseUrl()}/items/${originalBarang.id}`, {
+                method: "PUT",
+                headers: getHeaders(),
+                body: JSON.stringify(originalBarang),
+              })
+              throw transactionError
+            }
+          }
+
+          setBarangList(prev => prev.map(b => b.id === originalBarang.id ? updatedBarang : b))
+          toast.success(
+            changedToRusak
+              ? `Unit dengan SN ${updatedBarang.serialNumber} ditandai Rusak dan dicatat ke riwayat.`
+              : `Unit dengan SN ${updatedBarang.serialNumber} berhasil diperbarui!`
+          )
+        } catch (error: any) {
+          console.error("Gagal memperbarui unit:", error)
+          toast.error(
+            error.message || (changedToRusak
+              ? "Gagal menyimpan status Rusak ke data barang dan riwayat."
+              : "Gagal memperbarui unit.")
+          )
+          return
+        }
       }
+
+      setIsFormOpen(false)
+      resetForm()
+    } finally {
+      setIsSaving(false)
     }
-
-    setIsFormOpen(false)
-    resetForm()
   }
 
   const filteredBarang = useMemo(() => {
@@ -560,7 +590,7 @@ export default function DataBarangPage() {
     const stock = new Map<string, number>()
 
     barangList.forEach((item) => {
-      if (item.status.trim().toLowerCase() !== "masuk") return
+      if (item.status.trim().toLowerCase() !== "tersedia") return
 
       const key = item.kategori.trim().toLowerCase()
       stock.set(key, (stock.get(key) || 0) + 1)
@@ -603,17 +633,6 @@ export default function DataBarangPage() {
     }
   }
 
-  const safetyStockSummary = useMemo(
-    () =>
-      categoryDefinitions.map((category) => ({
-        category: category.name,
-        ...getSafetyStockInfo(category.name),
-      })),
-    [availableStockByCategory, categoryDefinitions]
-  )
-  const lowStockCategories = safetyStockSummary.filter(
-    (item) => item.label !== "Aman"
-  )
   const hasActiveFilter = searchTerm.trim().length > 0 || filterStatus !== "all"
   const totalPages = Math.max(1, Math.ceil(filteredBarang.length / pageSize))
   const paginatedBarang = useMemo(() => {
@@ -660,13 +679,15 @@ export default function DataBarangPage() {
 
   const getStatusBadgeProps = (status: StatusUnit) => {
     switch (status) {
-      case "Masuk":
-        return { text: "Masuk", dotClass: "bg-emerald-500" }
-      case "Keluar":
-        return { text: "Keluar", dotClass: "bg-sky-500" }
+      case "Tersedia":
+        return { text: "Tersedia", dotClass: "bg-emerald-500" }
+      case "Diluar":
+        return { text: "Diluar", dotClass: "bg-sky-500" }
       case "Rusak":
-      default:
         return { text: "Rusak", dotClass: "bg-rose-500" }
+      case "Hilang":
+      default:
+        return { text: "Hilang", dotClass: "bg-amber-500" }
     }
   }
 
@@ -684,17 +705,6 @@ export default function DataBarangPage() {
     }
 
     try {
-      const escapeCsvCell = (value: string | number | undefined) => {
-        let cell = String(value ?? "")
-
-        // Hindari formula injection ketika file dibuka di aplikasi spreadsheet.
-        if (/^[\t\r ]*[=+\-@]/.test(cell)) {
-          cell = `'${cell}`
-        }
-
-        return `"${cell.replace(/"/g, '""')}"`
-      }
-
       const headers = [
         "No",
         "Serial Number",
@@ -702,17 +712,12 @@ export default function DataBarangPage() {
         "Kategori",
         "Status",
         "Lokasi Penyimpanan",
-        "Tempat / Pemilik",
-        "Stok Tersedia Kategori",
-        "Safety Stock Minimum",
-        "Indikator Safety Stock",
+        "Tempat",
         "Tanggal Masuk",
         "Tanggal Keluar",
       ]
 
       const rows = filteredBarang.map((item, index) => {
-        const safetyStock = getSafetyStockInfo(item.kategori)
-
         return [
           index + 1,
           item.serialNumber,
@@ -720,20 +725,16 @@ export default function DataBarangPage() {
           item.kategori,
           item.status,
           item.lokasiPenyimpanan,
-          item.mitra || ADMIN_LOCATION,
-          safetyStock.available,
-          safetyStock.safetyStock,
-          safetyStock.label,
+          item.mitra || "KP Tasikmalaya",
           item.tanggalMasuk,
           item.tanggalKeluar || "",
         ]
       })
 
-      const csvContent = [
-        "sep=;",
-        headers.map(escapeCsvCell).join(";"),
-        ...rows.map((row) => row.map(escapeCsvCell).join(";")),
-      ].join("\r\n")
+      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows])
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Data Barang")
+      const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" })
 
       const now = new Date()
       const dateSuffix = [
@@ -742,8 +743,8 @@ export default function DataBarangPage() {
         String(now.getDate()).padStart(2, "0"),
       ].join("-")
       const exportResult = await saveExportFile({
-        fileName: `data-barang-${dateSuffix}.csv`,
-        contents: `\uFEFF${csvContent}`,
+        fileName: `data-barang-${dateSuffix}.xlsx`,
+        contents: buffer,
       })
 
       if (!exportResult.saved) return
@@ -765,6 +766,11 @@ export default function DataBarangPage() {
 
     return transactions
       .filter((transaction) => transaction.sn.toLowerCase() === detailBarang.serialNumber.toLowerCase())
+      .sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : new Date(a.tanggal).getTime();
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : new Date(b.tanggal).getTime();
+        return timeB - timeA; // terbaru di atas, terlama di bawah
+      })
       .map<RiwayatUnit>((transaction) => ({
         tanggal: transaction.tanggal,
         tipe: transaction.kategori,
@@ -794,7 +800,7 @@ export default function DataBarangPage() {
 
             <div className="flex flex-wrap items-center gap-3">
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[150px] py-0">
+                <SelectTrigger className="w-37.5 py-0">
                   <SelectValue placeholder="Status Unit" />
                 </SelectTrigger>
                 <SelectContent>
@@ -850,70 +856,14 @@ export default function DataBarangPage() {
         </div>
       </Card>
 
-      <Card
-        className={`shrink-0 border ${
-          lowStockCategories.length > 0
-            ? "border-amber-500/30 bg-amber-500/5"
-            : "border-emerald-500/30 bg-emerald-500/5"
-        }`}
-      >
-        <div className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div
-              className={`rounded-lg p-2 ${
-                lowStockCategories.length > 0
-                  ? "bg-amber-500/10 text-amber-500"
-                  : "bg-emerald-500/10 text-emerald-500"
-              }`}
-            >
-              {lowStockCategories.length > 0 ? (
-                <TriangleAlert className="size-5" />
-              ) : (
-                <ShieldCheck className="size-5" />
-              )}
-            </div>
-            <div>
-              <p className="font-semibold">
-                {lowStockCategories.length > 0
-                  ? `${lowStockCategories.length} kategori perlu restock`
-                  : "Safety stock seluruh kategori aman"}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Perhitungan berdasarkan barang berstatus Masuk pada data yang dapat
-                diakses akun ini.
-              </p>
-            </div>
-          </div>
-
-          {lowStockCategories.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {lowStockCategories.slice(0, 5).map((item) => (
-                <Badge
-                  key={item.category}
-                  variant="outline"
-                  className={item.className}
-                >
-                  {item.category}: {item.available}/{item.safetyStock}
-                </Badge>
-              ))}
-              {lowStockCategories.length > 5 && (
-                <Badge variant="outline">
-                  +{lowStockCategories.length - 5} kategori
-                </Badge>
-              )}
-            </div>
-          )}
-        </div>
-      </Card>
-
       {/* Data Table */}
       <div className="min-h-0 flex-1 rounded-lg border bg-card/20 overflow-auto">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-muted">
             <TableRow>
-              <TableHead className="w-[50px] text-center">No.</TableHead>
+              <TableHead className="w-12.5 text-center">No.</TableHead>
               {user?.role === "admin" && (
-                <TableHead className="w-[50px] text-center">
+                <TableHead className="w-12.5 text-center">
                   <Checkbox
                     checked={
                       paginatedBarang.length > 0 &&
@@ -924,19 +874,18 @@ export default function DataBarangPage() {
                   />
                 </TableHead>
               )}
-              <TableHead className="w-[170px]">Serial Number (SN)</TableHead>
-              <TableHead className="w-[140px]">Merek</TableHead>
-              <TableHead className="w-[140px]">Kategori</TableHead>
-              <TableHead className="text-center w-[120px]">Status</TableHead>
-              <TableHead className="w-[160px]">Safety Stock</TableHead>
+              <TableHead className="w-42.5">Serial Number (SN)</TableHead>
+              <TableHead className="w-35">Merek</TableHead>
+              <TableHead className="w-35">Kategori</TableHead>
+              <TableHead className="text-center w-30">Status</TableHead>
               <TableHead>Lokasi Penyimpanan</TableHead>
               {user?.role === "admin" && (
-                <TableHead className="w-[150px]">Tempat / Pemilik</TableHead>
+                <TableHead className="w-37.5">Tempat</TableHead>
               )}
-              <TableHead className="hidden md:table-cell w-[130px]">Tanggal Masuk</TableHead>
-              <TableHead className="hidden lg:table-cell w-[130px]">Tanggal Keluar</TableHead>
+              <TableHead className="hidden md:table-cell w-32.5">Tanggal Masuk</TableHead>
+              <TableHead className="hidden lg:table-cell w-32.5">Tanggal Keluar</TableHead>
               {user?.role === "admin" && (
-                <TableHead className="w-[60px] text-right"></TableHead>
+                <TableHead className="w-15 text-right"></TableHead>
               )}
             </TableRow>
           </TableHeader>
@@ -944,7 +893,6 @@ export default function DataBarangPage() {
             {paginatedBarang.length > 0 ? (
               paginatedBarang.map((item, index) => {
                 const badge = getStatusBadgeProps(item.status)
-                const safetyStock = getSafetyStockInfo(item.kategori)
                 return (
                   <TableRow
                     key={item.id}
@@ -980,16 +928,6 @@ export default function DataBarangPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={safetyStock.className}
-                        title={`Stok tersedia ${safetyStock.available} unit, batas minimum ${safetyStock.safetyStock} unit`}
-                      >
-                        {safetyStock.label} · {safetyStock.available}/
-                        {safetyStock.safetyStock}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
                       {item.lokasiPenyimpanan}
                     </TableCell>
                     {user?.role === "admin" && (
@@ -1009,30 +947,30 @@ export default function DataBarangPage() {
                       {formatTanggal(item.tanggalKeluar || "")}
                     </TableCell>
                     {user?.role === "admin" && (
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="icon-xs" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                            <MoreVertical className="size-4" />
-                            <span className="sr-only">Menu Aksi</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-[160px]">
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenEdit(item) }}>
-                            <Edit className="size-4 mr-2" />
-                            <span>Edit Unit</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={(e) => { e.stopPropagation(); handleDelete(item.id) }}
-                            className="text-destructive hover:bg-destructive/10 dark:text-destructive/80"
-                          >
-                            <Trash2 className="size-4 mr-2" />
-                            <span>Hapus</span>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon-xs" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                              <MoreVertical className="size-4" />
+                              <span className="sr-only">Menu Aksi</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-[160px]">
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleOpenEdit(item) }}>
+                              <Edit className="size-4 mr-2" />
+                              <span>Edit Unit</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={(e) => { e.stopPropagation(); handleDelete(item.id) }}
+                              className="text-destructive hover:bg-destructive/10 dark:text-destructive/80"
+                            >
+                              <Trash2 className="size-4 mr-2" />
+                              <span>Hapus</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
                     )}
                   </TableRow>
                 )
@@ -1189,13 +1127,13 @@ export default function DataBarangPage() {
                         ...prev,
                         status,
                         lokasiPenyimpanan:
-                          status === "Keluar"
-                            ? "Keluar"
-                            : prev.lokasiPenyimpanan === "Keluar"
+                          status === "Diluar"
+                            ? "Diluar"
+                            : prev.lokasiPenyimpanan === "Diluar"
                               ? ""
                               : prev.lokasiPenyimpanan,
                       }))
-                      if (status === "Keluar" && formErrors.lokasiPenyimpanan) {
+                      if (status === "Diluar" && formErrors.lokasiPenyimpanan) {
                         setFormErrors(prev => {
                           const next = { ...prev }
                           delete next.lokasiPenyimpanan
@@ -1241,7 +1179,7 @@ export default function DataBarangPage() {
                   <Label htmlFor="lokasiPenyimpanan">Lokasi Penyimpanan</Label>
                   <Select
                     value={formData.lokasiPenyimpanan}
-                    disabled={formData.status === "Keluar"}
+                    disabled={formData.status === "Diluar"}
                     onValueChange={(val) => {
                       setFormData(prev => ({ ...prev, lokasiPenyimpanan: val }))
                       if (formErrors.lokasiPenyimpanan) {
@@ -1253,8 +1191,8 @@ export default function DataBarangPage() {
                       <SelectValue placeholder="Pilih lokasi penyimpanan..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {formData.status === "Keluar" && (
-                        <SelectItem value="Keluar">Keluar</SelectItem>
+                      {formData.status === "Diluar" && (
+                        <SelectItem value="Diluar">Diluar</SelectItem>
                       )}
                       {availableFormLocations.map((loc) => (
                         <SelectItem key={`${loc.owner}-${loc.name}`} value={loc.name}>
@@ -1282,11 +1220,13 @@ export default function DataBarangPage() {
                 <Button
                   type="submit"
                   className="w-full bg-primary text-primary-foreground font-semibold"
+                  disabled={isSaving}
                 >
+                  {isSaving ? <Loader2 className="size-4 mr-2 animate-spin" /> : null}
                   Simpan Unit
                 </Button>
                 <DrawerClose asChild>
-                  <Button variant="outline" className="w-full">
+                  <Button variant="outline" className="w-full" disabled={isSaving}>
                     Batal
                   </Button>
                 </DrawerClose>
@@ -1297,7 +1237,7 @@ export default function DataBarangPage() {
       </Drawer>
 
       {/* Detail Drawer */}
-      <Drawer open={isDetailOpen} onOpenChange={setIsDetailOpen} direction={isMobile ? "bottom" : "right"}>
+      <Drawer open={isDetailOpen} onOpenChange={handleDetailOpenChange} direction={isMobile ? "bottom" : "right"}>
         <DrawerContent>
           {detailBarang && (
             <>
@@ -1328,31 +1268,13 @@ export default function DataBarangPage() {
                   </div>
 
                   <div className="flex flex-col gap-3">
-                    <Label>Indikator Safety Stock</Label>
-                    <div className="flex h-9 items-center">
-                      {(() => {
-                        const safetyStock = getSafetyStockInfo(detailBarang.kategori)
-                        return (
-                          <Badge
-                            variant="outline"
-                            className={safetyStock.className}
-                          >
-                            {safetyStock.label} · tersedia {safetyStock.available},
-                            minimum {safetyStock.safetyStock}
-                          </Badge>
-                        )
-                      })()}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-3">
                     <Label>Lokasi Aktif</Label>
                     <Input readOnly defaultValue={detailBarang.lokasiPenyimpanan} />
                   </div>
 
                   {user?.role === "admin" && (
                     <div className="flex flex-col gap-3">
-                      <Label>Tempat / Pemilik</Label>
+                      <Label>Pemilik</Label>
                       <Input
                         readOnly
                         defaultValue={detailBarang.mitra || ADMIN_LOCATION}
@@ -1434,7 +1356,7 @@ export default function DataBarangPage() {
         </DrawerContent>
       </Drawer>
 
-      <AlertDialog open={deleteDialog !== null} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+      <AlertDialog open={deleteDialog !== null} onOpenChange={(open) => !open && !isDeleting && setDeleteDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -1447,8 +1369,9 @@ export default function DataBarangPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={isDeleting}>
+              {isDeleting ? <Loader2 className="size-4 mr-2 animate-spin" /> : null}
               Hapus
             </AlertDialogAction>
           </AlertDialogFooter>

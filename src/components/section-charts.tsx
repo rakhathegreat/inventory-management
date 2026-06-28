@@ -29,7 +29,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { InventoryStats } from "@/components/section-cards"
+import type { InventoryStats, NotificationItem, SafetyStockAlert } from "@/types/dashboard"
 
 const chartConfig = {
     visitors: {
@@ -40,24 +40,6 @@ const chartConfig = {
         color: "var(--chart-2)",
     },
 } satisfies ChartConfig
-
-type NotificationItem = {
-    id: string
-    title: string
-    message: string
-    type: string
-    date: string
-    isRead: boolean
-    generated?: boolean
-    targetUrl?: string
-}
-
-export type SafetyStockAlert = {
-    category: string
-    available: number
-    safetyStock: number
-    status: "Menipis" | "Habis"
-}
 
 export function SectionCharts({
     isMitra = false,
@@ -97,16 +79,16 @@ export function SectionCharts({
             {
                 id: "mitra-tersedia",
                 title: "Barang tersedia",
-                message: `${stats.tersedia} unit milik ${displayName || "mitra"} saat ini berstatus Masuk.`,
+                message: `${stats.tersedia} unit milik ${displayName || "mitra"} saat ini berstatus Tersedia.`,
                 type: "success",
                 date: "",
                 isRead: true,
                 generated: true,
             },
             {
-                id: "mitra-keluar",
-                title: "Barang keluar",
-                message: `${stats.keluar} unit tercatat berstatus Keluar.`,
+                id: "mitra-diluar",
+                title: "Barang diluar",
+                message: `${stats.diluar} unit tercatat berstatus Diluar.`,
                 type: "info",
                 date: "",
                 isRead: true,
@@ -118,6 +100,17 @@ export function SectionCharts({
                     title: "Perhatian barang rusak",
                     message: `${stats.rusak} unit tercatat berstatus Rusak.`,
                     type: "warning",
+                    date: "",
+                    isRead: true,
+                    generated: true,
+                }]
+                : []),
+            ...(stats.hilang > 0
+                ? [{
+                    id: "mitra-hilang",
+                    title: "Perhatian barang hilang",
+                    message: `${stats.hilang} unit tercatat berstatus Hilang.`,
+                    type: "error",
                     date: "",
                     isRead: true,
                     generated: true,
@@ -155,7 +148,7 @@ export function SectionCharts({
     const [usedCapacity, setUsedCapacity] = React.useState(0)
     const displayedTotal = isMitra ? stats.totalItems : totalCapacity
     const displayedUsed = isMitra ? stats.tersedia : usedCapacity
-    const displayedRemaining = isMitra ? stats.keluar : totalCapacity - usedCapacity
+    const displayedRemaining = isMitra ? stats.diluar : totalCapacity - usedCapacity
     const capacityPercent = displayedTotal > 0
         ? Math.round((displayedUsed / displayedTotal) * 100)
         : 0
@@ -173,6 +166,9 @@ export function SectionCharts({
                 let total = 0
                 let used = 0
                 for (const loc of locations) {
+                    if (loc.name === "Keluar" || loc.name === "Diluar") {
+                        continue
+                    }
                     if (
                         (loc.owner || "KP").trim().toLowerCase() !== "kp"
                     ) {
@@ -341,7 +337,7 @@ export function SectionCharts({
                         </div>
                         <div className="flex flex-col text-center">
                             <p className="text-muted-foreground font-normal text-xs">
-                                {isMitra ? "Keluar" : "Tersisa"}
+                                {isMitra ? "Diluar" : "Tersisa"}
                             </p>
                             <p className="font-bold text-md">{displayedRemaining}</p>
                         </div>

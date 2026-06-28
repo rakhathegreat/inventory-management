@@ -79,6 +79,9 @@ export const schema = z.object({
   no: z.number().optional(),
   id: z.union([z.string(), z.number()]),
   tanggal: z.string(),
+  tanggalDisplay: z.string().optional(),
+  waktu: z.string().optional(),
+  createdAt: z.string().optional(),
   nomor: z.string(),
   kategori: z.string(),
   status: z.string().default("Selesai"),
@@ -132,7 +135,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
     header: "Tanggal",
     cell: ({ row }) => (
       <div className="text-muted-foreground whitespace-nowrap">
-        {row.original.tanggal}
+        <div className="font-medium text-foreground">{row.original.tanggalDisplay || row.original.tanggal}</div>
       </div>
     ),
   },
@@ -200,15 +203,6 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
     ),
   },
   {
-    accessorKey: "mitra",
-    header: "Mitra",
-    cell: ({ row }) => (
-      <div className="text-foreground">
-        {row.original.mitra || "-"}
-      </div>
-    ),
-  },
-  {
     accessorKey: "keterangan",
     header: "PA / Keterangan",
     cell: ({ row }) => (
@@ -250,7 +244,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-32">
-          <DropdownMenuItem 
+          <DropdownMenuItem
             variant="destructive"
             onClick={() => {
               const meta = table.options.meta as { onDeleteRow?: (id: string) => void } | undefined;
@@ -541,7 +535,7 @@ export function DataTable({
                 value={String(table.getState().pagination.pageSize)}
                 onValueChange={(value) => table.setPageSize(Number(value))}
               >
-                <SelectTrigger className="h-8 w-[72px]">
+                <SelectTrigger className="h-8 w-18">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

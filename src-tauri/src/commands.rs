@@ -3,7 +3,30 @@ use crate::db::DbState;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::State;
+use tauri::{Manager, State};
+
+#[tauri::command]
+pub fn save_arxiva_file(
+    subfolder: String,
+    filename: String,
+    data: Vec<u8>,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    let download_dir = app_handle
+        .path()
+        .download_dir()
+        .map_err(|e| format!("Gagal mendapatkan folder download: {}", e))?;
+
+    let target_dir = download_dir.join("arxiva").join(subfolder);
+    std::fs::create_dir_all(&target_dir)
+        .map_err(|e| format!("Gagal membuat folder arxiva: {}", e))?;
+
+    let file_path = target_dir.join(filename);
+    std::fs::write(&file_path, data)
+        .map_err(|e| format!("Gagal menyimpan file: {}", e))?;
+
+    Ok(file_path.to_string_lossy().to_string())
+}
 
 #[tauri::command]
 pub fn save_export_file(path: String, contents: String) -> Result<(), String> {
@@ -1323,4 +1346,100 @@ pub fn delete_notification(state: State<DbState>, id: String) -> Result<(), Stri
     conn.execute("DELETE FROM notifications WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn google_oauth_login(client_id: String) -> Result<String, String> {
+    let redirect_uri = "http://localhost:3456";
+
+    // Build Google OAuth2 consent URL
+    let auth_url = format!(
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope={}&access_type=offline&prompt=consent",
+        urlencoding(&client_id),
+        urlencoding(redirect_uri),
+        urlencoding("https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile"),
+    );
+
+    // Start a temporary HTTP server to capture the callback
+    let server = tiny_http::Server::http("127.0.0.1:3456")
+        .map_err(|e| format!("Gagal memulai server lokal OAuth: {}", e))?;
+
+    // Open the consent URL in the OS's default browser
+    open::that(&auth_url).map_err(|e| format!("Gagal membuka browser: {}", e))?;
+
+    // Wait for Google to redirect back (blocks until a request arrives)
+    let request = server
+        .recv()
+        .map_err(|e| format!("Gagal menerima callback OAuth: {}", e))?;
+
+    // Parse the URL to extract the `code` query parameter
+    let request_url = format!("http://localhost:3456{}", request.url());
+    let parsed = url::Url::parse(&request_url)
+        .map_err(|e| format!("Gagal parsing URL callback: {}", e))?;
+
+    let code = parsed
+        .query_pairs()
+        .find(|(key, _)| key == "code")
+        .map(|(_, value)| value.to_string())
+        .ok_or_else(|| {
+            // Check if there's an error parameter from Google
+            let error = parsed
+                .query_pairs()
+                .find(|(key, _)| key == "error")
+                .map(|(_, value)| value.to_string())
+                .unwrap_or_else(|| "tidak diketahui".to_string());
+            format!("Google OAuth gagal: {}", error)
+        })?;
+
+    // Respond to the browser with a success page
+    let success_html = r#"
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Arxiva - OAuth Berhasil</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #0a0a0a; color: #fafafa; }
+                .card { text-align: center; padding: 3rem; border-radius: 1rem; background: #171717; border: 1px solid #262626; max-width: 400px; }
+                .icon { font-size: 3rem; margin-bottom: 1rem; }
+                h1 { font-size: 1.25rem; margin: 0 0 0.5rem; }
+                p { color: #a3a3a3; font-size: 0.875rem; margin: 0; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="icon">✅</div>
+                <h1>Otentikasi Berhasil!</h1>
+                <p>Silakan kembali ke aplikasi Arxiva.<br>Jendela ini dapat ditutup.</p>
+            </div>
+        </body>
+        </html>
+    "#;
+
+    let response = tiny_http::Response::from_string(success_html)
+        .with_header(
+            tiny_http::Header::from_bytes(b"Content-Type", b"text/html; charset=utf-8").unwrap(),
+        );
+    let _ = request.respond(response);
+
+    // Server is dropped here, automatically shutting down
+    drop(server);
+
+    Ok(code)
+}
+
+/// Simple percent-encoding for URL parameters
+fn urlencoding(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() * 3);
+    for byte in s.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(byte as char);
+            }
+            _ => {
+                result.push('%');
+                result.push_str(&format!("{:02X}", byte));
+            }
+        }
+    }
+    result
 }

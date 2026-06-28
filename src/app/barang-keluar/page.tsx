@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { Archive, BadgeCheck, Boxes, PackageMinus, ScanLine, X } from "lucide-react";
+import { Archive, BadgeCheck, Boxes, PackageMinus, ScanLine, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -32,38 +31,25 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
-type LokasiOption = string;
+import type { LokasiOption, InventoryItem, KodeBarangUpdate } from "@/types/inventory";
+import type { Partner } from "@/types/partner";
+import type { BarangKeluarItem } from "@/types/transaction";
 
-type InventoryItem = {
-  id: string;
-  serialNumber: string;
-  kategori: string;
-  merek: string;
-  status: string;
-  lokasiPenyimpanan: string;
-  tanggalMasuk: string;
-  tanggalKeluar?: string;
-  mitra?: string | null;
+const getBaseUrl = () => {
+  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 };
 
-type Partner = {
-  id: string;
-  name: string;
-  isActive: boolean;
+const getHeaders = () => {
+  const token = localStorage.getItem("arxiva-auth-token");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `${token}`;
+  }
+  return headers;
 };
-
-type BarangKeluarItem = {
-  id: number;
-  nomor: string;
-  merek: string;
-  kategori: string;
-  lokasi: LokasiOption;
-  mitra: string;
-  keterangan: string;
-  status: "Valid" | "Invalid";
-};
-
-type KodeBarangUpdate = string | ((current: string) => string);
 
 const isTextInputTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) return false;
@@ -104,18 +90,21 @@ export default function BarangKeluarPage() {
   const [dbPartners, setDbPartners] = useState<Partner[]>([]);
   const [selectedPartnerId, setSelectedPartnerId] = useState("");
   const [keterangan, setKeterangan] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const fetchItemsAndLocations = async () => {
       try {
-        const items = await invoke<InventoryItem[]>("get_items");
+        const resItems = await fetch(`${getBaseUrl()}/items`, { method: "GET", headers: getHeaders() });
+        const rawItems = await resItems.json();
+        const items: InventoryItem[] = Array.isArray(rawItems.data || rawItems) ? (rawItems.data || rawItems) : [];
         setDbItems(
           user?.role === "mitra"
             ? items.filter(
-                (item) =>
-                  item.mitra?.trim().toLowerCase() ===
-                  user.displayName.trim().toLowerCase()
-              )
+              (item) =>
+                item.mitra?.trim().toLowerCase() ===
+                user.displayName.trim().toLowerCase()
+            )
             : items
         );
 
@@ -123,7 +112,21 @@ export default function BarangKeluarPage() {
           setDbPartners([]);
           setSelectedPartnerId("");
         } else {
-          const partners = await invoke<Partner[]>("get_partners");
+          const resPartners = await fetch(`${getBaseUrl()}/users`, { method: "GET", headers: getHeaders() });
+          const rawPartners = await resPartners.json();
+          const usersList = rawPartners.data || rawPartners.users || rawPartners;
+          const partners: Partner[] = (Array.isArray(usersList) ? usersList : []).filter((u: any) => u.role === "MITRA").map((u: any) => ({
+            id: String(u.id),
+            code: u.profile?.code || u.code || "-",
+            name: u.profile?.nama || u.profile?.name || u.name || u.username || "",
+            partnerType: u.profile?.partnerType || u.partnerType || "Supplier",
+            contactPerson: u.profile?.contactPerson || u.contactPerson || "-",
+            phone: u.profile?.telepon || u.profile?.phone || u.phone || "-",
+            email: u.profile?.email || u.email || "-",
+            address: u.profile?.alamat || u.profile?.address || u.address || "-",
+            isActive: u.isAktif !== undefined ? u.isAktif : (u.isActive !== undefined ? u.isActive : true),
+            username: u.username || null,
+          }));
           const activePartners = partners.filter((partner) => partner.isActive);
           setDbPartners(activePartners);
           if (activePartners.length === 1) {
@@ -131,12 +134,14 @@ export default function BarangKeluarPage() {
           }
         }
 
-        const locationsData = await invoke<any[]>("get_locations");
+        const resLoc = await fetch(`${getBaseUrl()}/locations`, { method: "GET", headers: getHeaders() });
+        const rawLoc = await resLoc.json();
+        const locationsData = rawLoc.data || rawLoc;
         const newKuota: Record<string, number> = {};
         const locationOwner =
           user?.role === "mitra" ? user.displayName : "KP";
 
-        locationsData.forEach(loc => {
+        (Array.isArray(locationsData) ? locationsData : []).forEach((loc: any) => {
           if (
             (loc.owner || "KP").trim().toLowerCase() !==
             locationOwner.trim().toLowerCase()
@@ -155,7 +160,7 @@ export default function BarangKeluarPage() {
         });
         setKuota(newKuota);
       } catch (error) {
-        console.error("Gagal mengambil data dari SQLite:", error);
+        console.error("Gagal mengambil data dari server:", error);
         toast.error("Gagal memuat data barang keluar.");
       }
     };
@@ -329,19 +334,23 @@ export default function BarangKeluarPage() {
   };
 
   const handleValidateAll = async () => {
+    if (isSaving) return;
     if (user?.role === "mitra" && !keterangan.trim()) {
       toast.error("PA / keterangan wajib diisi sebelum transaksi disimpan.");
       return;
     }
 
+    setIsSaving(true);
     try {
       const sessionDate = new Date().toISOString().slice(0, 10);
       const dateStr = sessionDate.replace(/-/g, "");
 
-      const txs = await invoke<any[]>("get_transactions");
+      const resTrx = await fetch(`${getBaseUrl()}/transactions`, { method: "GET", headers: getHeaders() });
+      const rawTrx = await resTrx.json();
+      const txs = rawTrx.data || rawTrx;
       const prefix = `OUT-${dateStr}-`;
       let maxNum = 0;
-      txs.forEach(t => {
+      (Array.isArray(txs) ? txs : []).forEach((t: any) => {
         if (t.nomor && t.nomor.startsWith(prefix)) {
           const numStr = t.nomor.slice(prefix.length);
           const num = parseInt(numStr, 10);
@@ -349,7 +358,9 @@ export default function BarangKeluarPage() {
         }
       });
       const sessionNomor = `${prefix}${(maxNum + 1).toString().padStart(4, '0')}`;
-      const latestItems = await invoke<InventoryItem[]>("get_items");
+      const resLatestItems = await fetch(`${getBaseUrl()}/items`, { method: "GET", headers: getHeaders() });
+      const rawLatestItems = await resLatestItems.json();
+      const latestItems: InventoryItem[] = Array.isArray(rawLatestItems.data || rawLatestItems) ? (rawLatestItems.data || rawLatestItems) : [];
 
       const invalidItem = barangKeluar.find((item) => {
         const latestItem = latestItems.find(
@@ -357,7 +368,7 @@ export default function BarangKeluarPage() {
             normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor) &&
             (user?.role !== "mitra" ||
               dbItem.mitra?.trim().toLowerCase() ===
-                user.displayName.trim().toLowerCase())
+              user.displayName.trim().toLowerCase())
         );
         return !latestItem || normalizeStatus(latestItem.status) === "keluar";
       });
@@ -368,7 +379,7 @@ export default function BarangKeluarPage() {
             normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(invalidItem.nomor) &&
             (user?.role !== "mitra" ||
               dbItem.mitra?.trim().toLowerCase() ===
-                user.displayName.trim().toLowerCase())
+              user.displayName.trim().toLowerCase())
         );
 
         toast.error(
@@ -387,17 +398,22 @@ export default function BarangKeluarPage() {
             normalizeKodeBarang(dbItem.serialNumber) === normalizeKodeBarang(item.nomor) &&
             (user?.role !== "mitra" ||
               dbItem.mitra?.trim().toLowerCase() ===
-                user.displayName.trim().toLowerCase())
+              user.displayName.trim().toLowerCase())
         )!;
         const originalLoc = originalItem.lokasiPenyimpanan || "-";
         const updatedItem: InventoryItem = {
           ...originalItem,
-          status: "Keluar",
-          lokasiPenyimpanan: "Keluar",
+          status: "Diluar",
+          lokasiPenyimpanan: "Diluar",
           tanggalKeluar: sessionDate,
           mitra: item.mitra,
         };
-        await invoke("update_item", { item: updatedItem });
+        const resUp = await fetch(`${getBaseUrl()}/items/${updatedItem.id}`, {
+          method: "PUT",
+          headers: getHeaders(),
+          body: JSON.stringify(updatedItem),
+        });
+        if (!resUp.ok) throw new Error(`Gagal update item ${item.nomor}`);
 
         const newTransaction = {
           id: `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -408,31 +424,39 @@ export default function BarangKeluarPage() {
           sn: item.nomor,
           merek: item.merek,
           asal: originalLoc,
-          tujuan: "Keluar",
-          mitra: item.mitra,
+          tujuan: item.mitra,
           keterangan:
             user?.role === "mitra" ? keterangan.trim() : null,
         };
-        await invoke("add_transaction", { transaction: newTransaction });
+        const resAddTrx = await fetch(`${getBaseUrl()}/transactions`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify(newTransaction),
+        });
+        if (!resAddTrx.ok) throw new Error(`Gagal mencatat transaksi ${item.nomor}`);
       }
       toast.success(`${barangKeluar.length} barang keluar berhasil disimpan.`);
       setBarangKeluar([]); // Clear local state after saving
       setKeterangan("");
 
       // Refresh DB Items after update
-      const items = await invoke<InventoryItem[]>("get_items");
+      const resRefresh = await fetch(`${getBaseUrl()}/items`, { method: "GET", headers: getHeaders() });
+      const rawRefresh = await resRefresh.json();
+      const items: InventoryItem[] = Array.isArray(rawRefresh.data || rawRefresh) ? (rawRefresh.data || rawRefresh) : [];
       setDbItems(
         user?.role === "mitra"
           ? items.filter(
-              (item) =>
-                item.mitra?.trim().toLowerCase() ===
-                user.displayName.trim().toLowerCase()
-            )
+            (item) =>
+              item.mitra?.trim().toLowerCase() ===
+              user.displayName.trim().toLowerCase()
+          )
           : items
       );
     } catch (error) {
       console.error("Gagal menyimpan ke database:", error);
       toast.error("Gagal menyimpan barang keluar ke database.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -524,7 +548,7 @@ export default function BarangKeluarPage() {
             <CardContent className="flex flex-1 flex-col gap-4">
               {user?.role !== "mitra" && (
                 <div className="flex flex-col gap-3">
-                  <Label htmlFor="mitra-tujuan">Mitra Tujuan</Label>
+                  <Label htmlFor="mitra-tujuan">Tujuan</Label>
                   <Select
                     value={selectedPartnerId}
                     onValueChange={(value) => {
@@ -703,11 +727,10 @@ export default function BarangKeluarPage() {
                         <TableCell>
                           <Badge variant="secondary" className="font-normal gap-1.5 px-2.5 py-0.5">
                             <div
-                              className={`w-1.5 h-1.5 rounded-full ${
-                                user?.role === "mitra" ? "bg-sky-500" : "bg-emerald-500"
-                              }`}
+                              className={`w-1.5 h-1.5 rounded-full ${user?.role === "mitra" ? "bg-sky-500" : "bg-emerald-500"
+                                }`}
                             />
-                            {user?.role === "mitra" ? "Keluar" : item.status}
+                            {user?.role === "mitra" ? "Diluar" : item.status}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
@@ -734,8 +757,9 @@ export default function BarangKeluarPage() {
               className="w-full gap-2 sm:w-auto"
               size="lg"
               onClick={handleValidateAll}
-              disabled={barangKeluar.length === 0}
+              disabled={barangKeluar.length === 0 || isSaving}
             >
+              {isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
               Simpan
             </Button>
           </CardFooter>

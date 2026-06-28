@@ -18,6 +18,7 @@ import KategoriBarangPage from "./app/kategori-barang/page";
 import MerekBarangPage from "./app/merek-barang/page";
 import MitraPage from "./app/mitra/page";
 import LoginPage from "./app/login/page";
+import PengaturanPage from "./app/pengaturan/page";
 import { useEffect, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -119,6 +120,10 @@ function App() {
                       <MitraPage />
                     </ProtectedRoute>
                   }
+                />
+                <Route
+                  path="pengaturan"
+                  element={<PengaturanPage />}
                 />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

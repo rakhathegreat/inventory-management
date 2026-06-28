@@ -1,21 +1,25 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { invoke } from "@tauri-apps/api/core"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Building2,
+  ChevronLeft,
+  ChevronRight,
   Edit,
-  Fingerprint,
   MoreVertical,
   Plus,
+  Power,
   Search,
   Trash2,
+  Users,
+  Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -58,14 +62,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 
 const getBaseUrl = () => {
   const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
@@ -83,32 +79,64 @@ const getHeaders = () => {
   return headers;
 };
 
-type PartnerType = "Supplier" | "Vendor" | "Jasa" | "Lainnya"
+import type { PartnerType, Partner } from "@/types/partner"
 
-type Partner = {
-  id: string
-  code: string
-  name: string
-  partnerType: PartnerType
-  contactPerson: string
-  phone: string
-  email: string
-  address: string
-  isActive: boolean
-  username?: string | null
-}
-
-type OwnerIdentitySettings = {
-  kpCode: string
-}
-
-const PARTNER_TYPES: PartnerType[] = ["Supplier", "Vendor", "Jasa", "Lainnya"]
+const PARTNER_TYPES: PartnerType[] = ["AKTIVASI", "GANGGUAN"]
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const
 const normalizeIdentityCode = (value: string) => value.trim().toUpperCase()
+
+function EmptyMitraTableState({ isFiltered }: { isFiltered: boolean }) {
+  return (
+    <div className="flex min-h-[300px] items-center justify-center px-6 py-12">
+      <div className="flex max-w-md flex-col items-center gap-4 text-center">
+        <div className="flex size-14 items-center justify-center rounded-full border bg-muted/40 text-muted-foreground">
+          {isFiltered ? (
+            <Search className="size-7" strokeWidth={1.8} />
+          ) : (
+            <Building2 className="size-7" strokeWidth={1.8} />
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-base font-semibold text-foreground">
+            {isFiltered ? "Tidak ada mitra yang cocok" : "Belum ada data mitra"}
+          </p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {isFiltered
+              ? "Coba ubah kata kunci pencarian atau filter yang sedang aktif."
+              : "Data mitra akan tampil di sini setelah Anda menambahkan mitra baru."}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TableSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <TableRow key={i}>
+          <TableCell className="text-center"><Skeleton className="mx-auto h-4 w-6" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+          <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+          <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-32" /></TableCell>
+          <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-36" /></TableCell>
+          <TableCell className="text-center"><Skeleton className="mx-auto h-5 w-16" /></TableCell>
+          <TableCell><Skeleton className="ml-auto h-7 w-7" /></TableCell>
+        </TableRow>
+      ))}
+    </>
+  )
+}
 
 const initialForm = {
   code: "",
   name: "",
-  partnerType: "Supplier" as PartnerType,
+  partnerType: "AKTIVASI" as PartnerType,
   contactPerson: "",
   phone: "",
   email: "",
@@ -121,6 +149,7 @@ const initialForm = {
 
 export default function MitraPage() {
   const [partners, setPartners] = useState<Partner[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -129,12 +158,14 @@ export default function MitraPage() {
   const [formData, setFormData] = useState(initialForm)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [deleteTarget, setDeleteTarget] = useState<Partner | null>(null)
-  const [kpCode, setKpCode] = useState("KP")
-  const [kpCodeDraft, setKpCodeDraft] = useState("KP")
-  const [kpCodeError, setKpCodeError] = useState("")
-  const [isKpCodeDialogOpen, setIsKpCodeDialogOpen] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0])
+  const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
-  const loadPartners = async () => {
+  const loadPartners = useCallback(async () => {
+    setIsLoading(true)
     try {
       const response = await fetch(`${getBaseUrl()}/users`, {
         method: "GET",
@@ -161,26 +192,16 @@ export default function MitraPage() {
     } catch (error) {
       console.error("Gagal memuat data mitra:", error)
       toast.error("Gagal memuat data mitra.")
+    } finally {
+      setIsLoading(false)
     }
-  }
-
-  const loadIdentitySettings = async () => {
-    try {
-      const settings = await invoke<OwnerIdentitySettings>(
-        "get_owner_identity_settings"
-      )
-      setKpCode(settings.kpCode)
-      setKpCodeDraft(settings.kpCode)
-    } catch (error) {
-      console.error("Gagal memuat kode identitas KP:", error)
-      toast.error("Gagal memuat kode identitas KP.")
-    }
-  }
+  }, [])
 
   useEffect(() => {
     loadPartners()
-    loadIdentitySettings()
   }, [])
+
+  const hasActiveFilter = searchQuery.trim() !== "" || typeFilter !== "all" || statusFilter !== "all"
 
   const filteredPartners = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -188,12 +209,12 @@ export default function MitraPage() {
     return partners.filter((partner) => {
       const matchesSearch =
         !query ||
-        partner.code.toLowerCase().includes(query) ||
+        partner.code?.toLowerCase().includes(query) ||
         partner.name.toLowerCase().includes(query) ||
-        partner.contactPerson.toLowerCase().includes(query) ||
-        partner.phone.toLowerCase().includes(query) ||
-        partner.email.toLowerCase().includes(query) ||
-        partner.address.toLowerCase().includes(query) ||
+        partner.contactPerson?.toLowerCase().includes(query) ||
+        partner.phone?.toLowerCase().includes(query) ||
+        partner.email?.toLowerCase().includes(query) ||
+        partner.address?.toLowerCase().includes(query) ||
         partner.username?.toLowerCase().includes(query)
       const matchesType =
         typeFilter === "all" || partner.partnerType === typeFilter
@@ -205,6 +226,18 @@ export default function MitraPage() {
     })
   }, [partners, searchQuery, statusFilter, typeFilter])
 
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredPartners.length / pageSize))
+  const paginatedPartners = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return filteredPartners.slice(start, start + pageSize)
+  }, [filteredPartners, currentPage, pageSize])
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, typeFilter, statusFilter, pageSize])
+
   const openAddSheet = () => {
     setEditId(null)
     setFormData(initialForm)
@@ -215,13 +248,13 @@ export default function MitraPage() {
   const openEditSheet = (partner: Partner) => {
     setEditId(partner.id)
     setFormData({
-      code: partner.code,
+      code: partner.code || "",
       name: partner.name,
-      partnerType: partner.partnerType,
-      contactPerson: partner.contactPerson === "-" ? "" : partner.contactPerson,
-      phone: partner.phone === "-" ? "" : partner.phone,
-      email: partner.email === "-" ? "" : partner.email,
-      address: partner.address === "-" ? "" : partner.address,
+      partnerType: partner.partnerType || "AKTIVASI",
+      contactPerson: partner.contactPerson || "",
+      phone: partner.phone || "",
+      email: partner.email || "",
+      address: partner.address || "",
       isActive: partner.isActive,
       username: partner.username || "",
       password: "",
@@ -232,6 +265,7 @@ export default function MitraPage() {
   }
 
   const handleSave = async () => {
+    if (isSaving) return
     const errors: Record<string, string> = {}
     const normalizedName = formData.name.trim()
     const normalizedEmail = formData.email.trim()
@@ -290,6 +324,7 @@ export default function MitraPage() {
       return
     }
 
+    setIsSaving(true)
     try {
       if (editId) {
         const bodyData: any = {
@@ -352,37 +387,14 @@ export default function MitraPage() {
       toast.error(
         error.message || (typeof error === "string" ? error : "Gagal menyimpan data mitra.")
       )
-    }
-  }
-
-  const handleSaveKpCode = async () => {
-    const normalizedCode = normalizeIdentityCode(kpCodeDraft)
-    if (
-      normalizedCode.length < 2 ||
-      normalizedCode.length > 30 ||
-      !/^[A-Z0-9_-]+$/.test(normalizedCode)
-    ) {
-      setKpCodeError(
-        "Kode harus 2-30 karakter dan hanya berisi huruf, angka, - atau _."
-      )
-      return
-    }
-
-    try {
-      await invoke("update_kp_identity_code", { code: normalizedCode })
-      setKpCode(normalizedCode)
-      setKpCodeDraft(normalizedCode)
-      setKpCodeError("")
-      setIsKpCodeDialogOpen(false)
-      toast.success("Kode identitas KP berhasil diperbarui.")
-    } catch (error) {
-      setKpCodeError(
-        typeof error === "string" ? error : "Gagal memperbarui kode KP."
-      )
+    } finally {
+      setIsSaving(false)
     }
   }
 
   const handleToggleStatus = async (partner: Partner) => {
+    if (togglingId === partner.id) return
+    setTogglingId(partner.id)
     try {
       const response = await fetch(`${getBaseUrl()}/users/${partner.id}`, {
         method: "PUT",
@@ -404,11 +416,14 @@ export default function MitraPage() {
     } catch (error: any) {
       console.error("Gagal mengubah status mitra:", error)
       toast.error(error.message || "Gagal mengubah status mitra.")
+    } finally {
+      setTogglingId(null)
     }
   }
 
   const handleDelete = async () => {
-    if (!deleteTarget) return
+    if (!deleteTarget || isDeleting) return
+    setIsDeleting(true)
 
     try {
       const response = await fetch(`${getBaseUrl()}/users/${deleteTarget.id}`, {
@@ -427,14 +442,17 @@ export default function MitraPage() {
     } catch (error: any) {
       console.error("Gagal menghapus mitra:", error)
       toast.error(error.message || "Gagal menghapus mitra.")
+    } finally {
+      setIsDeleting(false)
     }
   }
 
   return (
-    <div className="flex h-full flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className="flex h-full flex-col gap-4 p-4 md:p-6 lg:p-8">
+      {/* Toolbar */}
       <Card className="p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -469,6 +487,13 @@ export default function MitraPage() {
                 </SelectContent>
               </Select>
             </div>
+            {/* Result count */}
+            {!isLoading && (
+              <div className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
+                <Users className="size-3.5" />
+                <span>{filteredPartners.length} mitra</span>
+              </div>
+            )}
           </div>
           <Button onClick={openAddSheet} className="gap-2">
             <Plus className="size-4" />
@@ -477,93 +502,93 @@ export default function MitraPage() {
         </div>
       </Card>
 
-      <div className="overflow-hidden rounded-lg border bg-card">
-        <Table className="min-w-[980px]">
-          <TableHeader className="bg-muted/60">
+      {/* Data Table */}
+      <div className="min-h-0 flex-1 rounded-lg border bg-card/20 overflow-auto">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-muted">
             <TableRow>
-              <TableHead className="w-[60px] text-center">No.</TableHead>
-              <TableHead className="w-[200px]">Mitra</TableHead>
-              <TableHead className="w-[120px]">Jenis</TableHead>
-              <TableHead className="w-[180px]">PIC</TableHead>
-              <TableHead className="w-[170px]">Akun</TableHead>
-              <TableHead className="w-[220px]">Kontak</TableHead>
-              <TableHead className="w-[220px]">Alamat</TableHead>
-              <TableHead className="w-[120px] text-center">Status</TableHead>
-              <TableHead className="w-[60px] text-right"></TableHead>
+              <TableHead className="w-[50px] text-center">No.</TableHead>
+              <TableHead className="w-[180px]">Nama Mitra</TableHead>
+              <TableHead className="w-[100px]">Kode</TableHead>
+              <TableHead className="w-[110px]">Jenis</TableHead>
+              <TableHead className="w-[150px]">PIC</TableHead>
+              <TableHead className="w-[130px]">Username</TableHead>
+              <TableHead className="w-[140px]">Telepon</TableHead>
+              <TableHead className="hidden lg:table-cell w-[180px]">Email</TableHead>
+              <TableHead className="hidden lg:table-cell w-[180px]">Wilayah</TableHead>
+              <TableHead className="w-[100px] text-center">Status</TableHead>
+              <TableHead className="w-[50px] text-right"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredPartners.length > 0 ? (
-              filteredPartners.map((partner, index) => (
-                <TableRow key={partner.id}>
+            {isLoading ? (
+              <TableSkeleton />
+            ) : paginatedPartners.length > 0 ? (
+              paginatedPartners.map((partner, index) => (
+                <TableRow
+                  key={partner.id}
+                  className="hover:bg-muted/30 transition-colors"
+                >
                   <TableCell className="text-center font-medium">
-                    {index + 1}
+                    {(currentPage - 1) * pageSize + index + 1}
                   </TableCell>
                   <TableCell>
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <Building2 className="size-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{partner.name}</p>
-                        <Badge variant="outline" className="mt-1 font-mono">
-                          {partner.code}
-                        </Badge>
-                      </div>
-                    </div>
+                    <span className="block max-w-[160px] truncate font-medium">{partner.name}</span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{partner.partnerType}</Badge>
+                    <span className="text-muted-foreground">{partner.code}</span>
                   </TableCell>
                   <TableCell>
-                    <span className="block max-w-[160px] truncate">
-                      {partner.contactPerson}
+                    <Badge variant="secondary" className="font-normal">{partner.partnerType}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <span className="block max-w-[130px] truncate">{partner.contactPerson}</span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="block max-w-[120px] truncate text-muted-foreground">
+                      {partner.username ? `${partner.username}` : "—"}
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span className="block max-w-[150px] truncate font-mono text-xs">
-                      {partner.username ? `@${partner.username}` : "Belum dibuat"}
-                    </span>
+                    <span className="block max-w-[130px] truncate">{partner.phone}</span>
                   </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <p className="max-w-[200px] truncate">{partner.phone}</p>
-                      <p className="max-w-[200px] truncate text-xs text-muted-foreground">
-                        {partner.email}
-                      </p>
-                    </div>
+                  <TableCell className="hidden lg:table-cell">
+                    <span className="block max-w-[160px] truncate text-muted-foreground">{partner.email}</span>
                   </TableCell>
-                  <TableCell>
-                    <span className="block max-w-[260px] truncate text-muted-foreground">
-                      {partner.address}
-                    </span>
+                  <TableCell className="hidden lg:table-cell">
+                    <span className="block max-w-[160px] truncate text-muted-foreground">{partner.address}</span>
                   </TableCell>
                   <TableCell className="text-center">
                     <Badge
-                      variant="outline"
-                      className={
-                        partner.isActive
-                          ? "border-emerald-500/30 text-emerald-500"
-                          : "text-muted-foreground"
-                      }
+                      variant="secondary"
+                      className="font-normal gap-1.5 px-2.5 py-0.5"
                     >
+                      <div className={`w-1.5 h-1.5 rounded-full ${partner.isActive
+                        ? "bg-emerald-500"
+                        : "bg-muted-foreground/50"
+                        }`} />
                       {partner.isActive ? "Aktif" : "Nonaktif"}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-sm">
+                        <Button variant="ghost" size="icon-xs" className="h-8 w-8 text-muted-foreground hover:text-foreground">
                           <MoreVertical className="size-4" />
                           <span className="sr-only">Menu mitra</span>
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
+                      <DropdownMenuContent align="end" className="w-[160px]">
                         <DropdownMenuItem onClick={() => openEditSheet(partner)}>
-                          <Edit className="size-4" />
-                          Edit Mitra
+                          <Edit className="size-4 mr-2" />
+                          <span>Edit Mitra</span>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleToggleStatus(partner)}>
+                        <DropdownMenuItem disabled={togglingId === partner.id} onClick={() => handleToggleStatus(partner)}>
+                          {togglingId === partner.id ? (
+                            <Loader2 className="size-4 mr-2 animate-spin" />
+                          ) : (
+                            <Power className="size-4 mr-2" />
+                          )}
                           {partner.isActive ? "Nonaktifkan" : "Aktifkan"}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
@@ -571,8 +596,8 @@ export default function MitraPage() {
                           variant="destructive"
                           onClick={() => setDeleteTarget(partner)}
                         >
-                          <Trash2 className="size-4" />
-                          Hapus Mitra
+                          <Trash2 className="size-4 mr-2" />
+                          <span>Hapus Mitra</span>
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -581,24 +606,64 @@ export default function MitraPage() {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={9} className="h-72">
-                  <div className="flex flex-col items-center justify-center gap-4 text-center">
-                    <div className="flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                      <Building2 className="size-7" />
-                    </div>
-                    <div>
-                      <p className="font-semibold">Mitra tidak ditemukan</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Ubah filter pencarian atau tambahkan mitra baru.
-                      </p>
-                    </div>
-                  </div>
+                <TableCell colSpan={11} className="p-0">
+                  <EmptyMitraTableState isFiltered={hasActiveFilter} />
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
+
+      {/* Pagination */}
+      {!isLoading && filteredPartners.length > 0 && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>Tampilkan</span>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(v) => setPageSize(Number(v))}
+            >
+              <SelectTrigger className="h-7 w-[70px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span>per halaman</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              Halaman {currentPage} dari {totalPages}
+            </span>
+            <div className="flex gap-1">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+              >
+                <ChevronLeft className="size-4" />
+                <span className="sr-only">Halaman sebelumnya</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                <ChevronRight className="size-4" />
+                <span className="sr-only">Halaman selanjutnya</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetContent className="flex flex-col sm:max-w-lg">
@@ -862,17 +927,20 @@ export default function MitraPage() {
             </div>
           </div>
           <SheetFooter>
-            <Button variant="outline" onClick={() => setIsSheetOpen(false)}>
+            <Button variant="outline" onClick={() => setIsSheetOpen(false)} disabled={isSaving}>
               Batal
             </Button>
-            <Button onClick={handleSave}>Simpan Mitra</Button>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? <Loader2 className="size-4 mr-2 animate-spin" /> : null}
+              Simpan Mitra
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
 
       <AlertDialog
         open={deleteTarget !== null}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        onOpenChange={(open) => !open && !isDeleting && setDeleteTarget(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -882,51 +950,14 @@ export default function MitraPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Hapus</AlertDialogAction>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? <Loader2 className="size-4 mr-2 animate-spin" /> : null}
+              Hapus
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <Dialog
-        open={isKpCodeDialogOpen}
-        onOpenChange={setIsKpCodeDialogOpen}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Ubah kode identitas KP</DialogTitle>
-            <DialogDescription>
-              Kode ini menjadi identitas resmi lokasi dan barang milik Admin.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="kp-identity-code">Kode KP</Label>
-            <Input
-              id="kp-identity-code"
-              value={kpCodeDraft}
-              onChange={(event) => {
-                setKpCodeDraft(event.target.value.toUpperCase())
-                setKpCodeError("")
-              }}
-              className={`font-mono ${kpCodeError ? "border-destructive" : ""
-                }`}
-              placeholder="Contoh: KP-TSM"
-            />
-            {kpCodeError && (
-              <p className="text-xs text-destructive">{kpCodeError}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsKpCodeDialogOpen(false)}
-            >
-              Batal
-            </Button>
-            <Button onClick={handleSaveKpCode}>Simpan Kode</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

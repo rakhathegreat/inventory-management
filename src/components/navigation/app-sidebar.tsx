@@ -34,6 +34,7 @@ import {
   MapPinHouse,
   PackageMinus,
   PackagePlus,
+  Settings,
   Shapes,
   Zap,
 } from "lucide-react"
@@ -129,6 +130,15 @@ const data = {
       url: "/",
       icon: (
         <LayoutGrid
+        />
+      ),
+      isActive: true,
+    },
+    {
+      name: "Pengaturan",
+      url: "/pengaturan",
+      icon: (
+        <Settings
         />
       ),
       isActive: true,

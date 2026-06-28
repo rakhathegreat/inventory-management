@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react"
 import { DataTable } from "@/components/data-table"
-import { invoke } from "@tauri-apps/api/core"
 import { Card } from "@/components/ui/card"
-import { Download, Plus, Search, Trash2 } from "lucide-react"
+import { Download, Plus, Search, Trash2, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 import { saveExportFile } from "@/lib/export-file"
+import * as XLSX from "xlsx"
 import {
   Select,
   SelectContent,
@@ -26,33 +26,26 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useAuth } from "@/lib/auth"
+import type { Transaction } from "@/types/transaction"
+import type { DeleteDialogState } from "@/types/ui"
 
-const KATEGORI_OPTIONS = ["Masuk", "Keluar", "Rusak"]
-
-type Transaction = {
-  id: string;
-  tanggal: string;
-  nomor: string;
-  kategori: string;
-  status: string;
-  sn: string;
-  merek: string;
-  asal: string | null;
-  tujuan: string | null;
-  mitra?: string | null;
-  keterangan?: string | null;
+const getBaseUrl = () => {
+  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 };
 
-type DeleteDialogState =
-  | {
-    type: "single"
-    ids: string[]
-    transactionNumber: string
+const getHeaders = () => {
+  const token = localStorage.getItem("arxiva-auth-token");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `${token}`;
   }
-  | {
-    type: "bulk"
-    ids: string[]
-  }
+  return headers;
+};
+
+const KATEGORI_OPTIONS = ["Masuk", "Keluar", "Rusak"]
 
 export default function DataTransaksiPage() {
   const { user } = useAuth()
@@ -61,10 +54,19 @@ export default function DataTransaksiPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const fetchTransactions = async () => {
     try {
-      const data = await invoke<Transaction[]>("get_transactions");
+      const res = await fetch(`${getBaseUrl()}/transactions`, {
+        method: "GET",
+        headers: getHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error("Gagal mengambil data transaksi");
+      }
+      const rawTrx = await res.json();
+      const data: Transaction[] = rawTrx.data || rawTrx;
       setTransactions(
         user?.role === "mitra"
           ? data.filter(
@@ -103,12 +105,19 @@ export default function DataTransaksiPage() {
   };
 
   const confirmDelete = async () => {
-    if (!deleteDialog) return
+    if (!deleteDialog || isDeleting) return
     const idsToDelete = deleteDialog.ids
+    setIsDeleting(true)
 
     try {
       for (const id of idsToDelete) {
-        await invoke("delete_transaction", { id });
+        const res = await fetch(`${getBaseUrl()}/transactions/${id}`, {
+          method: "DELETE",
+          headers: getHeaders(),
+        });
+        if (!res.ok) {
+          throw new Error(`Gagal menghapus transaksi dengan ID ${id}`);
+        }
       }
       toast.success(deleteDialog.type === "single" ? "Transaksi berhasil dihapus." : `${idsToDelete.length} transaksi berhasil dihapus.`)
       setSelectedIds((current) => current.filter((id) => !idsToDelete.includes(id)))
@@ -117,12 +126,17 @@ export default function DataTransaksiPage() {
     } catch (error) {
       console.error("Gagal menghapus transaksi:", error);
       toast.error(deleteDialog.type === "single" ? "Gagal menghapus transaksi." : "Gagal menghapus beberapa transaksi.");
+    } finally {
+      setIsDeleting(false)
     }
   }
 
   const flattenedData = transactions.map((t) => ({
     id: t.id,
     tanggal: t.tanggal,
+    tanggalDisplay: t.tanggalDisplay,
+    waktu: t.waktu,
+    createdAt: t.createdAt,
     nomor: t.nomor,
     kategori: t.kategori,
     status: t.status,
@@ -130,17 +144,22 @@ export default function DataTransaksiPage() {
     merek: t.merek,
     asal: t.asal || "-",
     tujuan: t.tujuan || "-",
-    mitra: t.mitra || "-",
     keterangan: t.keterangan || "-",
   }));
 
   const filteredData = flattenedData.filter((item) => {
     const matchesSearch = item.nomor.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.sn.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.mitra.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.keterangan.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesKategori = filterKategori === "all" || item.kategori === filterKategori;
     return matchesSearch && matchesKategori;
+  }).sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : new Date(a.tanggal).getTime();
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : new Date(b.tanggal).getTime();
+    if (timeB !== timeA) {
+      return timeB - timeA; // Dari yang terbaru ke terlama
+    }
+    return b.id.toString().localeCompare(a.id.toString());
   });
   const hasActiveFilter = searchTerm.length > 0 || filterKategori !== "all";
 
@@ -151,17 +170,6 @@ export default function DataTransaksiPage() {
     }
 
     try {
-      const escapeCsvCell = (value: string | number | undefined) => {
-        let cell = String(value ?? "")
-
-        // Hindari formula injection ketika file dibuka di aplikasi spreadsheet.
-        if (/^[\t\r ]*[=+\-@]/.test(cell)) {
-          cell = `'${cell}`
-        }
-
-        return `"${cell.replace(/"/g, '""')}"`
-      }
-
       const headers = [
         "No",
         "Tanggal",
@@ -172,7 +180,6 @@ export default function DataTransaksiPage() {
         "Merek",
         "Lokasi Asal",
         "Lokasi Tujuan",
-        "Mitra",
         "PA / Keterangan",
       ]
 
@@ -186,15 +193,13 @@ export default function DataTransaksiPage() {
         item.merek,
         item.asal,
         item.tujuan,
-        item.mitra,
         item.keterangan,
       ])
 
-      const csvContent = [
-        "sep=;",
-        headers.map(escapeCsvCell).join(";"),
-        ...rows.map((row) => row.map(escapeCsvCell).join(";")),
-      ].join("\r\n")
+      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows])
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Transaksi")
+      const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" })
 
       const now = new Date()
       const dateSuffix = [
@@ -213,8 +218,8 @@ export default function DataTransaksiPage() {
           .slice(0, 40)}`
         : ""
       const exportResult = await saveExportFile({
-        fileName: `riwayat-${categorySuffix}${searchSuffix}-${dateSuffix}.csv`,
-        contents: `\uFEFF${csvContent}`,
+        fileName: `riwayat-${categorySuffix}${searchSuffix}-${dateSuffix}.xlsx`,
+        contents: buffer,
       })
 
       if (!exportResult.saved) return
@@ -314,7 +319,7 @@ export default function DataTransaksiPage() {
         onDeleteRow={user?.role === "admin" ? handleDeleteRow : undefined}
       />
 
-      <AlertDialog open={deleteDialog !== null} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+      <AlertDialog open={deleteDialog !== null} onOpenChange={(open) => !open && !isDeleting && setDeleteDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -327,8 +332,9 @@ export default function DataTransaksiPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={isDeleting}>
+              {isDeleting ? <Loader2 className="size-4 mr-2 animate-spin" /> : null}
               Hapus
             </AlertDialogAction>
           </AlertDialogFooter>

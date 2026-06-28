@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react"
-import { Eye, EyeOff, LockKeyhole, PackageSearch, UserRound } from "lucide-react"
+import { Eye, EyeOff, LockKeyhole, PackageSearch, UserRound, Loader2 } from "lucide-react"
 import { Navigate, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -153,7 +153,14 @@ export default function LoginPage() {
               )}
 
               <Button className="h-11 w-full" disabled={isSubmitting}>
-                {isSubmitting ? "Memeriksa akun..." : "Masuk"}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Memeriksa akun...
+                  </>
+                ) : (
+                  "Masuk"
+                )}
               </Button>
 
               <p className="text-center text-xs leading-5 text-muted-foreground">

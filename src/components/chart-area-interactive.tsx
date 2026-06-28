@@ -32,24 +32,8 @@ import {
 
 export const description = "Grafik aktivitas transaksi barang"
 
-export type ChartTransaction = {
-    id: string
-    tanggal: string
-    nomor: string
-    kategori: string
-    status: string
-    sn: string
-    merek: string
-    asal: string | null
-    tujuan: string | null
-}
-
-type ChartDataPoint = {
-    date: string
-    masuk: number
-    keluar: number
-    rusak: number
-}
+import type { ChartTransaction } from "@/types/transaction"
+import type { ChartDataPoint } from "@/types/dashboard"
 
 const chartConfig = {
     masuk: {
