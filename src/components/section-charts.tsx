@@ -31,6 +31,22 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { InventoryStats, NotificationItem, SafetyStockAlert } from "@/types/dashboard"
 
+const getBaseUrl = () => {
+    const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+    return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+};
+
+const getHeaders = () => {
+    const token = localStorage.getItem("arxiva-auth-token");
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+    };
+    if (token) {
+        headers["Authorization"] = `${token}`;
+    }
+    return headers;
+};
+
 const chartConfig = {
     visitors: {
         label: "Terisi",
@@ -162,7 +178,13 @@ export function SectionCharts({
             if (isMitra) return
 
             try {
-                const locations = await invoke<any[]>("get_locations")
+                const res = await fetch(`${getBaseUrl()}/locations`, {
+                    method: "GET",
+                    headers: getHeaders(),
+                })
+                if (!res.ok) throw new Error("Gagal mengambil data lokasi")
+                const locations = await res.json()
+
                 let total = 0
                 let used = 0
                 for (const loc of locations) {
