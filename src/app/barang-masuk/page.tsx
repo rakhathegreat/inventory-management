@@ -52,7 +52,7 @@ const getHeaders = () => {
   return headers;
 };
 
-const ADMIN_LOCATION = "KP";
+const ADMIN_LOCATION = "KP Tasikmalaya";
 
 const detectBrandFromCode = (code: string, brands: BrandDefinition[]): BrandOption => {
   if (!code) return "";
@@ -89,8 +89,8 @@ const isValidMitraInboundSource = (
   const status = normalizeStatus(item.status);
 
   return (
-    (owner === normalizeOwner(ADMIN_LOCATION) && status === "masuk") ||
-    (owner === normalizeOwner(mitraName) && status === "keluar")
+    ((owner === normalizeOwner(ADMIN_LOCATION) || owner === normalizeOwner("KP Tasikmalaya")) && (status === "masuk" || status === "tersedia")) ||
+    (owner === normalizeOwner(mitraName) && (status === "keluar" || status === "diluar"))
   );
 };
 
@@ -211,6 +211,7 @@ export default function BarangMasukPage() {
 
         (Array.isArray(locationsData) ? locationsData : []).forEach((loc: any) => {
           if (loc.isActive === false) return;
+          if (loc.name === "Keluar" || loc.name === "Diluar") return;
           if (
             normalizeOwner(loc.owner || ADMIN_LOCATION) !==
             normalizeOwner(locationOwner)
@@ -227,16 +228,26 @@ export default function BarangMasukPage() {
                 name,
                 brandRule: lvl.brandRule || "Campuran",
               });
-              newKuota[name] = Math.max(0, lvl.capacity - (lvl.usedCapacity || 0));
+              const actualUsed = (Array.isArray(items) ? items : []).filter((item: any) => {
+                if (!item.lokasiPenyimpanan) return false;
+                const st = (item.status || "").trim().toLowerCase();
+                return item.lokasiPenyimpanan.trim() === name.trim() && st !== "diluar" && st !== "keluar";
+              }).length;
+              newKuota[name] = Math.max(0, lvl.capacity - actualUsed);
             });
           } else {
             locs.push({
               name: loc.name,
               brandRule: loc.brandRule || "Campuran",
             });
+            const actualUsed = (Array.isArray(items) ? items : []).filter((item: any) => {
+              if (!item.lokasiPenyimpanan) return false;
+              const st = (item.status || "").trim().toLowerCase();
+              return item.lokasiPenyimpanan.trim() === loc.name.trim() && st !== "diluar" && st !== "keluar";
+            }).length;
             newKuota[loc.name] = Math.max(
               0,
-              (loc.capacity || 0) - (loc.usedCapacity || 0)
+              (loc.capacity || 0) - actualUsed
             );
           }
         });
@@ -324,24 +335,34 @@ export default function BarangMasukPage() {
       return;
     }
 
-    if (
-      user?.role !== "mitra" &&
-      existingItem &&
-      normalizeStatus(existingItem.status) !== "keluar"
-    ) {
-      toast.error("Serial number masih terdaftar sebagai barang aktif.", {
-        description: `Status saat ini: ${existingItem.status}`,
-      });
-      updateKodeBarang("");
-      focusKodeBarangInput();
-      return;
-    }
-
     const itemBrand =
       existingItem?.merek ||
       detectBrandFromCode(trimmedKode, dbBrands) ||
       merekFallback;
-    const recommendedLocation = getRecommendedLocation(itemBrand, dbLocations, kuota);
+    let recommendedLocation = getRecommendedLocation(itemBrand, dbLocations, kuota);
+
+    if (
+      user?.role !== "mitra" &&
+      existingItem &&
+      normalizeStatus(existingItem.status) !== "keluar" &&
+      normalizeStatus(existingItem.status) !== "diluar"
+    ) {
+      if (recommendedLocation && recommendedLocation.trim().toLowerCase() === (existingItem.lokasiPenyimpanan || "").trim().toLowerCase()) {
+        const alternativeLocation = dbLocations.find(
+          (loc) => (kuota[loc.name] ?? 0) > 0 && loc.name.trim().toLowerCase() !== (existingItem.lokasiPenyimpanan || "").trim().toLowerCase()
+        );
+        if (alternativeLocation) {
+          recommendedLocation = alternativeLocation.name;
+        } else {
+          toast.error("Barang sudah berada di lokasi tersebut dan tidak dapat dimasukkan kembali kecuali pindah penyimpanan.", {
+            description: `Lokasi saat ini: ${existingItem.lokasiPenyimpanan}`,
+          });
+          updateKodeBarang("");
+          focusKodeBarangInput();
+          return;
+        }
+      }
+    }
 
     if (!recommendedLocation) {
       toast.error(
@@ -362,7 +383,7 @@ export default function BarangMasukPage() {
       status: "Valid",
       existingItemId: existingItem?.id,
       source:
-        normalizeOwner(existingItem?.mitra) === normalizeOwner(ADMIN_LOCATION)
+        normalizeOwner(existingItem?.mitra) === normalizeOwner(ADMIN_LOCATION) || normalizeOwner(existingItem?.mitra) === normalizeOwner("KP Tasikmalaya")
           ? "KP"
           : existingItem
             ? "Mitra"
@@ -522,7 +543,10 @@ export default function BarangMasukPage() {
         }
 
         if (item.existingItemId && !existingItem) return true;
-        return Boolean(existingItem && normalizeStatus(existingItem.status) !== "keluar");
+        if (existingItem && normalizeStatus(existingItem.status) !== "keluar" && normalizeStatus(existingItem.status) !== "diluar") {
+          return item.lokasi.trim().toLowerCase() === (existingItem.lokasiPenyimpanan || "").trim().toLowerCase();
+        }
+        return false;
       });
 
       if (invalidItem) {
@@ -538,11 +562,13 @@ export default function BarangMasukPage() {
               ? "Barang tidak lagi tersedia untuk diterima dari KP."
               : "Barang tidak ditemukan di data KP."
             : existingItem
-              ? "Barang tidak dapat diproses sebagai masuk kembali."
+              ? normalizeStatus(existingItem.status) !== "keluar" && normalizeStatus(existingItem.status) !== "diluar"
+                ? "Barang sudah berstatus Tersedia di lokasi tersebut dan tidak dapat dimasukkan kembali kecuali pindah penyimpanan."
+                : "Barang tidak dapat diproses sebagai masuk kembali."
               : "Data barang keluar tidak lagi ditemukan.",
           {
             description: existingItem
-              ? `${invalidItem.nomor} berstatus ${existingItem.status} pada ${existingItem.mitra || ADMIN_LOCATION}`
+              ? `${invalidItem.nomor} berstatus ${existingItem.status} pada ${existingItem.mitra || "KP Tasikmalaya"}`
               : invalidItem.nomor,
           }
         );
@@ -576,7 +602,7 @@ export default function BarangMasukPage() {
             mitra:
               user?.role === "mitra"
                 ? user.displayName
-                : existingItem.mitra || ADMIN_LOCATION,
+                : "KP Tasikmalaya",
           };
           const resUp = await fetch(`${getBaseUrl()}/items/${updatedItem.id}`, {
             method: "PUT",
@@ -596,7 +622,7 @@ export default function BarangMasukPage() {
             mitra:
               user?.role === "mitra"
                 ? user.displayName
-                : ADMIN_LOCATION,
+                : "KP Tasikmalaya",
           };
           const resAdd = await fetch(`${getBaseUrl()}/items`, {
             method: "POST",
@@ -619,7 +645,7 @@ export default function BarangMasukPage() {
           mitra:
             user?.role === "mitra"
               ? user.displayName
-              : existingItem?.mitra || ADMIN_LOCATION,
+              : "KP Tasikmalaya",
           keterangan: item.kondisi || kondisiBarang,
         };
         const resAddTrx = await fetch(`${getBaseUrl()}/transactions`, {

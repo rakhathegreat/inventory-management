@@ -63,7 +63,7 @@ import {
 } from "@/components/ui/alert-dialog"
 
 import { toast } from "sonner"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { saveExportFile } from "@/lib/export-file"
 import * as XLSX from "xlsx"
 import { useAuth } from "@/lib/auth"
@@ -89,7 +89,7 @@ import type { Transaction } from "@/types/transaction"
 import type { DeleteDialogState } from "@/types/ui"
 
 const STATUS_OPTIONS: StatusUnit[] = ["Tersedia", "Diluar", "Rusak", "Hilang"]
-const ADMIN_LOCATION = "KP"
+const ADMIN_LOCATION = "KP Tasikmalaya"
 const getLokasiPenyimpanan = (
   status: StatusUnit,
   lokasiPenyimpanan: string
@@ -130,7 +130,14 @@ export default function DataBarangPage() {
   const isMobile = useIsMobile()
   const [barangList, setBarangList] = useState<BarangUnit[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
+  const [searchParams] = useSearchParams()
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "")
+  useEffect(() => {
+    const search = searchParams.get("search")
+    if (search) {
+      setSearchTerm(search)
+    }
+  }, [searchParams])
   const [dbCategories, setDbCategories] = useState<string[]>([])
   const [categoryDefinitions, setCategoryDefinitions] = useState<CategoryDefinition[]>([])
   const [dbLocations, setDbLocations] = useState<StorageLocationOption[]>([])
@@ -152,7 +159,7 @@ export default function DataBarangPage() {
           : data
       const normalizedData = visibleData.map((item) => ({
         ...item,
-        mitra: item.mitra || ADMIN_LOCATION,
+        mitra: !item.mitra || item.mitra === "KP" || item.mitra === "Administrator Utama" || item.mitra === "admin" ? ADMIN_LOCATION : item.mitra,
         lokasiPenyimpanan: getLokasiPenyimpanan(
           item.status,
           item.lokasiPenyimpanan || ""
@@ -502,7 +509,7 @@ export default function DataBarangPage() {
           mitra:
             user?.role === "mitra"
               ? user.displayName
-              : originalBarang.mitra || ADMIN_LOCATION,
+              : !originalBarang.mitra || originalBarang.mitra === "KP" || originalBarang.mitra === "Administrator Utama" || originalBarang.mitra === "admin" ? ADMIN_LOCATION : originalBarang.mitra,
         }
         const changedToRusak =
           originalBarang.status !== "Rusak" && updatedBarang.status === "Rusak"
@@ -933,7 +940,7 @@ export default function DataBarangPage() {
                     {user?.role === "admin" && (
                       <TableCell>
                         <Badge
-                          variant={item.mitra === ADMIN_LOCATION ? "default" : "outline"}
+                          variant="outline"
                           className="font-normal"
                         >
                           {item.mitra || ADMIN_LOCATION}

@@ -91,7 +91,7 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
 
     conn.execute(
         "INSERT OR IGNORE INTO app_settings (key, value)
-         VALUES ('kp_identity_code', 'KP')",
+         VALUES ('kp_identity_code', 'KP Tasikmalaya')",
         [],
     )?;
 
@@ -216,21 +216,21 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
             capacity INTEGER,
             used_capacity INTEGER,
             brand_rule TEXT,
-            owner TEXT NOT NULL DEFAULT 'KP'
+            owner TEXT NOT NULL DEFAULT 'KP Tasikmalaya'
         )",
         [],
     )?;
 
     if !column_exists(&conn, "storage_locations", "owner")? {
         conn.execute(
-            "ALTER TABLE storage_locations ADD COLUMN owner TEXT NOT NULL DEFAULT 'KP'",
+            "ALTER TABLE storage_locations ADD COLUMN owner TEXT NOT NULL DEFAULT 'KP Tasikmalaya'",
             [],
         )?;
     }
 
     conn.execute(
         "UPDATE storage_locations
-         SET owner = 'KP'
+         SET owner = 'KP Tasikmalaya'
          WHERE owner IS NULL OR TRIM(owner) = ''",
         [],
     )?;
@@ -311,7 +311,7 @@ pub fn init_db(db_path: PathBuf) -> Result<Connection> {
 
     conn.execute(
         "UPDATE items
-         SET partner = 'KP'
+         SET partner = 'KP Tasikmalaya'
          WHERE partner IS NULL OR TRIM(partner) = ''",
         [],
     )?;
@@ -510,11 +510,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(partner.as_deref(), Some("Mitra Contoh"));
-        assert_eq!(admin_location.as_deref(), Some("KP"));
+        assert_eq!(admin_location.as_deref(), Some("KP Tasikmalaya"));
         assert_eq!(safety_stock, 5);
-        assert_eq!(location_owner, "KP");
+        assert_eq!(location_owner, "KP Tasikmalaya");
         assert_eq!(partner_code, "MTR-001");
-        assert_eq!(kp_code, "KP");
+        assert_eq!(kp_code, "KP Tasikmalaya");
         assert_eq!(duplicate_code_count, 2);
         assert!(note_column_exists);
 

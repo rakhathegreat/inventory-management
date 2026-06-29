@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { useNavigate } from "react-router-dom";
 
 const getBaseUrl = () => {
   const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
@@ -47,6 +48,7 @@ import type { StorageLocation } from "@/types/inventory";
 import type { SheetMode } from "@/types/ui";
 
 export default function LokasiBarangPage() {
+  const navigate = useNavigate();
   const [locations, setLocations] = useState<StorageLocation[]>([]);
   const [brands, setBrands] = useState<string[]>(["Campuran"]);
   const [sheetMode, setSheetMode] = useState<SheetMode>("closed");
@@ -744,7 +746,7 @@ export default function LokasiBarangPage() {
         {filteredLocations.map(loc => {
           if (loc.type === "Rak") {
             return (
-              <Card key={loc.id} className={`border-neutral-800 bg-neutral-900/40 overflow-hidden flex flex-col relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60 hover:shadow-xl hover:shadow-black/20 ${!loc.isActive ? 'opacity-50 grayscale' : ''}`}>
+              <Card key={loc.id} className={`border-neutral-800 bg-neutral-900/40 overflow-hidden flex flex-col relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60 hover:shadow-xl hover:shadow-black/20 cursor-pointer ${!loc.isActive ? 'opacity-50 grayscale' : ''}`} onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="menuitem"]')) return; navigate(`/data-barang?search=${encodeURIComponent(loc.name)}`); }}>
                 <CardHeader className="pb-4 border-b border-neutral-800/50 bg-neutral-900/20">
                   <div className="flex justify-between items-start">
                     <div className="space-y-1.5">
@@ -789,7 +791,7 @@ export default function LokasiBarangPage() {
                     {loc.levels?.map(lvl => {
                       const isEffectiveActive = loc.isActive && lvl.isActive;
                       return (
-                        <div key={lvl.id} className={`p-3 rounded-xl border transition-colors ${isEffectiveActive ? 'border-neutral-800 bg-neutral-900/80 hover:border-neutral-700' : 'border-neutral-800/50 bg-neutral-900/30 opacity-50 grayscale'} flex flex-col gap-3 group/level`}>
+                        <div key={lvl.id} onClick={(e) => { e.stopPropagation(); if ((e.target as HTMLElement).closest('button, [role="menuitem"]')) return; navigate(`/data-barang?search=${encodeURIComponent(`${loc.name} - ${lvl.name}`)}`); }} className={`p-3 rounded-xl border transition-colors ${isEffectiveActive ? 'border-neutral-800 bg-neutral-900/80 hover:border-neutral-700 cursor-pointer' : 'border-neutral-800/50 bg-neutral-900/30 opacity-50 grayscale'} flex flex-col gap-3 group/level`}>
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-sm text-neutral-200">{lvl.name}</span>
@@ -849,7 +851,7 @@ export default function LokasiBarangPage() {
             );
           } else {
             return (
-              <Card key={loc.id} className={`border-neutral-800 bg-neutral-900/40 overflow-hidden flex flex-col relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60 hover:shadow-md hover:shadow-black/20 ${!loc.isActive ? 'opacity-50 grayscale' : ''}`}>
+              <Card key={loc.id} className={`border-neutral-800 bg-neutral-900/40 overflow-hidden flex flex-col relative group transition-all duration-300 hover:border-neutral-700 hover:bg-neutral-900/60 hover:shadow-md hover:shadow-black/20 cursor-pointer ${!loc.isActive ? 'opacity-50 grayscale' : ''}`} onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="menuitem"]')) return; navigate(`/data-barang?search=${encodeURIComponent(loc.name)}`); }}>
                 <CardContent className="px-4 flex flex-col gap-4">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-3">

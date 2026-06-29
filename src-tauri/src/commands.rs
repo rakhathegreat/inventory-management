@@ -621,7 +621,7 @@ pub fn delete_partner(state: State<DbState>, id: String) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     tx.execute(
         "UPDATE storage_locations
-         SET owner = 'KP'
+         SET owner = 'KP Tasikmalaya'
          WHERE owner = (SELECT name FROM partners WHERE id = ?1) COLLATE NOCASE",
         params![&id],
     )

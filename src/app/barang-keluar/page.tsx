@@ -139,11 +139,12 @@ export default function BarangKeluarPage() {
         const locationsData = rawLoc.data || rawLoc;
         const newKuota: Record<string, number> = {};
         const locationOwner =
-          user?.role === "mitra" ? user.displayName : "KP";
+          user?.role === "mitra" ? user.displayName : "KP Tasikmalaya";
 
         (Array.isArray(locationsData) ? locationsData : []).forEach((loc: any) => {
+          if (loc.name === "Keluar" || loc.name === "Diluar") return;
           if (
-            (loc.owner || "KP").trim().toLowerCase() !==
+            (loc.owner || "KP Tasikmalaya").trim().toLowerCase() !==
             locationOwner.trim().toLowerCase()
           ) {
             return;
@@ -152,10 +153,20 @@ export default function BarangKeluarPage() {
           if (loc.type === "Rak" && loc.levels) {
             loc.levels.forEach((lvl: any) => {
               const name = `${loc.name} - ${lvl.name}`;
-              newKuota[name] = lvl.capacity - (lvl.usedCapacity || 0);
+              const actualUsed = (Array.isArray(items) ? items : []).filter((item: any) => {
+                if (!item.lokasiPenyimpanan) return false;
+                const st = (item.status || "").trim().toLowerCase();
+                return item.lokasiPenyimpanan.trim() === name.trim() && st !== "diluar" && st !== "keluar";
+              }).length;
+              newKuota[name] = Math.max(0, lvl.capacity - actualUsed);
             });
           } else {
-            newKuota[loc.name] = (loc.capacity || 0) - (loc.usedCapacity || 0);
+            const actualUsed = (Array.isArray(items) ? items : []).filter((item: any) => {
+              if (!item.lokasiPenyimpanan) return false;
+              const st = (item.status || "").trim().toLowerCase();
+              return item.lokasiPenyimpanan.trim() === loc.name.trim() && st !== "diluar" && st !== "keluar";
+            }).length;
+            newKuota[loc.name] = Math.max(0, (loc.capacity || 0) - actualUsed);
           }
         });
         setKuota(newKuota);
@@ -236,9 +247,9 @@ export default function BarangKeluarPage() {
       return;
     }
 
-    if (normalizeStatus(matchedItem.status) === "keluar") {
-      toast.error("Barang ini sudah berstatus Keluar dan tidak dapat dikeluarkan kembali.", {
-        description: trimmedKode,
+    if (normalizeStatus(matchedItem.status) === "keluar" || normalizeStatus(matchedItem.status) === "diluar") {
+      toast.error("Barang ini sudah berada di luar dan tidak dapat dikeluarkan kembali.", {
+        description: `Status saat ini: ${matchedItem.status}`,
       });
       updateKodeBarang("");
       focusKodeBarangInput();
@@ -370,7 +381,7 @@ export default function BarangKeluarPage() {
               dbItem.mitra?.trim().toLowerCase() ===
               user.displayName.trim().toLowerCase())
         );
-        return !latestItem || normalizeStatus(latestItem.status) === "keluar";
+        return !latestItem || normalizeStatus(latestItem.status) === "keluar" || normalizeStatus(latestItem.status) === "diluar";
       });
 
       if (invalidItem) {
@@ -384,7 +395,7 @@ export default function BarangKeluarPage() {
 
         toast.error(
           latestItem
-            ? "Barang yang sudah berstatus Keluar tidak dapat disimpan kembali."
+            ? "Barang yang sudah berada di luar tidak dapat dikeluarkan kembali."
             : "Data barang tidak lagi ditemukan di data master.",
           { description: invalidItem.nomor }
         );

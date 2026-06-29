@@ -170,7 +170,7 @@ export function SectionCharts({
                         continue
                     }
                     if (
-                        (loc.owner || "KP").trim().toLowerCase() !== "kp"
+                        (loc.owner || "KP Tasikmalaya").trim().toLowerCase() !== "kp tasikmalaya"
                     ) {
                         continue
                     }
