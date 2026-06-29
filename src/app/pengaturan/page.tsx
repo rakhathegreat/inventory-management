@@ -9,6 +9,7 @@ import {
   User,
   Cloud,
   Lock,
+  Unlock,
   Server,
   Folder,
   Save
@@ -40,6 +41,7 @@ export default function PengaturanPage() {
   const [driveFolderId, setDriveFolderId] = useState("")
   const [isSavingFolderId, setIsSavingFolderId] = useState(false)
   const [isLoadingFolderId, setIsLoadingFolderId] = useState(true)
+  const [isInputActive, setIsInputActive] = useState(false)
 
   useEffect(() => {
     const fetchGoogleStatus = async () => {
@@ -112,6 +114,7 @@ export default function PengaturanPage() {
       }
 
       toast.success("ID Folder Drive berhasil disimpan!");
+      setIsInputActive(false);
     } catch (error: any) {
       console.error("Error saving Drive Folder ID:", error);
       toast.error(error.message || "Gagal menyimpan ID Folder Drive");
@@ -228,13 +231,29 @@ export default function PengaturanPage() {
                   <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                     <Label htmlFor="driveFolderId" className="font-medium">ID Folder Google Drive</Label>
                   </div>
-                  <Input
-                    id="driveFolderId"
-                    value={driveFolderId}
-                    onChange={(e) => setDriveFolderId(e.target.value)}
-                    disabled={!isAdmin || isLoadingFolderId || isSavingFolderId}
-                    className="p-5"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="driveFolderId"
+                      value={driveFolderId}
+                      onChange={(e) => setDriveFolderId(e.target.value)}
+                      disabled={!isAdmin || isLoadingFolderId || isSavingFolderId || !isInputActive}
+                      className="p-5 pr-12"
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => setIsInputActive(!isInputActive)}
+                      disabled={!isAdmin || isLoadingFolderId || isSavingFolderId}
+                      className="absolute right-2 top-1 text-muted-foreground hover:text-foreground"
+                    >
+                      {isInputActive ? (
+                        <Unlock className="size-4" />
+                      ) : (
+                        <Lock className="size-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </form>
             </div>
@@ -250,7 +269,7 @@ export default function PengaturanPage() {
                   {!isAdmin && <Badge variant="secondary" className="text-xs font-normal">Akses Admin</Badge>}
                 </CardTitle>
                 <CardDescription className="text-sm text-muted-foreground">
-                  {isGoogleConnected 
+                  {isGoogleConnected
                     ? "Akun Google terhubung untuk seluruh sistem aplikasi (upload file, pembuatan folder, dan sinkronisasi spreadsheet)."
                     : "Menghubungkan akun Google untuk otentikasi dan akses layanan terintegrasi."}
                 </CardDescription>
@@ -306,7 +325,7 @@ export default function PengaturanPage() {
                       Hubungkan Akun Google Anda
                     </p>
                     <p className="text-xs leading-relaxed text-muted-foreground max-w-md mx-auto">
-                      {isAdmin 
+                      {isAdmin
                         ? "Sistem memerlukan izin OAuth2 untuk mengotentikasi dan menghubungkan akun Google Anda dengan layanan aplikasi."
                         : "Sistem memerlukan izin OAuth2 dari Admin untuk mengotentikasi dan menghubungkan akun Google dengan layanan aplikasi."}
                     </p>
