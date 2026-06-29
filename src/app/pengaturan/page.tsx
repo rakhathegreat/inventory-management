@@ -29,6 +29,8 @@ const getBaseUrl = () => {
 
 export default function PengaturanPage() {
   const { user } = useAuth()
+  const isAdmin = user?.role?.toLowerCase() === "admin";
+
   const [isGoogleConnected, setIsGoogleConnected] = useState(false)
   const [googleEmail, setGoogleEmail] = useState("")
   const [isConnecting, setIsConnecting] = useState(false)
@@ -89,6 +91,10 @@ export default function PengaturanPage() {
 
   const handleSaveDriveFolderId = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      toast.error("Hanya Admin yang diizinkan untuk mengubah ID Folder Drive.");
+      return;
+    }
     setIsSavingFolderId(true);
     try {
       const token = localStorage.getItem("arxiva-auth-token");
@@ -115,6 +121,10 @@ export default function PengaturanPage() {
   };
 
   const handleConnectGoogle = async () => {
+    if (!isAdmin) {
+      toast.error("Hanya Admin yang diizinkan untuk menghubungkan akun Google.");
+      return;
+    }
     setIsConnecting(true);
     toast.info("Membuka browser untuk otentikasi Google...");
 
@@ -159,6 +169,10 @@ export default function PengaturanPage() {
   };
 
   const handleDisconnectGoogle = async () => {
+    if (!isAdmin) {
+      toast.error("Hanya Admin yang diizinkan untuk memutuskan koneksi akun Google.");
+      return;
+    }
     setIsDisconnecting(true);
     try {
       const token = localStorage.getItem("arxiva-auth-token");
@@ -201,7 +215,10 @@ export default function PengaturanPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-b pb-9 pt-2">
             <div className="flex items-center">
               <div>
-                <h2 className="text-base font-medium">Drive Folder ID</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-medium">Drive Folder ID</h2>
+                  {!isAdmin && <Badge variant="secondary" className="text-xs font-normal">Akses Admin</Badge>}
+                </div>
                 <p className="text-muted-foreground text-sm max-w-xl mt-1">Simpan Folder ID Drive untuk menentukan folder root.</p>
               </div>
             </div>
@@ -215,7 +232,7 @@ export default function PengaturanPage() {
                     id="driveFolderId"
                     value={driveFolderId}
                     onChange={(e) => setDriveFolderId(e.target.value)}
-                    disabled={isLoadingFolderId || isSavingFolderId}
+                    disabled={!isAdmin || isLoadingFolderId || isSavingFolderId}
                     className="p-5"
                   />
                 </div>
@@ -230,9 +247,12 @@ export default function PengaturanPage() {
                 <CardTitle className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
                   <Cloud className="size-5 text-primary" />
                   Google OAuth2
+                  {!isAdmin && <Badge variant="secondary" className="text-xs font-normal">Akses Admin</Badge>}
                 </CardTitle>
                 <CardDescription className="text-sm text-muted-foreground">
-                  Menghubungkan akun Google untuk otentikasi dan akses layanan terintegrasi
+                  {isGoogleConnected 
+                    ? "Akun Google terhubung untuk seluruh sistem aplikasi (upload file, pembuatan folder, dan sinkronisasi spreadsheet)."
+                    : "Menghubungkan akun Google untuk otentikasi dan akses layanan terintegrasi."}
                 </CardDescription>
               </div>
               <Badge variant="outline" className="w-fit font-medium shadow-sm">
@@ -250,7 +270,8 @@ export default function PengaturanPage() {
                       <Badge variant="secondary" className="font-normal px-2.5 py-0.5 shadow-sm">OAuth2 Aktif</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Akun Google Anda saat ini telah terhubung secara aman dengan sistem.
+                      Akun Google ini saat ini telah terhubung secara aman dengan sistem untuk digunakan oleh seluruh pengguna aplikasi.
+                      {!isAdmin && " (Hanya Admin yang dapat mengubah atau memutuskan tautan akun)."}
                     </p>
                   </div>
                   <div className="flex justify-start pt-2 border-t border-muted">
@@ -258,7 +279,7 @@ export default function PengaturanPage() {
                       variant="destructive"
                       size="sm"
                       onClick={handleDisconnectGoogle}
-                      disabled={isDisconnecting}
+                      disabled={!isAdmin || isDisconnecting}
                       className="gap-2 font-medium shadow-sm transition-all active:scale-98"
                     >
                       {isDisconnecting ? (
@@ -285,12 +306,14 @@ export default function PengaturanPage() {
                       Hubungkan Akun Google Anda
                     </p>
                     <p className="text-xs leading-relaxed text-muted-foreground max-w-md mx-auto">
-                      Sistem memerlukan izin OAuth2 untuk mengotentikasi dan menghubungkan akun Google Anda dengan layanan aplikasi.
+                      {isAdmin 
+                        ? "Sistem memerlukan izin OAuth2 untuk mengotentikasi dan menghubungkan akun Google Anda dengan layanan aplikasi."
+                        : "Sistem memerlukan izin OAuth2 dari Admin untuk mengotentikasi dan menghubungkan akun Google dengan layanan aplikasi."}
                     </p>
                   </div>
                   <Button
                     onClick={handleConnectGoogle}
-                    disabled={isConnecting}
+                    disabled={!isAdmin || isConnecting}
                     size="default"
                     className="gap-2 font-medium shadow-sm transition-all active:scale-98"
                   >
