@@ -57,7 +57,7 @@ export default function LoginPage() {
       <div className="absolute -right-24 -top-24 size-80 rounded-full bg-primary/10 blur-3xl" />
       <div className="absolute -bottom-32 -left-20 size-96 rounded-full bg-primary/10 blur-3xl" />
 
-      <div className="relative grid w-full max-w-120 overflow-hidden rounded-3xl border bg-card shadow-2xl">
+      <div className="relative grid w-full max-w-110 overflow-hidden rounded-xl border bg-card shadow-2xl">
         <Card className="rounded-none border-0 bg-transparent py-8 shadow-none sm:py-12">
           <CardHeader className="px-6 sm:px-10">
             <div className="mb-3 flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary md:hidden">
