@@ -57,35 +57,7 @@ export default function LoginPage() {
       <div className="absolute -right-24 -top-24 size-80 rounded-full bg-primary/10 blur-3xl" />
       <div className="absolute -bottom-32 -left-20 size-96 rounded-full bg-primary/10 blur-3xl" />
 
-      <div className="relative grid w-full max-w-4xl overflow-hidden rounded-3xl border bg-card shadow-2xl md:grid-cols-[1.1fr_0.9fr]">
-        <section className="hidden flex-col justify-between bg-primary p-10 text-primary-foreground md:flex">
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-xl bg-primary-foreground/15">
-              <PackageSearch className="size-6" />
-            </div>
-            <div>
-              <p className="text-xl font-semibold">Arxiva</p>
-              <p className="text-sm text-primary-foreground/70">
-                Inventory Management
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <h1 className="max-w-sm text-4xl font-semibold leading-tight">
-              Kelola inventori dengan akses yang tepat.
-            </h1>
-            <p className="mt-4 max-w-md text-sm leading-6 text-primary-foreground/75">
-              Administrator mengelola seluruh operasional. Mitra masuk melalui
-              akun yang telah dibuatkan oleh administrator.
-            </p>
-          </div>
-
-          <p className="text-xs text-primary-foreground/60">
-            Akses aman untuk Admin dan Mitra
-          </p>
-        </section>
-
+      <div className="relative grid w-full max-w-120 overflow-hidden rounded-3xl border bg-card shadow-2xl">
         <Card className="rounded-none border-0 bg-transparent py-8 shadow-none sm:py-12">
           <CardHeader className="px-6 sm:px-10">
             <div className="mb-3 flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary md:hidden">
