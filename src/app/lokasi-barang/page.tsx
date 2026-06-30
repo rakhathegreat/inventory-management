@@ -10,7 +10,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 
 const getBaseUrl = () => {
-  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL ;
   return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 };
 
