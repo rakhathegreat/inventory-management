@@ -91,6 +91,16 @@ const detectBrandFromCode = (code: string, brands: BrandDefinition[]): BrandOpti
  * Mengecek apakah event berasal dari elemen input teks, textarea, atau konten editable.
  * Berguna agar global keyboard listener (scanner) tidak membajak input pengguna saat mengetik.
  */
+const detectMitraFromSN = (sn: string, partners: Partner[]): string => {
+  if (!sn) return "";
+  const normalizedSN = sn.trim().toUpperCase();
+  const matched = partners.find((partner) => {
+    const code = (partner.code || "").trim().toUpperCase();
+    return code && normalizedSN.startsWith(code);
+  });
+  return matched?.name || "";
+};
+
 const isTextInputTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) return false;
   return Boolean(target.closest("input, textarea, [contenteditable='true']"));
@@ -192,6 +202,7 @@ export default function BarangMasukPage() {
   const [dbItems, setDbItems] = useState<InventoryItem[]>([]);
   const [dbPartners, setDbPartners] = useState<Partner[]>([]);
   const [asalBarang, setAsalBarang] = useState<string>("SBU Regional Jawa Barat");
+  const [asalBarangManual, setAsalBarangManual] = useState<boolean>(false);
   const [kondisiBarang, setKondisiBarang] = useState<string>("Baru");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -338,6 +349,17 @@ export default function BarangMasukPage() {
    * 
    * @param {string} kodeOverride - Kode serial number yang akan disubmit.
    */
+  // Auto-detect mitra dari SN dan set asal barang otomatis
+  useEffect(() => {
+    if (asalBarangManual) return;
+    const detectedMitra = detectMitraFromSN(kodeBarang, dbPartners);
+    if (detectedMitra) {
+      setAsalBarang(detectedMitra);
+    } else {
+      setAsalBarang("SBU Regional Jawa Barat");
+    }
+  }, [kodeBarang, dbPartners, asalBarangManual]);
+
   const handleSubmit = useCallback((kodeOverride = kodeBarang) => {
     const trimmedKode = kodeOverride.trim();
     if (!trimmedKode) return;
@@ -387,7 +409,7 @@ export default function BarangMasukPage() {
       existingItem?.merek ||
       detectBrandFromCode(trimmedKode, dbBrands) ||
       merekFallback;
-      
+
     // Rekomendasi Lokasi Otomatis (Smart Routing)
     let recommendedLocation = getRecommendedLocation(itemBrand, dbLocations, kuota);
 
@@ -450,6 +472,9 @@ export default function BarangMasukPage() {
 
     updateKodeBarang("");
     setMerekFallback("");
+    setAsalBarangManual(false);
+
+    // Auto-focus kembali ke input setelah submit
     focusKodeBarangInput();
   }, [
     barangMasuk,
@@ -465,6 +490,7 @@ export default function BarangMasukPage() {
     user,
     asalBarang,
     kondisiBarang,
+    asalBarangManual,
   ]);
 
   /**
@@ -824,6 +850,7 @@ export default function BarangMasukPage() {
                   value={asalBarang}
                   onValueChange={(value) => {
                     setAsalBarang(value);
+                    setAsalBarangManual(true);
                     focusKodeBarangInput();
                   }}
                 >
@@ -839,6 +866,11 @@ export default function BarangMasukPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {!asalBarangManual && detectMitraFromSN(kodeBarang, dbPartners) && (
+                  <p className="text-xs text-sky-600 dark:text-sky-400">
+                    Terdeteksi otomatis dari SN
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-3">

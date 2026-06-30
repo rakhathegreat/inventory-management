@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
  * @returns {string} String URL API Backend.
  */
 const getBaseUrl = () => {
-  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL || "http://172.168.9.139:3000/";
+  const baseUrl = import.meta.env.URL || import.meta.env.VITE_URL ;
   return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 };
 
