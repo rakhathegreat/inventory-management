@@ -7,6 +7,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
 import { useDisableContextMenu } from "@/lib/useDisableContextMenu";
 
+import { UpdateModal } from "@/components/ui/update-modal";
+
 function App() {
 	useDisableContextMenu();
 
@@ -20,6 +22,7 @@ function App() {
 				</AuthProvider>
 			</TooltipProvider>
 			<Toaster position="top-right" />
+			<UpdateModal />
 		</ThemeProvider>
 	);
 }

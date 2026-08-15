@@ -108,9 +108,9 @@ export default function PengaturanPage() {
             headers: { Authorization: token }
           });
           const data = await res.json();
-          if (data.connected) {
+          if (data.googleConnected || data.connected) {
             setIsGoogleConnected(true);
-            setGoogleEmail(data.email || "");
+            setGoogleEmail(data.googleEmail || data.email || "");
           } else {
             setIsGoogleConnected(false);
           }
@@ -126,19 +126,15 @@ export default function PengaturanPage() {
     const fetchDriveFolderId = async () => {
       try {
         setIsLoadingFolderId(true);
-        // Panggil endpoint pengaturan sistem
-        // Untuk sekarang, kita gunakan endpoint /api/settings/drive-folder
-        // Pastikan endpoint ini tersedia di backend (atau gunakan preferensi pengguna jika global)
         const token = localStorage.getItem("arxiva-auth-token");
         if (token) {
-          // Asumsi ada endpoint untuk ini
-          const res = await fetch(`${getBaseUrl()}/settings/drive-folder`, {
+          const res = await fetch(`${getBaseUrl()}/auth/google/folder-id`, {
             headers: { Authorization: token }
           });
           if (res.ok) {
             const data = await res.json();
-            if (data.folderId) {
-              setDriveFolderId(data.folderId);
+            if (data.rootFolderId) {
+              setDriveFolderId(data.rootFolderId);
             }
           }
         }
@@ -173,13 +169,13 @@ export default function PengaturanPage() {
     try {
       const token = localStorage.getItem("arxiva-auth-token");
       if (token) {
-        const res = await fetch(`${getBaseUrl()}/settings/drive-folder`, {
-          method: "POST",
+        const res = await fetch(`${getBaseUrl()}/auth/google/folder-id`, {
+          method: "PUT",
           headers: {
             "Content-Type": "application/json",
             Authorization: token
           },
-          body: JSON.stringify({ folderId: driveFolderId.trim() })
+          body: JSON.stringify({ rootFolderId: driveFolderId.trim() })
         });
 
         if (res.ok) {
@@ -205,8 +201,8 @@ export default function PengaturanPage() {
       toast.error("Hanya Admin yang diizinkan untuk menghubungkan akun Google.");
       return;
     }
-    // Set cookie state to redirect back to settings after auth
-    document.cookie = "auth_redirect=/pengaturan; path=/";
+    // Redirect URI harus mengarah ke /google-oauth-callback.html (lihat public/)
+    sessionStorage.setItem("google_oauth_return", "/pengaturan");
 
     // Inisiasi OAuth flow dengan backend (bukan Tauri invoke)
     // Backend akan redirect ke halaman Google Consent

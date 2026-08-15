@@ -99,6 +99,7 @@ export type DashboardRequest = {
   requesterName?: string
   partnerCategory?: string
   itemsCount?: number
+  allocatedCount?: number
   itemsDetail?: string
   adminRemarks?: string
   status: string

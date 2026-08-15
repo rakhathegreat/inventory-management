@@ -85,6 +85,7 @@ export default function DataBarangPage() {
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterCategory, setFilterCategory] = useState("all")
   const [filterBrand, setFilterBrand] = useState("all")
+  const [filterLocation, setFilterLocation] = useState("all")
   const [categories, setCategories] = useState<string[]>([])
   const [brands, setBrands] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
@@ -178,6 +179,7 @@ export default function DataBarangPage() {
       if (filterStatus !== "all") params.append("status", filterStatus)
       if (filterCategory !== "all") params.append("kategori", filterCategory)
       if (filterBrand !== "all") params.append("merek", filterBrand)
+      if (filterLocation !== "all") params.append("lokasi", filterLocation)
 
       const res = await fetch(`${getBaseUrl()}/items?${params.toString()}`, {
         method: "GET",
@@ -213,12 +215,12 @@ export default function DataBarangPage() {
 
   useEffect(() => {
     loadItems()
-  }, [user, currentPage, pageSize, searchTerm, filterStatus, filterCategory, filterBrand])
+  }, [user, currentPage, pageSize, searchTerm, filterStatus, filterCategory, filterBrand, filterLocation])
 
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, filterStatus, filterCategory, filterBrand, pageSize])
+  }, [searchTerm, filterStatus, filterCategory, filterBrand, filterLocation, pageSize])
 
   const handleOpenDetail = (barang: BarangUnit) => {
     setDetailBarang(barang)
@@ -423,6 +425,8 @@ export default function DataBarangPage() {
           return { text: formatted, dotClass: "bg-emerald-500", badgeClass: "bg-emerald-400/10 text-emerald-500" }
         }
         return { text: formatted, dotClass: "bg-sky-500", badgeClass: "bg-blue-400/10 text-blue-500" }
+      case "Digunakan":
+        return { text: "Digunakan", dotClass: "bg-sky-500", badgeClass: "bg-blue-400/10 text-blue-500" }
       case "Rusak":
         return { text: "Rusak", dotClass: "bg-destructive", badgeClass: "bg-destructive/10 text-destructive" }
       case "Hilang":
@@ -438,7 +442,7 @@ export default function DataBarangPage() {
     return date.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
   }
 
-  const isFiltered = searchTerm.trim().length > 0 || filterStatus !== "all" || filterCategory !== "all" || filterBrand !== "all"
+  const isFiltered = searchTerm.trim().length > 0 || filterStatus !== "all" || filterCategory !== "all" || filterBrand !== "all" || filterLocation !== "all"
 
   return (
     <div className="p-6 h-full flex flex-col gap-6 text-neutral-100 mx-auto w-full">
@@ -448,7 +452,7 @@ export default function DataBarangPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
             <Input
               type="search"
-              placeholder="Cari SN atau barang..."
+              placeholder="Cari SN atau material..."
               className="w-full pl-9 bg-card border-border focus-visible:ring-1 focus-visible:ring-neutral-700 placeholder:text-sm"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -488,6 +492,17 @@ export default function DataBarangPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={filterLocation} onValueChange={setFilterLocation}>
+              <SelectTrigger className={`w-40 rounded-sm bg-card border-border text-foreground ${filterLocation === 'all' ? 'border-dashed text-muted-foreground' : ''}`}>
+                <SelectValue placeholder="Shelf" />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border text-foreground">
+                <SelectItem value="all">Shelf</SelectItem>
+                {dbLocations.map((loc) => (
+                  <SelectItem key={loc.name} value={loc.name}>{loc.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <div className="flex justify-end gap-2 w-full lg:w-auto">
@@ -497,16 +512,17 @@ export default function DataBarangPage() {
                 <Download className="w-4 h-4" /> Export Excel
               </Button>
               <Button className="h-8 gap-2 rounded-sm cursor-pointer" onClick={() => { setFormMode("add"); setIsFormOpen(true); }}>
-                <Plus className="w-4 h-4" /> Tambah Barang
+                <Plus className="w-4 h-4" /> Tambah Material
               </Button>
             </>
           )}
         </div>
       </div>
 
-      <div className="rounded-sm border border-border bg-muted/50 overflow-hidden">
+      <div className="rounded-sm border border-border bg-muted/50 overflow-hidden flex-1 min-h-0">
+        <div className="overflow-auto max-h-[calc(100vh-14rem)]">
         <Table>
-          <TableHeader className="bg-muted/80">
+          <TableHeader className="bg-muted/80 [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-muted/80">
             <TableRow className="border-border hover:bg-transparent">
               <TableHead className="text-muted-foreground w-12">No.</TableHead>
               <TableHead className="text-muted-foreground">Serial Number (SN)</TableHead>
@@ -523,7 +539,7 @@ export default function DataBarangPage() {
                 <TableCell colSpan={7} className="h-32 text-center text-neutral-500">
                   <div className="flex flex-col items-center justify-center">
                     <Loader2 className="w-8 h-8 text-neutral-600 mb-2 animate-spin" />
-                    <p>Memuat data barang...</p>
+                    <p>Memuat data material...</p>
                   </div>
                 </TableCell>
               </TableRow>
@@ -532,7 +548,7 @@ export default function DataBarangPage() {
                 <TableCell colSpan={7} className="h-32 text-center text-neutral-500">
                   <div className="flex flex-col items-center justify-center">
                     <Boxes className="w-8 h-8 text-neutral-600 mb-2" />
-                    <p>{isFiltered ? "Tidak ada unit yang cocok" : "Belum ada data barang"}</p>
+                    <p>{isFiltered ? "Tidak ada unit yang cocok" : "Belum ada data material"}</p>
                   </div>
                 </TableCell>
               </TableRow>
@@ -567,11 +583,11 @@ export default function DataBarangPage() {
                           <DropdownMenuContent align="end" className="rounded-sm bg-neutral-950 border-border text-foreground">
                             <DropdownMenuItem className="px-2 h-8 rounded-sm cursor-pointer focus:bg-neutral-800" onClick={() => handleOpenEdit(item)}>
                               <Edit className="size-3.5 mr-1" />
-                              <span className="text-xs">Edit Barang</span>
+                              <span className="text-xs">Edit Material</span>
                             </DropdownMenuItem>
                             <DropdownMenuItem className="px-2 h-8 rounded-sm text-red-400 focus:bg-red-950/50 focus:text-red-400 cursor-pointer" onClick={() => handleDelete(item.id, item.serialNumber)}>
                               <Trash2 className="size-3.5 mr-1" />
-                              <span className="text-xs">Hapus Barang</span>
+                              <span className="text-xs">Hapus Material</span>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -583,6 +599,7 @@ export default function DataBarangPage() {
             )}
           </TableBody>
         </Table>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 px-1 text-xs shrink-0">
@@ -656,7 +673,7 @@ export default function DataBarangPage() {
                 : `Hapus ${deleteDialog?.ids.length} Unit Terpilih?`}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm">
-              Tindakan ini tidak dapat dibatalkan. Unit barang yang dihapus akan terhapus dari sistem inventaris.
+              Tindakan ini tidak dapat dibatalkan. Unit material yang dihapus akan terhapus dari sistem inventaris.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="pt-2">

@@ -80,6 +80,45 @@ export function ProfileTab() {
             </div>
           </CardContent>
         </Card>
+
+        <h1 className="text-lg font-medium mt-8">Informasi Aplikasi</h1>
+        <Card className="rounded-sm p-0!">
+          <CardContent className="p-0!">
+            <div className="flex flex-wrap justify-between p-4 items-center">
+              <div>
+                <h2 className="font-medium text-sm">Versi Aplikasi</h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Pastikan Anda selalu menggunakan versi terbaru untuk fitur dan perbaikan bug.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const { check } = await import('@tauri-apps/plugin-updater');
+                    const update = await check();
+                    if (update) {
+                      // The UpdateModal (which runs checkForUpdates on mount) will automatically show if there is an update.
+                      // Wait, UpdateModal only runs on mount. We should either trigger the hook globally or just let the UpdateModal handle it.
+                      // If we want manual check to trigger the modal, we need a global state or let the UpdateModal expose a trigger, or we can use the `useUpdater` hook here directly and if `update` is found, how to show the modal?
+                      // The easiest way is to use a CustomEvent to tell the UpdateModal to check, or just rely on standard checking.
+                      // Actually, if we use the useUpdater hook here, we don't have the modal.
+                      // Let's dispatch a custom event that `UpdateModal` listens to.
+                      window.dispatchEvent(new CustomEvent('arxiva-check-updates'));
+                    } else {
+                      toast.info('Sudah versi terbaru');
+                    }
+                  } catch (e: any) {
+                    toast.error(e?.message || 'Gagal memeriksa pembaruan');
+                  }
+                }}
+              >
+                Cek Pembaruan
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

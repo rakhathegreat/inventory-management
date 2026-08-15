@@ -231,7 +231,7 @@ export default function MerekBarangPage() {
           method: "PUT",
           headers: getHeaders(),
           body: JSON.stringify({
-            name: trimmedName,
+            nama: trimmedName,
             identifier: normalizedIdentifier,
             origin: origin.trim() || "-",
             totalItems: brand?.totalItems || 0
@@ -397,7 +397,7 @@ export default function MerekBarangPage() {
                 </div>
 
                 <div className="mt-auto pt-4 border-t border-border/60 flex justify-between items-center">
-                  <span className="text-xs font-medium text-neutral-500">Total Barang</span>
+                  <span className="text-xs font-medium text-neutral-500">Total Material</span>
                   <span className="text-sm font-medium text-foreground">{brand.totalItems} Unit</span>
                 </div>
               </CardContent>
@@ -489,7 +489,7 @@ export default function MerekBarangPage() {
           <SheetHeader className="p-6 border-b border-border/60 bg-muted/20">
             <SheetTitle className="text-xl text-neutral-100">{editId ? "Edit Merek" : "Tambah Merek Baru"}</SheetTitle>
             <SheetDescription className="text-muted-foreground">
-              Isi formulir di bawah ini untuk mengelola informasi merek barang.
+              Isi formulir di bawah ini untuk mengelola informasi merek material.
             </SheetDescription>
           </SheetHeader>
           <div className="p-6 flex-1 overflow-y-auto">

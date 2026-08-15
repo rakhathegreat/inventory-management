@@ -43,7 +43,7 @@ export function ScannedItemsTable({
     <Card className="@container/card flex flex-1 flex-col @5xl/main:min-h-[calc(100svh-var(--header-height)-15rem)]">
       <CardHeader className="flex flex-col gap-3 border-b pb-4 @lg/card:flex-row @lg/card:items-center @lg/card:justify-between">
         <div className="space-y-1">
-          <CardTitle>Daftar Barang Masuk</CardTitle>
+          <CardTitle>Daftar Material Masuk</CardTitle>
         </div>
         <Badge variant="outline" className="w-fit">
           {barangMasuk.length} Item

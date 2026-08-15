@@ -37,11 +37,11 @@ import type { ChartDataPoint } from "@/types/dashboard"
 
 const chartConfig = {
     masuk: {
-        label: "Barang Masuk",
+        label: "Material Masuk",
         color: "oklch(0.696 0.17 162.48)",
     },
     keluar: {
-        label: "Distribusi Barang",
+        label: "Distribusi Material",
         color: "oklch(0.685 0.169 237.323)",
     },
     rusak: {

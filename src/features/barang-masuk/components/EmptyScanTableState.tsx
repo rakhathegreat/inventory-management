@@ -8,7 +8,7 @@ export function EmptyScanTableState() {
           <PackagePlus className="size-7" strokeWidth={1.8} />
         </div>
         <div className="space-y-1.5">
-          <p className="text-base font-semibold text-foreground">Belum ada barang masuk</p>
+          <p className="text-base font-semibold text-foreground">Belum ada material masuk</p>
           <p className="text-sm leading-relaxed text-muted-foreground md:block hidden">
             Scan atau masukkan serial number dari form di sebelah kiri untuk menambahkan item ke sesi ini.
           </p>

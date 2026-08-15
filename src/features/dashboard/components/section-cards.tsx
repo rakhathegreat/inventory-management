@@ -20,7 +20,7 @@ import type { InventoryStats } from "@/types/dashboard";
 
 export function SectionCards({
 	stats,
-	totalLabel = "Total Barang",
+	totalLabel = "Total Material",
 }: {
 	stats: InventoryStats;
 	totalLabel?: string;

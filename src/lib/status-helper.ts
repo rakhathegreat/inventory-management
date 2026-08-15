@@ -11,6 +11,10 @@ export function formatItemStatus(status: string | undefined | null, role: string
     return "Terdistribusi";
   }
   
+  if (normalizedStatus === "digunakan") {
+    return "Digunakan";
+  }
+  
   // Capitalize first letter for other statuses
   return status.charAt(0).toUpperCase() + status.slice(1);
 }

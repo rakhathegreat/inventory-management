@@ -129,6 +129,7 @@ export function RequestDetailDrawer({
           notes: data.notes || "-",
           requestedAt: data.requestedAt,
           itemsCount: data.requestItems?.reduce((acc: number, ri: any) => acc + ri.quantity, 0),
+          allocatedCount: data.requestItems?.reduce((acc: number, ri: any) => acc + (ri.allocations?.length || 0), 0),
           requestItems: data.requestItems?.map((ri: any) => ({
             id: ri.id,
             category: ri.materialCategory?.nama,
@@ -143,7 +144,7 @@ export function RequestDetailDrawer({
               materialNumber: alloc.item?.model?.code || "-",
               materialCategory: ri.materialCategory?.nama,
               brand: alloc.item?.brand?.nama || ri.brand?.nama,
-              materialName: `${getCleanCategoryName(ri.materialCategory?.nama)} ${alloc.item?.brand?.nama || ri.brand?.nama}${alloc.item?.model?.nama ? ` (${alloc.item.model.nama})` : ''}`,
+              materialName: alloc.item?.model?.nama || ri.model?.nama || "-",
               serialNumber: alloc.item?.serialNumber,
               quantity: 1,
               unit: getUnitByCategory(ri.materialCategory?.nama)
@@ -157,7 +158,7 @@ export function RequestDetailDrawer({
         setDetailData(formatted)
       } catch (error) {
         console.error("Gagal memuat detail request:", error)
-        toast.error("Gagal memuat detail alokasi barang")
+        toast.error("Gagal memuat detail alokasi material")
       } finally {
         setIsLoading(false)
       }
@@ -295,7 +296,7 @@ export function RequestDetailDrawer({
           <div className="flex w-full gap-2">
             {['MENUNGGU'].includes(displayItem.status?.toUpperCase() || "") && (
               <>
-                <Button variant="default" className="flex-1 cursor-pointer" onClick={() => navigate(`/request/${displayItem.id}/prepare`)}>Siapkan Barang</Button>
+                <Button variant="default" className="flex-1 cursor-pointer" onClick={() => navigate(`/request/${displayItem.id}/prepare`)}>Siapkan Material</Button>
                 <Button variant="destructive" className="flex-1 cursor-pointer" onClick={() => handleAction("Ditolak", true)}>Tolak Permintaan</Button>
               </>
             )}

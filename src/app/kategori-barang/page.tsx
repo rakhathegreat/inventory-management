@@ -377,6 +377,14 @@ export default function KategoriBarangPage() {
 
                 <div className="mt-auto pt-4 border-t border-border/60 flex justify-between items-center">
                   <div className="flex items-center gap-2 text-xs font-medium text-neutral-500">
+                    Total Unit
+                  </div>
+                  <span className="text-sm font-medium text-foreground">
+                    {cat.totalItems} Unit
+                  </span>
+                </div>
+                <div className="pt-3 flex justify-between items-center">
+                  <div className="flex items-center gap-2 text-xs font-medium text-neutral-500">
                     <ShieldAlert className="size-3.5 text-amber-400" />
                     Safety Stock
                   </div>

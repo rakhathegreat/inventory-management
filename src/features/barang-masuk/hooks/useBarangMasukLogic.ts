@@ -69,7 +69,7 @@ export function useBarangMasukLogic() {
         setDbLocations(locs);
         session.setKuota(newKuota);
       } catch (error) {
-        toast.error("Gagal memuat data barang masuk.");
+        toast.error("Gagal memuat data material masuk.");
       }
     };
     void fetchData();
@@ -124,7 +124,7 @@ export function useBarangMasukLogic() {
     );
 
     if (user?.role === "mitra" && !existingItem) {
-      toast.error("Barang belum terdaftar di KP.", { description: `${trimmedKode} harus didaftarkan oleh Admin terlebih dahulu.` });
+      toast.error("Material belum terdaftar di KP.", { description: `${trimmedKode} harus didaftarkan oleh Admin terlebih dahulu.` });
       updateKodeBarang("");
       focusKodeBarangInput();
       return;
@@ -133,8 +133,8 @@ export function useBarangMasukLogic() {
     if (user?.role === "mitra" && existingItem && !isValidMitraInboundSource(existingItem, user.displayName || "")) {
       const status = existingItem.status || "tidak diketahui";
       const lokasi = existingItem.lokasiPenyimpanan || "gudang KP";
-      toast.error("Barang belum bisa diterima.", {
-        description: `${trimmedKode} masih berstatus "${status}" di "${lokasi}". Barang harus sudah keluar dari KP terlebih dahulu.`,
+      toast.error("Material belum bisa diterima.", {
+        description: `${trimmedKode} masih berstatus "${status}" di "${lokasi}". Material harus sudah keluar dari KP terlebih dahulu.`,
       });
       updateKodeBarang("");
       focusKodeBarangInput();
@@ -149,14 +149,14 @@ export function useBarangMasukLogic() {
 
     if (itemCondition === "baru") {
       if (existingItem) {
-        toast.error("Barang sudah ada di database.", { description: "SN ini sudah terdaftar. Silakan ubah kondisi ke 'dismantle' atau 'rusak'." });
+        toast.error("Material sudah ada di database.", { description: "SN ini sudah terdaftar. Silakan ubah kondisi ke 'dismantle' atau 'rusak'." });
         updateKodeBarang("");
         focusKodeBarangInput();
         return;
       }
     } else if (itemCondition === "dismantle" || itemCondition === "rusak") {
       if (itemCondition === "rusak" && catatan.trim() === "") {
-        toast.error("Catatan wajib diisi untuk barang rusak.", { description: "Isi deskripsi kerusakan sebelum scan barang." });
+        toast.error("Catatan wajib diisi untuk material rusak.", { description: "Isi deskripsi kerusakan sebelum scan material." });
         focusKodeBarangInput();
         return;
       }
@@ -188,7 +188,7 @@ export function useBarangMasukLogic() {
         if (alternativeLocation) {
           recommendedLocation = alternativeLocation.name;
         } else {
-          toast.error("Barang sudah berada di lokasi tersebut dan tidak dapat dimasukkan kembali kecuali pindah penyimpanan.", {
+          toast.error("Material sudah berada di lokasi tersebut dan tidak dapat dimasukkan kembali kecuali pindah penyimpanan.", {
             description: `Lokasi saat ini: ${existingItem.lokasiPenyimpanan}`,
           });
           updateKodeBarang("");
@@ -214,7 +214,9 @@ export function useBarangMasukLogic() {
       id: Date.now(),
       nomor: trimmedKode,
       merek: isdismantle ? dismantleEffectiveMerek : (itemBrand || ""),
-      kategori: isdismantle ? dismantleEffectiveKategori : (kategori || "ONT"),
+      kategori: isdismantle
+        ? dismantleEffectiveKategori
+        : (selectedModelInfo?.materialCategory?.nama || existingItem?.kategori || "ONT"),
       tipe: isdismantle ? dismantleEffectiveTipe : (itemCondition === "baru" ? tipeBarang : ""),
       lokasi: recommendedLocation,
       status: isDismantleBad ? "Rusak" : "Valid",
@@ -274,7 +276,7 @@ export function useBarangMasukLogic() {
       (item) => item.kondisi === "Baru" && !item.tipe
     );
     if (hasIncompleteNewItems) {
-      toast.error("Masih ada barang Baru yang belum memiliki Model Material.", {
+      toast.error("Masih ada material Baru yang belum memiliki Model Material.", {
         description: "Silakan lengkapi Model Material di tabel sebelum menyimpan.",
       });
       return;
@@ -422,7 +424,7 @@ export function useBarangMasukLogic() {
       await refreshItems();
     } catch (error) {
       console.error("Gagal menyimpan ke database:", error);
-      toast.error("Gagal menyimpan barang masuk ke database.");
+      toast.error("Gagal menyimpan material masuk ke database.");
     } finally {
       setIsSaving(false);
     }

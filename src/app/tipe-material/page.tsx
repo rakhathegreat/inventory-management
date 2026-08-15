@@ -304,7 +304,7 @@ export default function TipeMaterialPage() {
                 </div>
 
                 <div className="flex items-center gap-2.5">
-                  <span className="text-sm text-foreground font-medium">Total {t._count?.items || 0} Unit</span>
+                  <span className="text-sm text-foreground font-medium">Total {t.totalItems ?? t._count?.items ?? 0} Unit</span>
 
                   {t.code && (
                     <span className="text-xs ml-auto px-2 pb-1 pt-1.5 rounded border border-border">
@@ -371,7 +371,7 @@ export default function TipeMaterialPage() {
                       {t.materialCategory?.nama || '-'}
                     </TableCell>
                     <TableCell className="text-foreground font-medium">
-                      {t._count?.items || 0} Unit
+                      {t.totalItems ?? t._count?.items ?? 0} Unit
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>

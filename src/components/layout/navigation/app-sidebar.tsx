@@ -36,7 +36,7 @@ const data = {
       title: "Operasional",
       items: [
         {
-          title: "Barang Masuk",
+          title: "Material Masuk",
           url: "/barang-masuk",
           icon: (
             <PackagePlus />
@@ -57,7 +57,7 @@ const data = {
       title: "Inventori",
       items: [
         {
-          title: "Data Barang",
+          title: "Data Material",
           url: "/data-barang",
           icon: (
             <Database />
@@ -70,7 +70,7 @@ const data = {
       title: "Manajemen Data",
       items: [
         {
-          title: "Lokasi Barang",
+          title: "Lokasi Material",
           url: "/lokasi-barang",
           icon: (
             <MapPinHouse />
@@ -86,7 +86,7 @@ const data = {
           isActive: false,
         },
         {
-          title: "Kategori Barang",
+          title: "Kategori Material",
           url: "/kategori-barang",
           icon: (
             <Shapes />
@@ -94,7 +94,7 @@ const data = {
           isActive: false,
         },
         {
-          title: "Merek Barang",
+          title: "Merek Material",
           url: "/merek-barang",
           icon: (
             <CircleStar />
@@ -125,7 +125,7 @@ const data = {
           isActive: true,
         },
         {
-          title: "Penggunaan Barang",
+          title: "Penggunaan Material",
           url: "/barang-keluar",
           icon: (
             <PackageMinus />
@@ -138,7 +138,7 @@ const data = {
       title: "Inventori",
       items: [
         {
-          title: "Data Barang",
+          title: "Data Material",
           url: "/data-barang",
           icon: (
             <Database />

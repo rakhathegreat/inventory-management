@@ -105,7 +105,7 @@ const isTextInputTarget = (target: EventTarget | null) => {
   return Boolean(target.closest("input, textarea, [contenteditable='true']"));
 };
 
-const normalize = (str: string) => str.trim().toUpperCase()
+const normalize = (str: string) => str.replace(/[\r\n\t]/g, "").trim().toUpperCase()
 
 // ── Main Component ──────────────────────────────────────────────────────
 
@@ -184,6 +184,7 @@ export default function PreparePage() {
 
   const inputRef = useRef<HTMLInputElement>(null)
   const kodeBarangRef = useRef("")
+  const isScanningLockRef = useRef(false)
 
   // Fetch Data
   useEffect(() => {
@@ -271,13 +272,52 @@ export default function PreparePage() {
     setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
 
+  // Validasi dan Submit Scan
+  const handleScanSubmit = useCallback((kodeOverride = kodeBarang) => {
+    const sn = normalize(kodeOverride)
+    if (!sn) return
+
+    if (isScanningLockRef.current) return
+    isScanningLockRef.current = true
+    setTimeout(() => {
+      isScanningLockRef.current = false
+    }, 300)
+
+    // 1. Cek apakah sudah discan di sesi ini
+    const isDuplicate = scannedItems.some(si => normalize(si.inventoryItem.serialNumber) === sn)
+    if (isDuplicate) {
+      toast.error("Barang sudah discan di sesi ini", { description: sn })
+      updateKodeBarang("")
+      focusKodeBarangInput()
+      return
+    }
+
+    // 2. Cari di inventaris (yang statusnya tersedia)
+    const item = inventoryItems.find(i => normalize(i.serialNumber) === sn)
+    if (!item) {
+      toast.error("Barang tidak ditemukan atau tidak tersedia", { description: sn })
+      updateKodeBarang("")
+      focusKodeBarangInput()
+      return
+    }
+
+    // Sukses, masukkan ke daftar
+    setScannedItems(prev => [{ inventoryItem: item }, ...prev])
+    toast.success("Berhasil ditambahkan")
+
+    updateKodeBarang("")
+    focusKodeBarangInput()
+  }, [kodeBarang, scannedItems, inventoryItems, updateKodeBarang, focusKodeBarangInput])
+
   // Auto-focus pada mount
   useEffect(() => {
     inputRef.current?.focus();
   }, [isLoading]);
 
-  // Global Keyboard Listener untuk Auto Scan
+  // Global Keyboard Listener untuk Auto Scan (Hanya Aktif di Mode Auto)
   useEffect(() => {
+    if (inputMode !== "auto") return;
+
     const handleWindowKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) {
         return;
@@ -303,38 +343,7 @@ export default function PreparePage() {
 
     window.addEventListener("keydown", handleWindowKeyDown);
     return () => window.removeEventListener("keydown", handleWindowKeyDown);
-  }, [updateKodeBarang]);
-
-  // Validasi dan Submit Scan
-  const handleScanSubmit = useCallback((kodeOverride = kodeBarang) => {
-    const sn = kodeOverride.trim()
-    if (!sn) return
-
-    // 1. Cek apakah sudah discan di sesi ini
-    const isDuplicate = scannedItems.some(si => normalize(si.inventoryItem.serialNumber) === normalize(sn))
-    if (isDuplicate) {
-      toast.error("Barang sudah discan di sesi ini", { description: sn })
-      updateKodeBarang("")
-      focusKodeBarangInput()
-      return
-    }
-
-    // 2. Cari di inventaris (yang statusnya tersedia)
-    const item = inventoryItems.find(i => normalize(i.serialNumber) === normalize(sn))
-    if (!item) {
-      toast.error("Barang tidak ditemukan atau tidak tersedia", { description: sn })
-      updateKodeBarang("")
-      focusKodeBarangInput()
-      return
-    }
-
-    // Sukses, masukkan ke daftar
-    setScannedItems(prev => [{ inventoryItem: item }, ...prev])
-    toast.success("Berhasil ditambahkan")
-
-    updateKodeBarang("")
-    focusKodeBarangInput()
-  }, [kodeBarang, scannedItems, inventoryItems, updateKodeBarang, focusKodeBarangInput])
+  }, [inputMode, updateKodeBarang, handleScanSubmit]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -432,7 +441,7 @@ export default function PreparePage() {
                     }
                   }}
                   placeholder="Masukkan serial number"
-                  className="hidden"
+                  className="absolute opacity-0 -z-10 w-0 h-0"
                 />
                 <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border border-dashed bg-muted/20 px-6 py-10 text-center">
                   <div className="flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">

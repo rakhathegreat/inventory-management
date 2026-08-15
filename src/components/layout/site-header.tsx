@@ -58,10 +58,10 @@ export function SiteHeader({ className }: { className?: string }) {
 
     if (path === "/barang-masuk") {
         parent = "Operasional"
-        pageName = "Barang Masuk"
+        pageName = "Material Masuk"
     } else if (path === "/barang-keluar") {
         parent = "Operasional"
-        pageName = "Distribusi Barang"
+        pageName = "Distribusi Material"
     } else if (path === "/request") {
         parent = "Operasional"
         pageName = "Request"
@@ -78,22 +78,22 @@ export function SiteHeader({ className }: { className?: string }) {
         pageName = "Histori Request"
     } else if (path === "/data-barang") {
         parent = "Inventori"
-        pageName = "Data Barang"
+        pageName = "Data Material"
     } else if (path === "/data-transaksi") {
         parent = "Inventori"
         pageName = "Data Transaksi"
     } else if (path === "/lokasi-barang") {
         parent = "Manajemen Data"
-        pageName = "Lokasi Barang"
+        pageName = "Lokasi Material"
     } else if (path === "/tipe-material") {
         parent = "Manajemen Data"
         pageName = "Model Material"
     } else if (path === "/kategori-barang") {
         parent = "Manajemen Data"
-        pageName = "Kategori Barang"
+        pageName = "Kategori Material"
     } else if (path === "/merek-barang") {
         parent = "Manajemen Data"
-        pageName = "Merek Barang"
+        pageName = "Merek Material"
     } else if (path === "/mitra") {
         parent = "Manajemen Data"
         pageName = "Mitra"

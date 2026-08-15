@@ -197,12 +197,30 @@ export default function LokasiBarangPage() {
     return result;
   }, [locations, searchQuery, filterType, sortBy]);
 
+  const getNextLevelShelfName = (parentId?: string) => {
+    if (!parentId) return "Shelf 1";
+    const parent = locations.find((loc) => loc.id === parentId);
+    const nextNum = (parent?.levels?.length || 0) + 1;
+    return `Shelf ${nextNum}`;
+  };
+
+  const getNextShelfName = () => {
+    const shelfNumbers = locations
+      .filter((loc) => loc.type === "Rak")
+      .map((loc) => {
+        const match = loc.name.match(/^Shelf\s+(\d+)$/i);
+        return match ? parseInt(match[1], 10) : 0;
+      });
+    const nextNum = shelfNumbers.length > 0 ? Math.max(...shelfNumbers) + 1 : 1;
+    return `Shelf ${nextNum}`;
+  };
+
   const handleOpenSheet = (mode: SheetMode, item?: { parentId?: string; levelId?: string }) => {
     setSheetMode(mode);
     setActiveItem(item || null);
     
     // Reset form states
-    setLocName("");
+    setLocName(mode === "add-rak" ? getNextShelfName() : "");
     setLocCapacity("1");
     setLocBrand("Campuran");
     setLocLevelsCount("3");
@@ -235,10 +253,10 @@ export default function LokasiBarangPage() {
     try {
       if (sheetMode === "add-rak") {
         const payload = {
-          name: locName || "Rak Baru",
+          name: locName || getNextShelfName(),
           type: "Rak",
           levels: Array.from({ length: parseInt(locLevelsCount) || 1 }).map((_, i) => ({
-            name: `Level ${i + 1}`,
+            name: `Shelf ${i + 1}`,
             capacity: 0,
             brandRule: "Campuran"
           }))
@@ -319,8 +337,8 @@ export default function LokasiBarangPage() {
           method: "POST",
           headers: getHeaders(),
           body: JSON.stringify({
-            name: levelName || "Level Baru",
-            type: "Kardus",
+            name: getNextLevelShelfName(activeItem.parentId),
+            type: "BOX",
             parentId: activeItem.parentId,
             capacity: parseInt(locCapacity) || 0,
             brandRule: locBrand
@@ -334,7 +352,7 @@ export default function LokasiBarangPage() {
         const res = await fetch(`${getBaseUrl()}/locations/${activeItem.levelId}`, {
           method: "PUT",
           headers: getHeaders(),
-          body: JSON.stringify({ name: levelName, capacity: parseInt(locCapacity) || 0, brandRule: locBrand })
+          body: JSON.stringify({ capacity: parseInt(locCapacity) || 0, brandRule: locBrand })
         });
         if (!res.ok) {
           const e = await res.json().catch(() => ({}));
@@ -491,8 +509,15 @@ export default function LokasiBarangPage() {
     if (sheetMode === "add-rak" || sheetMode === "edit-rak") return (
       <>
         <div className="space-y-2">
-          <Label className="text-xs font-semibold text-neutral-300">Nama Rak</Label>
-          <Input value={locName} onChange={e => setLocName(e.target.value)} placeholder="Contoh: Rak A1" className="bg-neutral-900 border-neutral-800 focus-visible:ring-1 focus-visible:ring-neutral-700" />
+          <Label className="text-xs font-semibold text-neutral-300">Nama Shelf</Label>
+          {sheetMode === "add-rak" ? (
+            <Input value={locName} readOnly className="bg-neutral-900/50 border-neutral-800 text-neutral-400 cursor-not-allowed" />
+          ) : (
+            <Input value={locName} onChange={e => setLocName(e.target.value)} placeholder="Contoh: Shelf 1" className="bg-neutral-900 border-neutral-800 focus-visible:ring-1 focus-visible:ring-neutral-700" />
+          )}
+          {sheetMode === "add-rak" && (
+            <p className="text-[11px] text-neutral-500">Nama shelf di-generate otomatis (Shelf 1, Shelf 2, ...)</p>
+          )}
         </div>
         {sheetMode === "add-rak" && (
           <div className="space-y-2">
@@ -540,10 +565,6 @@ export default function LokasiBarangPage() {
     );
     if (sheetMode === "add-level" || sheetMode === "edit-level") return (
       <>
-        <div className="space-y-2">
-          <Label className="text-xs font-semibold text-neutral-300">Nama Level</Label>
-          <Input value={levelName} onChange={e => setLevelName(e.target.value)} placeholder="Contoh: Level 1" className="bg-neutral-900 border-neutral-800 focus-visible:ring-1 focus-visible:ring-neutral-700" />
-        </div>
         {renderCapacityInput()}
         <div className="space-y-2">
           <Label className="text-xs font-semibold text-neutral-300">Aturan Merek</Label>

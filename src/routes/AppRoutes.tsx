@@ -14,6 +14,7 @@ import MerekBarangPage from "@/app/merek-barang/page";
 import MitraPage from "@/app/mitra/page";
 import LoginPage from "@/app/login/page";
 import PengaturanPage from "@/app/pengaturan/page";
+import GoogleOAuthCallbackPage from "@/app/oauth/google/callback/page";
 import MobileSignPage from "@/app/mobile-sign/page";
 import PartnerRequestPage from "@/app/partner-request/page";
 import { useAuth } from "@/lib/auth";
@@ -30,6 +31,7 @@ export function AppRoutes() {
 	return (
 		<Routes>
 			<Route path="/login" element={<LoginPage />} />
+			<Route path="/oauth/google/callback" element={<GoogleOAuthCallbackPage />} />
 			<Route path="/mobile-sign/:sessionId" element={<MobileSignPage />} />
 			<Route
 				path="/"

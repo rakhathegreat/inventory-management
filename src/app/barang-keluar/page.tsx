@@ -74,8 +74,13 @@ const normalizeKodeBarang = (code?: string | null) => (code || "").trim().toUppe
 const normalizeStatus = (status: string) => status.trim().toLocaleLowerCase("id-ID");
 const normalizeText = (text?: string | null) => (text || "").trim().toLocaleLowerCase("id-ID");
 const normalizeOwner = (owner?: string | null) => normalizeText(owner || ADMIN_LOCATION);
-const isOutsideStatus = (status: string) => {
+const isOutsideStatus = (status: string, role?: string) => {
   const normalizedStatus = normalizeStatus(status);
+  if (role === "mitra") {
+    // Mitra may use items that were distributed to them (status: terdistribusi)
+    // Only block statuses that indicate the item was already fully used/returned
+    return normalizedStatus === "keluar" || normalizedStatus === "diluar";
+  }
   return normalizedStatus === "keluar" || normalizedStatus === "diluar" || normalizedStatus === "terdistribusi";
 };
 
@@ -143,7 +148,7 @@ function EmptyScanTableState({ role }: { role?: string }) {
         </div>
         <div className="space-y-1.5">
           <p className="text-base font-semibold text-foreground">
-            {role === "mitra" ? "Belum ada item penggunaan" : "Belum ada barang keluar"}
+            {role === "mitra" ? "Belum ada item penggunaan" : "Belum ada material keluar"}
           </p>
           <p className="text-sm leading-relaxed text-muted-foreground">
             {role === "mitra"
@@ -341,7 +346,7 @@ export default function BarangKeluarPage() {
       return;
     }
 
-    if (isOutsideStatus(matchedItem.status)) {
+    if (isOutsideStatus(matchedItem.status, user?.role)) {
       toast.error("Barang ini sudah berada di luar dan tidak dapat dikeluarkan kembali.", {
         description: `Status saat ini: ${matchedItem.status}`,
       });
@@ -510,7 +515,7 @@ export default function BarangKeluarPage() {
 
       const invalidItem = barangKeluar.find((item) => {
         const latestItem = findLatestSessionItem(item.nomor);
-        return !latestItem || isOutsideStatus(latestItem.status);
+        return !latestItem || isOutsideStatus(latestItem.status, user?.role);
       });
 
       if (invalidItem) {
@@ -563,10 +568,11 @@ export default function BarangKeluarPage() {
         const originalLoc = originalItem.lokasiPenyimpanan || "-";
         const updatedItem: InventoryItem = {
           ...originalItem,
-          status: "Keluar",
-          lokasiPenyimpanan: "Keluar",
+          status: user?.role === "mitra" ? "Digunakan" : "Keluar",
+          lokasiPenyimpanan: user?.role === "mitra" ? user.displayName : "Keluar",
           tanggalKeluar: sessionDate,
           mitra: item.mitra,
+          paNumber: user?.role === "mitra" ? (keterangan.trim() || sessionNomor) : undefined,
         };
         const resUp = await fetch(`${getBaseUrl()}/items/${updatedItem.id}`, {
           method: "PUT",
@@ -579,12 +585,12 @@ export default function BarangKeluarPage() {
           id: `TRX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           tanggal: sessionDate,
           nomor: sessionNomor,
-          kategori: "Keluar",
+          kategori: user?.role === "mitra" ? "Digunakan" : "Keluar",
           status: "Selesai",
           sn: item.nomor,
           merek: item.merek,
-          asal: originalLoc,
-          tujuan: item.mitra,
+          asal: user?.role === "mitra" ? user.displayName : originalLoc,
+          tujuan: user?.role === "mitra" ? (keterangan.trim() || sessionNomor) : item.mitra,
           mitra: item.mitra,
           keterangan:
             user?.role === "mitra" ? keterangan.trim() : null,
@@ -754,7 +760,7 @@ export default function BarangKeluarPage() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <h2 className="text-base font-medium">
-              {user?.role === "mitra" ? "Daftar Penggunaan Material" : "Daftar Distribusi Barang"}
+              {user?.role === "mitra" ? "Daftar Penggunaan Material" : "Daftar Distribusi Material"}
             </h2>
             <Badge variant="outline">
               {barangKeluar.length} Item
@@ -766,7 +772,7 @@ export default function BarangKeluarPage() {
             disabled={barangKeluar.length === 0 || isSaving}
           >
             {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
-            {user?.role === "mitra" ? "Lapor Pemakaian" : "Simpan Distribusi Barang"}
+            {user?.role === "mitra" ? "Lapor Pemakaian" : "Simpan Distribusi Material"}
           </Button>
         </div>
 

@@ -329,6 +329,7 @@ export default function DataTransaksiPage() {
                 onRowClick={(item) => setSelectedRequest(item)}
                 onStatusChange={handleStatusChange}
                 hiddenColumns={hiddenColumns}
+                countMode={["siap", "selesai", "diterima"].includes(tabLower) ? "allocated" : "requested"}
               />
             </TabsContent>
           )

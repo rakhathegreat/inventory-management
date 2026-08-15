@@ -57,12 +57,12 @@ export function InboundFormCard({
   setItemCondition,
   tipeBarang,
   setTipeBarang,
-  brand,
-  setBrand,
-  kategori,
-  setKategori,
-  dbBrands,
-  dbCategories,
+  brand: _brand,
+  setBrand: _setBrand,
+  kategori: _kategori,
+  setKategori: _setKategori,
+  dbBrands: _dbBrands,
+  dbCategories: _dbCategories,
   catatan,
   setCatatan,
   focusKodeBarangInput,
@@ -100,8 +100,8 @@ export function InboundFormCard({
 
           {user?.role === "mitra" && (
             <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2.5 text-xs leading-5 text-sky-600 dark:text-sky-400 space-y-1">
-              <p className="font-semibold">Ketentuan Penerimaan Barang Mitra</p>
-              <p>Barang hanya dapat diterima jika sudah berstatus <span className="font-semibold">Keluar</span> atau <span className="font-semibold">Terdistribusi/Diluar</span> dari KP. Barang yang masih tersimpan di gudang KP tidak dapat dipindah ke gudang mitra.</p>
+              <p className="font-semibold">Ketentuan Penerimaan Material Mitra</p>
+              <p>Material hanya dapat diterima jika sudah berstatus <span className="font-semibold">Keluar</span> atau <span className="font-semibold">Terdistribusi/Diluar</span> dari KP. Material yang masih tersimpan di gudang KP tidak dapat dipindah ke gudang mitra.</p>
             </div>
           )}
         </div>
@@ -114,7 +114,7 @@ export function InboundFormCard({
               {/* Kolom Kiri */}
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-3">
-                  <Label htmlFor="asal-barang">Asal Barang</Label>
+                  <Label htmlFor="asal-barang">Asal Material</Label>
                   <Select
                     value={asalBarang}
                     onValueChange={(value) => {
@@ -124,7 +124,7 @@ export function InboundFormCard({
                     }}
                   >
                     <SelectTrigger id="asal-barang" className="w-full">
-                      <SelectValue placeholder="Pilih asal barang..." />
+                      <SelectValue placeholder="Pilih asal material..." />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="SBU Regional Jawa Barat">SBU Regional Jawa Barat</SelectItem>
@@ -153,38 +153,9 @@ export function InboundFormCard({
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="brand">Brand</Label>
-                    <Select value={brand} onValueChange={setBrand}>
-                      <SelectTrigger id="brand" className="w-full">
-                        <SelectValue placeholder="Otomatis dari SN" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {dbBrands.map((b, i) => (
-                          <SelectItem key={b.id || b.name || i} value={b.name || b.nama}>
-                            {b.name || b.nama}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="kategori">Kategori</Label>
-                    <Select value={kategori} onValueChange={setKategori}>
-                      <SelectTrigger id="kategori" className="w-full">
-                        <SelectValue placeholder="Otomatis dari SN" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {dbCategories.map((c, i) => (
-                          <SelectItem key={typeof c === 'string' ? c : (c.id || i)} value={typeof c === 'string' ? c : (c.name || c.nama)}>
-                            {typeof c === 'string' ? c : (c.name || c.nama)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  Kategori dan merek akan terdeteksi otomatis dari model atau SN.
+                </p>
               </div>
 
               {/* Kolom Kanan */}
@@ -235,9 +206,6 @@ export function InboundFormCard({
                     />
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  Kategori dan Merek akan terdeteksi otomatis dari SN.
-                </p>
               </div>
             </div>
           </CardContent>

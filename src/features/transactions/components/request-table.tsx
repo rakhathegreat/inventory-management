@@ -113,8 +113,9 @@ export type DataTableProps = {
     className?: string
     onRowClick?: (item: DashboardRequest) => void
     onStatusChange?: (id: string, status: string) => void
-    /** ID kolom yang ingin disembunyikan. Contoh: ["requestItems"] */
     hiddenColumns?: string[]
+    /** Kolom Jumlah: 'allocated' = jumlah alokasi, 'requested' = jumlah permintaan */
+    countMode?: 'requested' | 'allocated'
 }
 
 // ─────────────────────────────────────────────
@@ -315,7 +316,7 @@ function ActionMenu({
                         size="icon-lg"
                         className="text-xs font-medium text-muted-foreground hover:text-amber-600 cursor-pointer"
                         onClick={handleNavigateToPrepare}
-                        title="Siapkan Barang"
+                        title="Siapkan Material"
                     >
                         <IconPackage size={18} />
                     </Button>
@@ -337,7 +338,8 @@ function ActionMenu({
                         variant="ghost"
                         size="icon-lg"
                         className="text-xs font-medium text-muted-foreground hover:text-blue-600 cursor-pointer"
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={handleNavigateToPrepare}
+                        title="Edit Alokasi"
                     >
                         <Edit strokeWidth={2} />
                     </Button>
@@ -359,7 +361,7 @@ function ActionMenu({
 // Column Definitions (factory function agar columns tidak berisi closure meta)
 // ─────────────────────────────────────────────
 
-function createColumns(): ColumnDef<DashboardRequest>[] {
+function createColumns(countMode: 'requested' | 'allocated' = 'requested'): ColumnDef<DashboardRequest>[] {
     return [
         {
             id: "nomor",
@@ -414,11 +416,18 @@ function createColumns(): ColumnDef<DashboardRequest>[] {
         {
             accessorKey: "itemsCount",
             header: () => <div className="text-center">Jumlah</div>,
-            cell: ({ row }) => (
-                <div className="text-muted-foreground whitespace-nowrap text-center">
-                    {row.original.itemsCount}
-                </div>
-            ),
+            cell: ({ row }) => {
+                const status = row.original.status?.toUpperCase()?.trim()
+                const useAllocated = countMode === 'allocated' || ["SIAP", "SELESAI", "DITERIMA"].includes(status || "")
+                const count = useAllocated
+                    ? (row.original.allocatedCount ?? 0)
+                    : (row.original.itemsCount ?? 0)
+                return (
+                    <div className="text-muted-foreground whitespace-nowrap text-center">
+                        {count}
+                    </div>
+                )
+            },
         },
         {
             accessorKey: "status",
@@ -441,14 +450,14 @@ function createColumns(): ColumnDef<DashboardRequest>[] {
 // DataTable component
 // ─────────────────────────────────────────────
 
-export function DataTable({ data, className, onRowClick, onStatusChange, hiddenColumns = [] }: DataTableProps) {
+export function DataTable({ data, className, onRowClick, onStatusChange, hiddenColumns = [], countMode = 'requested' }: DataTableProps) {
 
     const tableMeta: TableMeta = React.useMemo(
         () => ({ onRowClick, onStatusChange }),
         [onRowClick, onStatusChange]
     )
 
-    const columns = React.useMemo(() => createColumns(), [])
+    const columns = React.useMemo(() => createColumns(countMode), [countMode])
 
     const columnVisibility = React.useMemo(
         () => Object.fromEntries(hiddenColumns.map((col) => [col, false])),
