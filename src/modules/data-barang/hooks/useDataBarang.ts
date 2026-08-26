@@ -189,13 +189,39 @@ export function useDataBarang() {
 	const handleExportExcel = async (selectedColumns: string[]) => {
 		setIsExporting(true);
 		try {
-			const dataToExport = barangList;
+			// Ekspor SELURUH data yang cocok dengan filter aktif —
+			// paginasi tabel diabaikan; semua halaman diambil berurutan.
+			const exportPageSize = 1000;
+			let exportPage = 1;
+			let exportTotalPages = 1;
+			const allItems: BarangUnit[] = [];
+
+			while (exportPage <= exportTotalPages) {
+				const result = await fetchItems({
+					page: exportPage,
+					pageSize: exportPageSize,
+					searchTerm,
+					filterStatus,
+					filterCategory,
+					filterBrand,
+					filterLocation,
+				});
+
+				if (!result || !Array.isArray(result.data) || result.data.length === 0) break;
+
+				allItems.push(...result.data);
+				exportTotalPages = result.pagination?.totalPages || 1;
+				exportPage += 1;
+			}
+
+			const dataToExport = allItems;
 
 			if (dataToExport.length === 0) {
 				toast.error("Tidak ada data untuk diekspor.");
-				setIsExporting(false);
 				return;
 			}
+
+			toast.info(`Mengumpulkan ${dataToExport.length} unit untuk diekspor...`);
 
 			const mappedData = mapItemsToExportRows(dataToExport, selectedColumns);
 
@@ -216,9 +242,9 @@ export function useDataBarang() {
 
 			if (res.saved) {
 				if (res.path) {
-					toast.success(`Berhasil mengekspor data ke ${res.path}`);
+					toast.success(`Berhasil mengekspor ${dataToExport.length} unit ke ${res.path}`);
 				} else {
-					toast.success("Berhasil mengekspor data.");
+					toast.success(`Berhasil mengekspor ${dataToExport.length} unit.`);
 				}
 				setIsExportModalOpen(false);
 			} else {

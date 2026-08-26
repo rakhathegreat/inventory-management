@@ -1,4 +1,5 @@
 import * as React from "react";
+import { toast } from "sonner";
 import { Loader2, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -26,6 +27,8 @@ import { Skeleton } from "@/shared/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/shared/ui/sheet";
 import { cn } from "@/shared/lib/utils";
 import { useLokasiBarang } from "../hooks/useLokasiBarang";
+import { migrateLocationItems } from "../api/lokasiApi";
+import { MigrateDialog, flattenMigrateTargets } from "../components/MigrateDialog";
 import { downloadQrCode as onDownloadQr } from "../utils/downloadQr";
 import { LokasiCard, type LokasiCardActions } from "../components/LokasiCard";
 import { getTypeConfig } from "../components/type-config";
@@ -61,7 +64,9 @@ const SHEET_TITLES: Record<string, string> = {
 export default function ManajemenLokasiTab() {
 	const navigate = useNavigate();
 	const {
+		locations,
 		isLoading,
+		loadLocations,
 		filteredAndSortedLocations,
 		searchQuery,
 		setSearchQuery,
@@ -103,8 +108,45 @@ export default function ManajemenLokasiTab() {
 			onDeleteLevel: requestDeleteLevel,
 			onDownloadQr,
 			onViewItems: (query) => navigate(`/data-barang?search=${encodeURIComponent(query)}`),
+			onMigrate: (sourceId, sourceLabel, itemCount) =>
+				setMigrateTarget({ sourceId, sourceLabel, itemCount }),
 		}),
-		[handleOpenSheet, handleToggleLocation, handleToggleLevel, requestDeleteLocation, requestDeleteLevel, navigate],
+		[
+			handleOpenSheet,
+			handleToggleLocation,
+			handleToggleLevel,
+			requestDeleteLocation,
+			requestDeleteLevel,
+			navigate,
+		],
+	);
+
+	const [migrateTarget, setMigrateTarget] = React.useState<{
+		sourceId: string;
+		sourceLabel: string;
+		itemCount: number;
+	} | null>(null);
+	const [isMigrating, setIsMigrating] = React.useState(false);
+
+	const handleMigrate = async (targetId: string) => {
+		if (!migrateTarget) return;
+		setIsMigrating(true);
+		try {
+			const res = await migrateLocationItems(migrateTarget.sourceId, targetId);
+			toast.success(res.message);
+			setMigrateTarget(null);
+			await loadLocations();
+		} catch (e: any) {
+			toast.error(e.message || "Gagal memindahkan item.");
+			throw e;
+		} finally {
+			setIsMigrating(false);
+		}
+	};
+
+	const migrateTargets = React.useMemo(
+		() => flattenMigrateTargets(locations, migrateTarget?.sourceId ?? ""),
+		[locations, migrateTarget?.sourceId],
 	);
 
 	const hasActiveFilter = searchQuery !== "";
@@ -240,6 +282,17 @@ export default function ManajemenLokasiTab() {
 					)}
 				</div>
 			)}
+
+			{/* Dialog migrasi lokasi */}
+			<MigrateDialog
+				isOpen={migrateTarget !== null}
+				sourceLabel={migrateTarget?.sourceLabel ?? ""}
+				itemCount={migrateTarget?.itemCount ?? 0}
+				targets={migrateTargets}
+				isSubmitting={isMigrating}
+				onSubmit={handleMigrate}
+				onClose={() => setMigrateTarget(null)}
+			/>
 
 			{/* Form tambah/edit */}
 			<Sheet open={sheetMode !== "closed"} onOpenChange={(open) => !open && setSheetMode("closed")}>

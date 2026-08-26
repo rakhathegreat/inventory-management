@@ -1,4 +1,4 @@
-import { Edit, MoreVertical, Plus, Power, QrCode, Trash2 } from "lucide-react";
+import { ArrowRightLeft, Edit, MoreVertical, Plus, Power, QrCode, Trash2 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -26,6 +26,8 @@ export interface LokasiCardActions {
 	onDownloadQr: (url: string | null | undefined, name: string) => void;
 	/** Buka Data Material terfilter untuk lokasi ini. */
 	onViewItems: (query: string) => void;
+	/** Pindahkan seluruh item dari lokasi ini ke lokasi lain. */
+	onMigrate: (sourceId: string, sourceLabel: string, itemCount: number) => void;
 }
 
 interface LokasiCardProps extends LokasiCardActions {
@@ -77,6 +79,7 @@ export function LokasiCard({
 	onDeleteLevel,
 	onDownloadQr,
 	onViewItems,
+	onMigrate,
 }: LokasiCardProps) {
 	const config = getTypeConfig(loc.type);
 	const Icon = config.icon;
@@ -131,6 +134,12 @@ export function LokasiCard({
 								className={menuItem}
 								onClick={() => onDownloadQr(loc.sheetUrl, loc.name)}>
 								<QrCode /> Simpan QR Code
+							</DropdownMenuItem>
+													<DropdownMenuItem
+								className={menuItem}
+								disabled={!loc.usedCapacity}
+								onClick={() => onMigrate(loc.id, loc.name, loc.usedCapacity || 0)}>
+								<ArrowRightLeft /> Pindahkan Isi
 							</DropdownMenuItem>
 						</>
 					)}
@@ -187,6 +196,12 @@ export function LokasiCard({
 										className={menuItem}
 										onClick={() => onDownloadQr(lvl.sheetUrl, `${loc.name} - ${lvl.name}`)}>
 										<QrCode /> Simpan QR Code
+									</DropdownMenuItem>
+									<DropdownMenuItem
+										className={menuItem}
+										disabled={!lvl.usedCapacity}
+										onClick={() => onMigrate(lvl.id, `${loc.name} - ${lvl.name}`, lvl.usedCapacity)}>
+										<ArrowRightLeft /> Pindahkan Isi
 									</DropdownMenuItem>
 								</DropdownMenuGroup>
 								<DropdownMenuSeparator />

@@ -131,3 +131,18 @@ export const deleteLocation = async (id: string) =>
 		await fetch(`${getBaseUrl()}/locations/${id}`, { method: "DELETE", headers: getHeaders() }),
 		"Gagal menghapus"
 	);
+
+/** Pindahkan seluruh item dari lokasi sumber ke lokasi tujuan (admin). */
+export async function migrateLocationItems(
+	sourceId: string,
+	targetLocationId: string,
+): Promise<{ message: string; moved: number; targetName: string }> {
+	return unwrap<{ message: string; moved: number; targetName: string }>(
+		await fetch(`${getBaseUrl()}/locations/${sourceId}/migrate-items`, {
+			method: "POST",
+			headers: getHeaders(),
+			body: JSON.stringify({ targetLocationId: Number(targetLocationId) }),
+		}),
+		"Gagal memindahkan item.",
+	);
+}
