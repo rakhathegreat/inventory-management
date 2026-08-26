@@ -105,18 +105,17 @@ export function InboundFormCard({
 								placeholder="Scan barcode atau ketik manual di sini..."
 								className="rounded-sm h-8"
 							/>
-<CollapsibleTrigger asChild>
-							<Button size="sm" className="h-8 rounded-sm cursor-pointer">
-								{isOpen ? "Simpan" : "Edit"}
-								<ChevronDown
-									className={`size-4 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
-								/>
-								<span className="sr-only">Toggle</span>
-							</Button>
-						</CollapsibleTrigger>
+							<CollapsibleTrigger asChild>
+								<Button size="sm" className="h-8 rounded-sm cursor-pointer">
+									{isOpen ? "Simpan" : "Edit"}
+									<ChevronDown
+										className={`size-4 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+									/>
+									<span className="sr-only">Toggle</span>
+								</Button>
+							</CollapsibleTrigger>
 						</div>
 					</div>
-
 				</div>
 
 				<CollapsibleContent>
@@ -148,12 +147,15 @@ export function InboundFormCard({
 											))}
 										</SelectContent>
 									</Select>
-									{!asalBarangManual &&
+									{asalBarangManual ? (
+										<div className="flex items-center justify-between gap-2 -mt-1"></div>
+									) : (
 										detectMitraFromSN(kodeBarang, dbPartners) && (
-											<p className="text-xs text-sky-600 dark:text-sky-400">
+											<p className="-mt-1 text-xs text-sky-600 dark:text-sky-400">
 												Terdeteksi otomatis dari SN
 											</p>
-										)}
+										)
+									)}
 								</div>
 
 								<div className="space-y-1.5">

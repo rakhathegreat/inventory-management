@@ -1,33 +1,12 @@
-import {
-	Bar,
-	BarChart,
-	CartesianGrid,
-	LabelList,
-	XAxis,
-	YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts";
 import { AlertTriangle, Boxes, RefreshCw } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/shared/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Skeleton } from "@/shared/ui/skeleton";
-import {
-	ChartContainer,
-	ChartTooltip,
-	ChartTooltipContent,
-	type ChartConfig,
-} from "@/shared/ui/chart";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/shared/ui/chart";
 import { OccupancyPanel } from "../components/OccupancyPanel";
-import {
-	useStatistikGudang,
-	type DistributionSlice,
-} from "../hooks/useStatistikGudang";
+import { useStatistikGudang, type DistributionSlice } from "../hooks/useStatistikGudang";
 
 const chartConfig = {
 	jumlah: { label: "Unit" },
@@ -47,9 +26,7 @@ function DistributionCard({
 	return (
 		<Card>
 			<CardHeader className="pb-2">
-				<CardTitle className="text-sm font-semibold text-foreground">
-					{title}
-				</CardTitle>
+				<CardTitle className="text-sm font-semibold text-foreground">{title}</CardTitle>
 				<CardDescription className="text-xs">{description}</CardDescription>
 			</CardHeader>
 			<CardContent>
@@ -63,9 +40,7 @@ function DistributionCard({
 						))}
 					</div>
 				) : data.length === 0 ? (
-					<p className="py-8 text-center text-xs text-muted-foreground">
-						Belum ada data material.
-					</p>
+					<p className="py-8 text-center text-xs text-muted-foreground">Belum ada data material.</p>
 				) : (
 					<ChartContainer config={chartConfig} className="h-52 w-full">
 						<BarChart
@@ -83,15 +58,8 @@ function DistributionCard({
 								width={80}
 								tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
 							/>
-							<ChartTooltip
-								cursor={false}
-								content={<ChartTooltipContent hideLabel />}
-							/>
-							<CartesianGrid
-								horizontal={false}
-								strokeDasharray="3 3"
-								stroke="var(--border)"
-							/>
+							<ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
+							<CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="var(--border)" />
 							<Bar
 								dataKey="jumlah"
 								fill="var(--primary)"
@@ -116,24 +84,17 @@ function DistributionCard({
 
 /** Tab statistik gudang KP: okupansi + ringkasan material. */
 export default function StatistikTab() {
-	const { stats, materialStats, isLoading, error, reload } =
-		useStatistikGudang();
+	const { stats, materialStats, isLoading, error, reload } = useStatistikGudang();
 
 	if (error && !isLoading) {
 		return (
 			<div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-24 text-center">
-				<div className="flex size-14 items-center justify-center rounded-xl bg-muted">
+				<div className="mb-2 flex size-14 items-center justify-center rounded-xl bg-muted">
 					<AlertTriangle className="size-6 text-muted-foreground" />
 				</div>
-				<h2 className="text-base font-semibold text-foreground">
-					Statistik gagal dimuat
-				</h2>
+				<h2 className="text-base font-semibold text-foreground">Statistik gagal dimuat</h2>
 				<p className="max-w-sm text-xs text-muted-foreground">{error}</p>
-				<Button
-					variant="outline"
-					size="sm"
-					className="mt-1 cursor-pointer gap-2 text-xs"
-					onClick={() => reload()}>
+				<Button variant="outline" size="sm" className="mt-1 cursor-pointer gap-2 text-xs" onClick={() => reload()}>
 					<RefreshCw className="size-3.5" /> Coba lagi
 				</Button>
 			</div>
@@ -145,12 +106,10 @@ export default function StatistikTab() {
 	return (
 		<div className="flex flex-col gap-4 pb-10">
 			{/* Baris 1: total material + okupansi */}
-			<div className="grid gap-4 lg:grid-cols-4">
+			<div className="grid gap-4 lg:grid-cols-3">
 				<Card className="border-primary/25 bg-primary/5">
-					<CardContent className="flex h-full flex-col justify-center px-5">
-						<p className="text-xs font-medium text-muted-foreground">
-							Total Material
-						</p>
+					<CardContent className="flex h-full flex-col justify-center p-5">
+						<p className="text-xs font-medium text-muted-foreground">Total Material</p>
 						{isLoading ? (
 							<Skeleton className="mt-2 h-10 w-28" />
 						) : (
@@ -158,35 +117,23 @@ export default function StatistikTab() {
 								{(materialStats?.total ?? 0).toLocaleString("id-ID")}
 							</p>
 						)}
-						<p className="mt-1 text-xs text-muted-foreground">
-							unit tercatat di gudang KP
-						</p>
+						<p className="mt-1 text-xs text-muted-foreground">unit tercatat di gudang KP</p>
 					</CardContent>
 				</Card>
 
-				<div className="lg:col-span-3">
-					{isLoading ? (
-						<Skeleton className="h-full min-h-40 w-full rounded-xl" />
-					) : (
-						<OccupancyPanel stats={stats} />
-					)}
+				<div className="lg:col-span-2">
+					{isLoading ? <Skeleton className="h-full min-h-40 w-full rounded-xl" /> : <OccupancyPanel stats={stats} />}
 				</div>
 			</div>
 
 			{/* Baris 2: ringkasan per status */}
-			<section
-				aria-label="Ringkasan status material"
-				className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+			<section aria-label="Ringkasan status material" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 				{isLoading
-					? [1, 2, 3, 4].map((i) => (
-							<Skeleton key={i} className="h-[104px] rounded-xl" />
-						))
+					? [1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-[104px] rounded-xl" />)
 					: statusCards.map(({ name, jumlah }) => (
 							<Card key={name}>
 								<CardContent className="flex h-full flex-col justify-center p-5">
-									<p className="truncate text-xs font-medium text-muted-foreground">
-										{name}
-									</p>
+									<p className="truncate text-xs font-medium text-muted-foreground">{name}</p>
 									<p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
 										{jumlah.toLocaleString("id-ID")}
 									</p>
@@ -197,9 +144,7 @@ export default function StatistikTab() {
 			</section>
 
 			{/* Distribusi */}
-			<section
-				aria-label="Distribusi material"
-				className="grid gap-4 lg:grid-cols-2">
+			<section aria-label="Distribusi material" className="grid gap-4 lg:grid-cols-2">
 				<DistributionCard
 					title="Per Kategori"
 					description="Enam kategori material terbanyak"
@@ -216,8 +161,7 @@ export default function StatistikTab() {
 
 			{!isLoading && (materialStats?.total ?? 0) === 0 && (
 				<div className="flex items-center justify-center gap-2 rounded-xl border border-dashed py-10 text-xs text-muted-foreground">
-					<Boxes className="size-4" /> Belum ada material tercatat. Tambahkan
-					lewat modul Material Masuk.
+					<Boxes className="size-4" /> Belum ada material tercatat. Tambahkan lewat modul Material Masuk.
 				</div>
 			)}
 		</div>

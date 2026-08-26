@@ -225,6 +225,8 @@ export default function MerekBarangPage() {
       ) : (
         <DataTable<Merek>
           data={filteredBrands}
+          enableSelection
+          getRowId={(row) => row.id}
           columns={columns}
           emptyState={{
             icon: Search,

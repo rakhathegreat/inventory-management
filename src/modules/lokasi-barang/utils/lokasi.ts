@@ -4,12 +4,14 @@ export const ADMIN_LOCATION = "KP Tasikmalaya";
 export const normalizeOwner = (owner?: string | null) =>
 	(owner || ADMIN_LOCATION).trim().toLowerCase();
 
-/** Lokasi yang dikelola halaman ini: gudang KP saja, tanpa pintu keluar/partner. */
+/** Nama yang sebenarnya adalah status material — bukan lokasi fisik. */
+const STATUS_NAMES = new Set(["digunakan", "terdistribusi", "rusak", "hilang", "keluar", "diluar"]);
+
+/** Lokasi yang dikelola halaman ini: gudang KP saja, tanpa pintu keluar/partner/nama status. */
 export function isKpStorageLocation(loc: StorageLocation): boolean {
 	const type = (loc as any).type;
 	return (
-		loc.name !== "Keluar" &&
-		loc.name !== "Diluar" &&
+		!STATUS_NAMES.has(loc.name.trim().toLowerCase()) &&
 		type !== "Partner" &&
 		type !== "PARTNER" &&
 		!loc.name.toUpperCase().startsWith("PT ") &&

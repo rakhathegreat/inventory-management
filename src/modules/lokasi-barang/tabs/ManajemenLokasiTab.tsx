@@ -22,6 +22,7 @@ import {
 	AlertDialogTitle,
 } from "@/shared/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+import { Skeleton } from "@/shared/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/shared/ui/sheet";
 import { cn } from "@/shared/lib/utils";
 import { useLokasiBarang } from "../hooks/useLokasiBarang";
@@ -31,7 +32,6 @@ import { getTypeConfig } from "../components/type-config";
 import { LokasiSheet } from "../components/LokasiSheet";
 
 const FILTERS = [
-	{ key: "all", label: "Semua" },
 	{ key: "rak", label: "Rak" },
 	{ key: "kardus", label: "Kardus" },
 	{ key: "pallet", label: "Pallet" },
@@ -61,6 +61,7 @@ const SHEET_TITLES: Record<string, string> = {
 export default function ManajemenLokasiTab() {
 	const navigate = useNavigate();
 	const {
+		isLoading,
 		filteredAndSortedLocations,
 		searchQuery,
 		setSearchQuery,
@@ -106,37 +107,12 @@ export default function ManajemenLokasiTab() {
 		[handleOpenSheet, handleToggleLocation, handleToggleLevel, requestDeleteLocation, requestDeleteLevel, navigate],
 	);
 
-	const hasActiveFilter = searchQuery !== "" || filterType !== "all";
+	const hasActiveFilter = searchQuery !== "";
 
 	return (
 		<div className="flex flex-col gap-4 pb-10">
-			<div className="flex justify-end">
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button size="sm" className="h-9 cursor-pointer gap-2">
-							<Plus className="size-4" /> Tambah Lokasi
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-44 text-xs">
-						<DropdownMenuGroup>
-							{(Object.keys(ADD_MODES) as (keyof typeof ADD_MODES)[]).map((type) => {
-								const config = getTypeConfig(type);
-								const Icon = config.icon;
-								return (
-									<DropdownMenuItem
-										key={type}
-										className="cursor-pointer text-xs"
-										onClick={() => handleOpenSheet(ADD_MODES[type])}>
-										<Icon className={config.text} /> Tambah {type}
-									</DropdownMenuItem>
-								);
-							})}
-						</DropdownMenuGroup>
-					</DropdownMenuContent>
-			</DropdownMenu>
-			</div>
-
-			<div className="flex flex-col gap-3 rounded-xl border bg-card p-3 lg:flex-row lg:items-center lg:justify-between">
+			{/* Toolbar pencarian, filter & aksi */}
+			<div className="flex flex-col gap-3 rounded-xl border bg-card p-3 lg:flex-row lg:items-center">
 				<div className="relative w-full lg:w-80">
 					<Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input
@@ -169,6 +145,8 @@ export default function ManajemenLokasiTab() {
 
 					<span className="hidden h-6 w-px bg-border lg:block" />
 
+					<span className="hidden h-6 w-px bg-border lg:block" />
+
 					<div className="flex items-center gap-2">
 						<SlidersHorizontal className="size-3.5 shrink-0 text-muted-foreground" />
 						<Select value={sortBy} onValueChange={(val) => setSortBy(val as typeof sortBy)}>
@@ -184,33 +162,75 @@ export default function ManajemenLokasiTab() {
 							</SelectContent>
 						</Select>
 					</div>
+
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button size="sm" className="h-8 cursor-pointer gap-2 text-xs lg:ml-auto">
+								<Plus className="size-3.5" /> Tambah Lokasi
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end" className="w-40 cursor-pointer text-xs">
+							<DropdownMenuGroup>
+								{(Object.keys(ADD_MODES) as (keyof typeof ADD_MODES)[]).map((type) => {
+									const config = getTypeConfig(type);
+									const Icon = config.icon;
+									return (
+										<DropdownMenuItem
+											key={type}
+											className="cursor-pointer text-xs"
+											onClick={() => handleOpenSheet(ADD_MODES[type])}>
+											<Icon className={config.text} /> Tambah {type}
+										</DropdownMenuItem>
+									);
+								})}
+							</DropdownMenuGroup>
+						</DropdownMenuContent>
+					</DropdownMenu>
 				</div>
 			</div>
 
-			{filteredAndSortedLocations.length > 0 ? (
+			{/* Grid kartu lokasi */}
+			{isLoading ? (
 				<div className="grid gap-4 pb-10 md:grid-cols-2 xl:grid-cols-3">
-					{filteredAndSortedLocations.map((loc) => (
-						<LokasiCard key={loc.id} loc={loc} isToggling={isToggling} isDeleting={isDeleting} {...cardActions} />
+					{[1, 2, 3, 4, 5, 6].map((i) => (
+						<Skeleton key={i} className="h-44 rounded-xl" />
 					))}
 				</div>
-			) : (
+			) : filteredAndSortedLocations.length > 0 ? (
+				<>
+					<p className="text-xs text-muted-foreground" aria-live="polite">
+						Menampilkan {filteredAndSortedLocations.length} lokasi{" "}
+						<span className="font-medium text-foreground">
+							{FILTERS.find((f) => f.key === filterType)?.label.toLowerCase()}
+						</span>
+					</p>
+					<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+						{filteredAndSortedLocations.map((loc) => (
+							<LokasiCard key={loc.id} loc={loc} isToggling={isToggling} isDeleting={isDeleting} {...cardActions} />
+						))}
+					</div>
+				</>
+			) : null}
+
+			{!isLoading && filteredAndSortedLocations.length === 0 && (
 				<div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed py-20 text-center">
 					<div className="mb-2 flex size-14 items-center justify-center rounded-xl bg-muted">
 						<Search className="size-6 text-muted-foreground" />
 					</div>
-					<h2 className="text-base font-semibold text-foreground">Tidak ada lokasi yang cocok</h2>
+					<h2 className="text-base font-semibold text-foreground">
+						Tidak ada lokasi {hasActiveFilter ? "yang cocok" : `tipe ${FILTERS.find((f) => f.key === filterType)?.label}`}
+					</h2>
 					<p className="max-w-sm text-xs text-muted-foreground">
-						Tidak ditemukan lokasi penyimpanan sesuai kata kunci atau filter tipe saat ini.
+						{hasActiveFilter
+							? "Tidak ditemukan lokasi sesuai kata kunci pencarian."
+							: `Belum ada ${FILTERS.find((f) => f.key === filterType)?.label.toLowerCase()} terdaftar di gudang.`}
 					</p>
 					{hasActiveFilter ? (
 						<Button
 							variant="outline"
 							size="sm"
 							className="mt-2 cursor-pointer text-xs"
-							onClick={() => {
-								setSearchQuery("");
-								setFilterType("all");
-							}}>
+							onClick={() => setSearchQuery("")}>
 							Bersihkan filter
 						</Button>
 					) : (
@@ -221,6 +241,7 @@ export default function ManajemenLokasiTab() {
 				</div>
 			)}
 
+			{/* Form tambah/edit */}
 			<Sheet open={sheetMode !== "closed"} onOpenChange={(open) => !open && setSheetMode("closed")}>
 				<SheetContent className="flex flex-col sm:max-w-md">
 					<SheetHeader>
@@ -262,6 +283,7 @@ export default function ManajemenLokasiTab() {
 				</SheetContent>
 			</Sheet>
 
+			{/* Konfirmasi hapus */}
 			<AlertDialog
 				open={deleteAlertData.isOpen}
 				onOpenChange={(open) => !open && setDeleteAlertData({ ...deleteAlertData, isOpen: false })}>

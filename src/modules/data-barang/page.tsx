@@ -259,6 +259,8 @@ export default function DataBarangPage() {
 
 			<DataTable<BarangUnit>
 				data={barangList}
+				enableSelection
+				getRowId={(row) => row.id}
 				columns={columns}
 				isLoading={isLoading}
 				onRowClick={handleOpenDetail}

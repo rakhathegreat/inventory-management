@@ -425,6 +425,8 @@ export function RequestTable({
 		<>
 			<DataTable<DashboardRequest>
 				data={data}
+				enableSelection
+				getRowId={(row) => row.id}
 				columns={visibleColumns}
 				meta={tableMeta}
 				onRowClick={onRowClick}

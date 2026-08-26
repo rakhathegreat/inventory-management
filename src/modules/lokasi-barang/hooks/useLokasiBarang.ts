@@ -26,10 +26,11 @@ import {
 export function useLokasiBarang() {
 	const [locations, setLocations] = useState<StorageLocation[]>([]);
 	const [brands, setBrands] = useState<string[]>(["Campuran"]);
+	const [isLoading, setIsLoading] = useState(true);
 	const [sheetMode, setSheetMode] = useState<SheetMode>("closed");
 	const [activeItem, setActiveItem] = useState<{ parentId?: string; levelId?: string } | null>(null);
 	const [searchQuery, setSearchQuery] = useState("");
-	const [filterType, setFilterType] = useState<"all" | "rak" | "kardus" | "pallet">("all");
+	const [filterType, setFilterType] = useState<"all" | "rak" | "kardus" | "pallet">("rak");
 	const [sortBy, setSortBy] = useState<"util-desc" | "util-asc" | "name">("name");
 
 	// Form states
@@ -61,8 +62,10 @@ export function useLokasiBarang() {
 	};
 
 	useEffect(() => {
-		loadLocations();
-		loadBrands();
+		(async () => {
+			await Promise.all([loadLocations(), loadBrands()]);
+			setIsLoading(false);
+		})();
 	}, []);
 
 	const stats = useMemo(() => computeStats(locations), [locations]);
@@ -216,6 +219,7 @@ export function useLokasiBarang() {
 		// data & derived
 		locations,
 		stats,
+		isLoading,
 		filteredAndSortedLocations,
 		// filter
 		searchQuery,

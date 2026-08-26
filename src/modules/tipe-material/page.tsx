@@ -310,6 +310,8 @@ export default function TipeMaterialPage() {
 			) : (
 				<DataTable<ModelRow>
 					data={filteredTypes}
+					enableSelection
+					getRowId={(row) => row.id}
 					columns={columns}
 					emptyState={{
 						icon: Search,

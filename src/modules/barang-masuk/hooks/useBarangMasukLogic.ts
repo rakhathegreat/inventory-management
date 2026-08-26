@@ -144,7 +144,8 @@ export function useBarangMasukLogic() {
       [decision.item.lokasi]: current[decision.item.lokasi] - 1,
     }));
 
-    setAsalBarangManual(false);
+    // Asal material yang dipilih manual TIDAK direset — berlaku untuk
+    // semua scan berikutnya sampai user mengembalikannya ke otomatis.
     focusKodeBarangInput();
   }, [
     session,

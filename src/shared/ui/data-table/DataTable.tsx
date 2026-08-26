@@ -43,8 +43,10 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { ScrollShadowWrapper } from "@/shared/ui/scroll-shadow";
 import { Skeleton } from "@/shared/ui/skeleton";
+import { Checkbox } from "@/shared/ui/checkbox";
 import { cn } from "@/shared/lib/utils";
 import { MoreVertical } from "lucide-react";
+import type { RowSelectionState } from "@tanstack/react-table";
 import type { LucideIcon } from "lucide-react";
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
@@ -189,6 +191,12 @@ export interface DataTableProps<TData> {
 	onPageSizeChange?: (pageSize: number) => void;
 	toolbar?: React.ReactNode;
 	className?: string;
+	/** Aktifkan kolom checkbox untuk memilih baris. */
+	enableSelection?: boolean;
+	/** Ekstrak id unik tiap baris (fallback: field `id`). */
+	getRowId?: (row: TData) => string;
+	/** Diberi tahu setiap kali set baris terpilih berubah. */
+	onSelectionChange?: (selectedIds: string[]) => void;
 }
 
 const DEFAULT_EMPTY: DataTableEmptyState = {
@@ -260,6 +268,9 @@ export function DataTable<TData>({
 	onPageSizeChange,
 	toolbar,
 	className,
+	enableSelection = false,
+	getRowId,
+	onSelectionChange,
 }: DataTableProps<TData>) {
 	const [sorting, setSorting] = React.useState<SortingState>([]);
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -312,9 +323,53 @@ export function DataTable<TData>({
 		],
 	);
 
+	const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+
+	const resolvedGetRowId = React.useCallback(
+		(row: TData, index: number) => {
+			if (getRowId) return getRowId(row);
+			return String((row as { id?: unknown })?.id ?? index);
+		},
+		[getRowId],
+	);
+
+	const columnsWithSelection = React.useMemo(() => {
+		if (!enableSelection) return columns;
+		const selectColumn: ColumnDef<TData, any> = {
+			id: "__select",
+			header: ({ table: tbl }) => (
+				<Checkbox
+					checked={
+						tbl.getIsAllPageRowsSelected() ||
+						(tbl.getIsSomePageRowsSelected() && "indeterminate")
+					}
+					onCheckedChange={(v) => tbl.toggleAllPageRowsSelected(v === true)}
+					aria-label="Pilih semua"
+					className="mx-auto block"
+				/>
+			),
+			cell: ({ row }) => (
+				<div onClick={(e) => e.stopPropagation()}>
+					<Checkbox
+						checked={row.getIsSelected()}
+						onCheckedChange={(v) => row.toggleSelected(v === true)}
+						aria-label="Pilih baris"
+						className="mx-auto block"
+					/>
+				</div>
+			),
+			enableSorting: false,
+			meta: { className: "flex justify-center w-10" },
+		};
+		return [selectColumn, ...columns];
+	}, [columns, enableSelection]);
+
 	const table = useReactTable({
 		data,
-		columns,
+		columns: columnsWithSelection,
+		enableRowSelection: enableSelection,
+		getRowId: enableSelection ? resolvedGetRowId : undefined,
+		onRowSelectionChange: enableSelection ? setRowSelection : undefined,
 		getCoreRowModel: getCoreRowModel(),
 		getPaginationRowModel: getPaginationRowModel(),
 		getSortedRowModel: getSortedRowModel(),
@@ -324,12 +379,21 @@ export function DataTable<TData>({
 			sorting,
 			columnFilters,
 			pagination: paginationState,
+			rowSelection: enableSelection ? rowSelection : {},
 		},
 		onPaginationChange: handlePaginationChange,
 		manualPagination: isServer,
 		pageCount,
 		meta,
 	});
+
+	React.useEffect(() => {
+		if (!enableSelection || !onSelectionChange) return;
+		const ids = table
+			.getSelectedRowModel()
+			.rows.map((r) => resolvedGetRowId(r.original, r.index));
+		onSelectionChange(ids);
+	}, [rowSelection, enableSelection, onSelectionChange, resolvedGetRowId, table]);
 
 	const totalRows = isServer
 		? (totalItems ?? 0)

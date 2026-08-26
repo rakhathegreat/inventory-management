@@ -265,6 +265,8 @@ export default function KategoriBarangPage() {
 			) : (
 				<DataTable<Kategori>
 					data={filteredCategories}
+					enableSelection
+					getRowId={(row) => row.id}
 					columns={columns}
 					emptyState={{
 						icon: Search,

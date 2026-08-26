@@ -300,6 +300,8 @@ export default function ManajemenUserPage() {
 			{/* Tabel user */}
 			<DataTable<ManagedUser>
 				data={filteredUsers}
+			enableSelection
+			getRowId={(row) => row.id}
 				columns={columns}
 				isLoading={isLoading}
 				pagination="client"
