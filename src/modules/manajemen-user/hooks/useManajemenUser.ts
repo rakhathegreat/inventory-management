@@ -71,6 +71,43 @@ export function useManajemenUser() {
 		toast.success("Password berhasil direset");
 	};
 
+	const runSequential = async (
+		targets: ManagedUser[],
+		run: (u: ManagedUser) => Promise<void>,
+		labelOk: string,
+	) => {
+		let ok = 0;
+		let fail = 0;
+		for (const u of targets) {
+			try {
+				await run(u);
+				ok++;
+			} catch {
+				fail++;
+			}
+		}
+		if (ok) toast.success(`${ok} akun ${labelOk}`);
+		if (fail) toast.error(`${fail} akun gagal diproses`);
+		if (ok) await load();
+	};
+
+	const handleBulkDeactivate = async (ids: string[]) => {
+		const targets = users.filter(
+			(u) => ids.includes(u.id) && u.id !== currentUser?.id && u.isAktif,
+		);
+		if (!targets.length) {
+			toast.info("Tidak ada akun aktif yang bisa dinonaktifkan.");
+			return;
+		}
+		await runSequential(targets, async (u) => updateUser(u.id, { isAktif: false }), "dinonaktifkan");
+	};
+
+	const handleBulkDelete = async (ids: string[]) => {
+		const targets = users.filter((u) => ids.includes(u.id) && u.id !== currentUser?.id);
+		if (!targets.length) return;
+		await runSequential(targets, async (u) => deleteUser(u.id), "dihapus");
+	};
+
 	const handleToggleActive = async (user: ManagedUser) => {
 		if (user.id === currentUser?.id) return;
 		try {
@@ -106,5 +143,7 @@ export function useManajemenUser() {
 		handleResetPassword,
 		handleToggleActive,
 		handleDelete,
+		handleBulkDeactivate,
+		handleBulkDelete,
 	};
 }

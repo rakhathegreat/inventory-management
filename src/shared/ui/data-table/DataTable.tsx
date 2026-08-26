@@ -45,7 +45,7 @@ import { ScrollShadowWrapper } from "@/shared/ui/scroll-shadow";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { cn } from "@/shared/lib/utils";
-import { MoreVertical } from "lucide-react";
+import { MoreVertical, X } from "lucide-react";
 import type { RowSelectionState } from "@tanstack/react-table";
 import type { LucideIcon } from "lucide-react";
 
@@ -167,6 +167,14 @@ export function createRowActionsColumn<TData>(
 	};
 }
 
+export interface DataTableBulkAction {
+	label: string;
+	icon?: LucideIcon;
+	destructive?: boolean;
+	/** Jalankan aksi untuk daftar id baris terpilih. */
+	onAction: (selectedIds: string[]) => Promise<void> | void;
+}
+
 export interface DataTableEmptyState {
 	icon?: LucideIcon;
 	title: string;
@@ -197,6 +205,8 @@ export interface DataTableProps<TData> {
 	getRowId?: (row: TData) => string;
 	/** Diberi tahu setiap kali set baris terpilih berubah. */
 	onSelectionChange?: (selectedIds: string[]) => void;
+	/** Aksi massal yang tampil saat ada baris terpilih. */
+	bulkActions?: DataTableBulkAction[];
 }
 
 const DEFAULT_EMPTY: DataTableEmptyState = {
@@ -271,6 +281,7 @@ export function DataTable<TData>({
 	enableSelection = false,
 	getRowId,
 	onSelectionChange,
+	bulkActions,
 }: DataTableProps<TData>) {
 	const [sorting, setSorting] = React.useState<SortingState>([]);
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -324,6 +335,8 @@ export function DataTable<TData>({
 	);
 
 	const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+	const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+	const [isBulkRunning, setIsBulkRunning] = React.useState(false);
 
 	const resolvedGetRowId = React.useCallback(
 		(row: TData, index: number) => {
@@ -388,12 +401,15 @@ export function DataTable<TData>({
 	});
 
 	React.useEffect(() => {
-		if (!enableSelection || !onSelectionChange) return;
+		if (!enableSelection) return;
 		const ids = table
 			.getSelectedRowModel()
 			.rows.map((r) => resolvedGetRowId(r.original, r.index));
-		onSelectionChange(ids);
+		setSelectedIds(ids);
+		onSelectionChange?.(ids);
 	}, [rowSelection, enableSelection, onSelectionChange, resolvedGetRowId, table]);
+
+	const clearSelection = React.useCallback(() => setRowSelection({}), []);
 
 	const totalRows = isServer
 		? (totalItems ?? 0)
@@ -406,6 +422,44 @@ export function DataTable<TData>({
 				className ?? "flex flex-col w-full h-full min-h-0 gap-4",
 			)}>
 			{toolbar}
+			{enableSelection && !!bulkActions?.length && selectedIds.length > 0 && (
+				<div
+					role="toolbar"
+					aria-label="Aksi massal"
+					className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+					<span className="text-xs font-semibold text-foreground">
+						{selectedIds.length} dipilih
+					</span>
+					<span className="h-4 w-px bg-border" />
+					{bulkActions.map((action) => (
+						<Button
+							key={action.label}
+							variant={action.destructive ? "destructive" : "outline"}
+							size="sm"
+							disabled={isBulkRunning}
+							className="h-7 cursor-pointer gap-1.5 text-xs"
+							onClick={async () => {
+								setIsBulkRunning(true);
+								try {
+									await action.onAction(selectedIds);
+									clearSelection();
+								} finally {
+									setIsBulkRunning(false);
+								}
+							}}>
+							{action.icon && <action.icon className="size-3.5" />}
+							{isBulkRunning ? "Memproses..." : action.label}
+						</Button>
+					))}
+					<Button
+						variant="ghost"
+						size="sm"
+						className="ml-auto h-7 cursor-pointer gap-1 px-2 text-xs text-muted-foreground"
+						onClick={clearSelection}>
+						<X className="size-3.5" /> Bersihkan
+					</Button>
+				</div>
+			)}
 			<ScrollShadowWrapper>
 				<Table>
 					<TableHeader className="sticky top-0 z-20 bg-muted shadow-sm">

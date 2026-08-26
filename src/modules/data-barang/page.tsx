@@ -88,6 +88,7 @@ export default function DataBarangPage() {
 		handleOpenEdit,
 		handleExportExcel,
 		handleDelete,
+		handleBulkDelete,
 		confirmDelete,
 		handleSubmitForm,
 	} = useDataBarang();
@@ -261,6 +262,14 @@ export default function DataBarangPage() {
 				data={barangList}
 				enableSelection
 				getRowId={(row) => row.id}
+				bulkActions={[
+					{
+						label: "Hapus terpilih",
+						icon: Trash2,
+						destructive: true,
+						onAction: handleBulkDelete,
+					},
+				]}
 				columns={columns}
 				isLoading={isLoading}
 				onRowClick={handleOpenDetail}

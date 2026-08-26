@@ -26,6 +26,8 @@ export interface InboundScanContext {
   catatan: string;
   asalBarang: string;
   idSeed: number;
+  /** Prefix identifier yang diizinkan (dari storage). Kosong/absen = gerbang nonaktif. */
+  allowedIdentifiers?: string[];
 
   sessionItems: BarangMasukItem[];
   latestItems: InventoryItem[];
@@ -47,6 +49,23 @@ export function decideInboundScan(ctx: InboundScanContext): ScanDecision {
 
   if (!trimmedKode) {
     return { action: "reject", message: "Serial number kosong." };
+  }
+
+  // Gerbang identifier: bila daftar tersedia, SN harus diawali SALAH SATU
+  // identifier terdaftar — selain itu langsung ditolak.
+  const allowedIdentifiers = (ctx.allowedIdentifiers ?? [])
+    .map((i) => i.trim().toUpperCase())
+    .filter(Boolean);
+  if (allowedIdentifiers.length > 0) {
+    const upperKode = trimmedKode.toUpperCase();
+    const matched = allowedIdentifiers.find((prefix) => upperKode.startsWith(prefix));
+    if (!matched) {
+      return {
+        action: "reject",
+        message: "SN tidak dikenal sistem.",
+        description: "Tidak cocok dengan identifier merek manapun.",
+      };
+    }
   }
 
   const isDuplicate = ctx.sessionItems.some(

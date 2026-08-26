@@ -29,7 +29,7 @@ export function useTipeMaterial() {
 
 	const [isSheetOpen, setIsSheetOpen] = useState(false);
 	const [editId, setEditId] = useState<string | null>(null);
-	const [deleteAlertData, setDeleteAlertData] = useState({ isOpen: false, id: "", name: "" });
+	const [deleteAlertData, setDeleteAlertData] = useState<{ isOpen: boolean; id: string; name: string; ids?: string[] }>({ isOpen: false, id: "", name: "" });
 
 	const [isSaving, setIsSaving] = useState(false);
 	const [isDeleting, setIsDeleting] = useState(false);
@@ -116,7 +116,28 @@ export function useTipeMaterial() {
 		}
 	};
 
+	const requestBulkDelete = (items: { id: string; name: string }[]) => {
+		if (!items.length) return;
+		setDeleteAlertData({ isOpen: true, id: items[0].id, name: items[0].name, ids: items.map((i) => i.id) });
+	};
+
 	const confirmDelete = async () => {
+		if (deleteAlertData.ids && deleteAlertData.ids.length > 1) {
+			if (isDeleting) return;
+			setIsDeleting(true);
+			let ok = 0;
+			let fail = 0;
+			for (const id of deleteAlertData.ids) {
+				try { await deleteModelById(id); ok++; } catch { fail++; }
+			}
+			await loadTypes();
+			if (ok) toast.success(`${ok} ${"model material"} berhasil dihapus`);
+			if (fail) toast.error(`${fail} gagal dihapus karena sedang digunakan.`);
+			setIsDeleting(false);
+			setDeleteAlertData({ isOpen: false, id: "", name: "" });
+			return;
+		}
+
 		if (isDeleting || !deleteAlertData.id) return;
 		setIsDeleting(true);
 		try {
@@ -163,6 +184,7 @@ export function useTipeMaterial() {
 		setCategoryError,
 		handleOpenSheet,
 		handleSave,
+		requestBulkDelete,
 		confirmDelete,
 	};
 }

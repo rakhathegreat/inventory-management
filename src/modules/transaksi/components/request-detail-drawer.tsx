@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { Loader2 } from "lucide-react"
+import { FileText, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { api } from "@/shared/lib/api"
 import { Button } from "@/shared/ui/button"
@@ -153,7 +153,8 @@ export function RequestDetailDrawer({
           ),
           deliveryDocument: data.deliveryDocument ? {
             kpSignedById: data.deliveryDocument.kpSignedById,
-            picSignedById: data.deliveryDocument.picSignedById
+            picSignedById: data.deliveryDocument.picSignedById,
+            driveViewUrl: data.deliveryDocument.driveViewUrl || null
           } : null
         }
         setDetailData(formatted)
@@ -218,6 +219,16 @@ export function RequestDetailDrawer({
             </div>
           ) : (
             <div className="flex flex-col gap-3">
+              {isSelesai && displayItem.deliveryDocument?.driveViewUrl && (
+                <a
+                  href={displayItem.deliveryDocument.driveViewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-muted"
+                >
+                  <FileText className="size-4" /> Lihat dokumen BAST di Google Drive
+                </a>
+              )}
               {['SIAP', 'SELESAI', 'DITERIMA'].includes(displayItem.status?.toUpperCase() || "") ? (
                 <ScrollShadowWrapper>
                   <Table className="whitespace-nowrap">

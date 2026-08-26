@@ -22,6 +22,7 @@ export function GoogleDriveTab() {
 	const [googleEmail, setGoogleEmail] = useState("");
 	const [isLoading, setIsLoading] = useState(true);
 	const [isConnecting, setIsConnecting] = useState(false);
+	const [isPolling, setIsPolling] = useState(false);
 	const [isDisconnecting, setIsDisconnecting] = useState(false);
 
 	const checkStatus = useCallback(async () => {
@@ -44,6 +45,29 @@ export function GoogleDriveTab() {
 		checkStatus();
 	}, [checkStatus]);
 
+	const pollStatusUntilConnected = useCallback(async () => {
+		const deadline = Date.now() + 5 * 60 * 1000;
+		while (Date.now() < deadline) {
+			await new Promise((r) => setTimeout(r, 2000));
+			try {
+				const res = await fetch(`${getBaseUrl()}/auth/google/status`, { headers: getHeaders() });
+				if (!res.ok) continue;
+				const data = await res.json();
+				if (data.googleConnected) {
+					setIsConnected(true);
+					setGoogleEmail(data.googleEmail || "");
+					toast.success("Akun Google berhasil terhubung", {
+						description: data.googleEmail || undefined,
+					});
+					return true;
+				}
+			} catch {
+				// jaringan sesaat terputus — lanjutkan polling
+			}
+		}
+		return false;
+	}, []);
+
 	const handleConnect = async () => {
 		setIsConnecting(true);
 		try {
@@ -56,6 +80,15 @@ export function GoogleDriveTab() {
 			} catch {
 				window.open(data.url, "_blank");
 			}
+
+			// Exchange terjadi di browser setelah consent — pantau statusnya
+			// sampai backend melaporkan terhubung.
+			setIsConnecting(false);
+			setIsPolling(true);
+			const connected = await pollStatusUntilConnected();
+			setIsPolling(false);
+			if (!connected) toast.error("Koneksi tidak selesai dalam batas waktu. Coba lagi.");
+			return;
 		} catch (err: any) {
 			toast.error(err.message || "Gagal memulai koneksi Google.");
 		} finally {
@@ -100,6 +133,16 @@ export function GoogleDriveTab() {
 							<Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
 							Memeriksa status koneksi...
 						</div>
+					) : isPolling ? (
+						<div className="flex items-start gap-3">
+							<Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" />
+							<div>
+								<p className="text-sm font-medium text-foreground">Menunggu persetujuan Google...</p>
+								<p className="text-xs text-muted-foreground">
+									Selesaikan login di browser yang terbuka — halaman ini diperbarui otomatis.
+								</p>
+							</div>
+						</div>
 					) : isConnected ? (
 						<div className="flex items-start gap-3">
 							<CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-500" />
@@ -129,11 +172,11 @@ export function GoogleDriveTab() {
 							disabled={isLoading}>
 							<RefreshCw className="size-3.5" /> Periksa ulang
 						</Button>
-						{!isConnected && (
+						{!isConnected && !isPolling && (
 							<Button size="sm" className="cursor-pointer gap-2 text-xs" onClick={handleConnect} disabled={isConnecting}>
 								{isConnecting ? (
 									<>
-										<Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" /> Menghubungkan...
+										<Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" /> Membuka Google...
 									</>
 								) : (
 									<>
@@ -166,9 +209,9 @@ export function GoogleDriveTab() {
 						<li>Spreadsheet lokasi dibuat saat lokasi ditambahkan; QR code-nya berisi link spreadsheet tersebut.</li>
 						<li>Melepas koneksi tidak menghapus spreadsheet yang sudah ada.</li>
 						<li>
-							Pastikan <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">GOOGLE_REDIRECT_URI</code>{" "}
-							menunjuk ke <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/oauth/google/callback</code>{" "}
-							pada aplikasi ini.
+							Redirect OAuth diarahkan ke server backend — pastikan{" "}
+							<code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">GOOGLE_REDIRECT_URI</code>{" "}
+							dan URI yang sama di Google Cloud Console dapat dijangkau browser Anda.
 						</li>
 					</ul>
 				</CardContent>

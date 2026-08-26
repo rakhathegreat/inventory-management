@@ -78,6 +78,7 @@ export default function KategoriBarangPage() {
 		deleteAlertData,
 		setDeleteAlertData,
 		requestDelete,
+		requestBulkDelete,
 		confirmDelete,
 		handleSave,
 		handleOpenSheet,
@@ -267,6 +268,20 @@ export default function KategoriBarangPage() {
 					data={filteredCategories}
 					enableSelection
 					getRowId={(row) => row.id}
+					bulkActions={[
+						{
+							label: "Hapus terpilih",
+							icon: Trash2,
+							destructive: true,
+							onAction: (ids) =>
+								requestBulkDelete(
+									ids.flatMap((id) => {
+										const row = filteredCategories.find((x) => String(x.id) === id);
+										return row ? [{ id: String(row.id), name: row.name }] : [];
+									}),
+								),
+						},
+					]}
 					columns={columns}
 					emptyState={{
 						icon: Search,

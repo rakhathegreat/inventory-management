@@ -16,7 +16,9 @@ export function useMerekBarang() {
 	const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
 	const [isSheetOpen, setIsSheetOpen] = useState(false);
 	const [editId, setEditId] = useState<string | null>(null);
-	const [deleteAlertData, setDeleteAlertData] = useState<{ isOpen: boolean; id: string; name: string }>({ isOpen: false, id: "", name: "" });
+	const [deleteAlertData, setDeleteAlertData] = useState<{ isOpen: boolean; id: string; name: string; ids?: string[] }>(
+		{ isOpen: false, id: "", name: "" },
+	);
 	const [isSaving, setIsSaving] = useState(false);
 	const [isDeleting, setIsDeleting] = useState(false);
 	const [name, setName] = useState("");
@@ -129,11 +131,32 @@ export function useMerekBarang() {
 		}
 	};
 
+	const requestBulkDelete = (items: { id: string; name: string }[]) => {
+		if (!items.length) return;
+		setDeleteAlertData({ isOpen: true, id: items[0].id, name: items[0].name, ids: items.map((i) => i.id) });
+	};
+
 	const requestDelete = (id: string, name: string) => {
 		setDeleteAlertData({ isOpen: true, id, name });
 	};
 
 	const confirmDelete = async () => {
+		if (deleteAlertData.ids && deleteAlertData.ids.length > 1) {
+			if (isDeleting) return;
+			setIsDeleting(true);
+			let ok = 0;
+			let fail = 0;
+			for (const id of deleteAlertData.ids) {
+				try { await deleteBrandById(id); ok++; } catch { fail++; }
+			}
+			await loadBrands();
+			if (ok) toast.success(`${ok} ${"merek"} berhasil dihapus`);
+			if (fail) toast.error(`${fail} gagal dihapus karena sedang digunakan.`);
+			setIsDeleting(false);
+			setDeleteAlertData({ isOpen: false, id: "", name: "" });
+			return;
+		}
+
 		if (isDeleting) return;
 		const { id } = deleteAlertData;
 		if (!id) return;
@@ -180,6 +203,7 @@ export function useMerekBarang() {
 		deleteAlertData,
 		setDeleteAlertData,
 		requestDelete,
+		requestBulkDelete,
 		confirmDelete,
 		handleSave,
 	};

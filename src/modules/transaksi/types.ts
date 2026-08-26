@@ -116,6 +116,7 @@ export type DashboardRequest = {
     picSignedById?: string | null
     filePath?: string | null
     finalFilePath?: string | null
+    driveViewUrl?: string | null
   } | null
 }
 

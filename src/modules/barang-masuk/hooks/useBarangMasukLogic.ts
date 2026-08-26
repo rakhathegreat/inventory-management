@@ -4,6 +4,7 @@ import { useInboundSession } from "./useInboundSession";
 import { useBarcodeScanner } from "./useBarcodeScanner";
 import { fetchBarangMasukMasterData, fetchInventoryItems, submitInboundSession } from "../api/barangMasukApi";
 import { detectMitraFromSN } from "../utils/brandDetector";
+import { loadIdentifiers, saveIdentifiers } from "../utils/identifierStore";
 import { calculateCapacityMap } from "../utils/locationSmartRouting";
 import {
   decideInboundScan,
@@ -70,6 +71,9 @@ export function useBarangMasukLogic() {
         const { locs, newKuota } = calculateCapacityMap(data.locations, data.items, locationOwner);
         setDbLocations(locs);
         session.setKuota(newKuota);
+
+        // Seluruh identifier merek disimpan ke storage — dipakai gerbang scan.
+        saveIdentifiers(data.brands);
       } catch (error) {
         toast.error("Gagal memuat data material masuk.");
       }
@@ -124,6 +128,7 @@ export function useBarangMasukLogic() {
       catatan,
       asalBarang,
       idSeed: Date.now(),
+      allowedIdentifiers: loadIdentifiers().map((e) => e.identifier),
       sessionItems: session.barangMasuk,
       latestItems,
       dbBrands,

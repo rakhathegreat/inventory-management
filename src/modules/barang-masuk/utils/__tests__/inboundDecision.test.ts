@@ -36,6 +36,34 @@ const baseCtx = (): InboundScanContext => ({
 });
 
 describe("decideInboundScan", () => {
+  it("gerbang identifier: SN di luar semua identifier ditolak", () => {
+    const d = decideInboundScan({
+      ...baseCtx(),
+      kode: "HW-777",
+      allowedIdentifiers: ["ZTE"],
+    });
+    expect(d.action).toBe("reject");
+    if (d.action === "reject") expect(d.message).toBe("SN tidak dikenal sistem.");
+  });
+
+  it("gerbang identifier: SN cocok salah satu identifier diterima", () => {
+    const d = decideInboundScan({
+      ...baseCtx(),
+      kode: "ZTE-001",
+      allowedIdentifiers: ["HW", "ZTE"],
+    });
+    expect(d.action).toBe("accept");
+  });
+
+  it("daftar identifier kosong: gerbang nonaktif, SN apa pun lewat", () => {
+    const d = decideInboundScan({
+      ...baseCtx(),
+      kode: "HW-777",
+      allowedIdentifiers: [],
+    });
+    expect(d.action).not.toBe("reject");
+  });
+
   it("accept scan Baru baru: kategori/model dari master data, lokasi disarankan", () => {
     const d = decideInboundScan(baseCtx());
     expect(d.action).toBe("accept");

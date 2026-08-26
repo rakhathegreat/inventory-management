@@ -17,7 +17,6 @@ import KategoriBarangPage from "@/modules/kategori-barang/page";
 import TipeMaterialPage from "@/modules/tipe-material/page";
 import MerekBarangPage from "@/modules/merek-barang/page";
 import LoginPage from "@/modules/auth/LoginPage";
-import GoogleCallbackPage from "@/modules/auth/GoogleCallbackPage";
 import PengaturanPage from "@/modules/pengaturan/page";
 import ManajemenUserPage from "@/modules/manajemen-user/page";
 
@@ -25,7 +24,6 @@ export function AppRoutes() {
 	return (
 		<Routes>
 			<Route path="/login" element={<LoginPage />} />
-			<Route path="/oauth/google/callback" element={<GoogleCallbackPage />} />
 			<Route
 				path="/"
 				element={

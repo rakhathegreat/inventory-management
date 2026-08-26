@@ -87,6 +87,7 @@ export default function TipeMaterialPage() {
 		handleOpenSheet,
 		handleSave,
 		confirmDelete,
+		requestBulkDelete,
 	} = useTipeMaterial();
 
 	const columns = React.useMemo<ColumnDef<ModelRow, any>[]>(
@@ -312,6 +313,20 @@ export default function TipeMaterialPage() {
 					data={filteredTypes}
 					enableSelection
 					getRowId={(row) => row.id}
+					bulkActions={[
+						{
+							label: "Hapus terpilih",
+							icon: Trash2,
+							destructive: true,
+							onAction: (ids) =>
+								requestBulkDelete(
+									ids.flatMap((id) => {
+										const row = filteredTypes.find((t) => String(t.id) === id);
+										return row ? [{ id: String(row.id), name: row.nama }] : [];
+									}),
+								),
+						},
+					]}
 					columns={columns}
 					emptyState={{
 						icon: Search,

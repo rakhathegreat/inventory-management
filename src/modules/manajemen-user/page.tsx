@@ -53,6 +53,8 @@ export default function ManajemenUserPage() {
 		handleResetPassword,
 		handleToggleActive,
 		handleDelete,
+		handleBulkDeactivate,
+		handleBulkDelete,
 	} = useManajemenUser();
 
 	const [searchQuery, setSearchQuery] = React.useState("");
@@ -62,6 +64,7 @@ export default function ManajemenUserPage() {
 	const [editingUser, setEditingUser] = React.useState<ManagedUser | null>(null);
 	const [resetTarget, setResetTarget] = React.useState<ManagedUser | null>(null);
 	const [deleteTarget, setDeleteTarget] = React.useState<ManagedUser | null>(null);
+	const [bulkDeleteIds, setBulkDeleteIds] = React.useState<string[] | null>(null);
 
 	const filteredUsers = React.useMemo(() => {
 		const q = searchQuery.trim().toLowerCase();
@@ -302,6 +305,19 @@ export default function ManajemenUserPage() {
 				data={filteredUsers}
 			enableSelection
 			getRowId={(row) => row.id}
+				bulkActions={[
+					{
+						label: "Nonaktifkan",
+						icon: Power,
+						onAction: handleBulkDeactivate,
+					},
+					{
+						label: "Hapus",
+						icon: Trash2,
+						destructive: true,
+						onAction: (ids) => setBulkDeleteIds(ids),
+					},
+				]}
 				columns={columns}
 				isLoading={isLoading}
 				pagination="client"
@@ -369,6 +385,29 @@ export default function ManajemenUserPage() {
 			</AlertDialog>
 
 			<UserSuccessModal credential={successCredential} onClose={() => setSuccessCredential(null)} />
+
+			<AlertDialog open={bulkDeleteIds !== null} onOpenChange={(open) => !open && setBulkDeleteIds(null)}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle className="text-base">Hapus {bulkDeleteIds?.length} akun terpilih?</AlertDialogTitle>
+						<AlertDialogDescription className="text-xs">
+							Akun yang dipilih akan dihapus permanen dan tidak dapat digunakan untuk login lagi.
+							Tindakan ini tidak dapat dibatalkan.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter className="gap-2">
+						<AlertDialogCancel className="cursor-pointer text-xs">Batal</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={() => {
+								if (bulkDeleteIds) handleBulkDelete(bulkDeleteIds);
+								setBulkDeleteIds(null);
+							}}
+							className="cursor-pointer bg-destructive text-xs text-white hover:bg-destructive/90">
+							Hapus Akun
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 
 			<AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
 				<AlertDialogContent>

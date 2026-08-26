@@ -51,6 +51,7 @@ export default function MerekBarangPage() {
 		deleteAlertData,
 		setDeleteAlertData,
 		requestDelete,
+		requestBulkDelete,
 		confirmDelete,
 		handleSave,
 		editId,
@@ -227,6 +228,20 @@ export default function MerekBarangPage() {
           data={filteredBrands}
           enableSelection
           getRowId={(row) => row.id}
+          bulkActions={[
+          	{
+          		label: "Hapus terpilih",
+          		icon: Trash2,
+          		destructive: true,
+          		onAction: (ids) =>
+          			requestBulkDelete(
+          				ids.flatMap((id) => {
+          					const row = filteredBrands.find((x) => String(x.id) === id);
+          					return row ? [{ id: String(row.id), name: row.nama }] : [];
+          				}),
+          			),
+          	},
+          ]}
           columns={columns}
           emptyState={{
             icon: Search,

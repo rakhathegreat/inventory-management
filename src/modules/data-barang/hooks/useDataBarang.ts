@@ -240,6 +240,11 @@ export function useDataBarang() {
 		});
 	};
 
+	const handleBulkDelete = (ids: string[]) => {
+		if (!ids.length) return;
+		setDeleteDialog({ type: "bulk", ids });
+	};
+
 	const confirmDelete = async () => {
 		if (!deleteDialog || isDeleting) return;
 		const idsToDelete = deleteDialog.ids;
@@ -344,6 +349,7 @@ export function useDataBarang() {
 		isDeleting,
 		deleteDialog,
 		setDeleteDialog,
+		handleBulkDelete,
 		isFiltered,
 		handleOpenDetail,
 		handleOpenEdit,
