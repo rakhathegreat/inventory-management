@@ -1,38 +1,31 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import ProtectedRoute from "@/components/shared/ProtectedRoute";
-import Layout from "@/components/layout/layout";
-import DashboardPage from "@/app/dashboard/page";
-import BarangMasukPage from "@/app/barang-masuk/page";
-import BarangKeluarPage from "@/app/barang-keluar/page";
-import DataBarangPage from "@/app/data-barang/page";
-import DataTransaksiPage from "@/app/request/page";
-import PreparePage from "@/app/request/prepare/page";
-import LokasiBarangPage from "@/app/lokasi-barang/page";
-import TipeMaterialPage from "@/app/tipe-material/page";
-import KategoriBarangPage from "@/app/kategori-barang/page";
-import MerekBarangPage from "@/app/merek-barang/page";
-import MitraPage from "@/app/mitra/page";
-import LoginPage from "@/app/login/page";
-import PengaturanPage from "@/app/pengaturan/page";
-import GoogleOAuthCallbackPage from "@/app/oauth/google/callback/page";
-import MobileSignPage from "@/app/mobile-sign/page";
-import PartnerRequestPage from "@/app/partner-request/page";
-import { useAuth } from "@/lib/auth";
+import ProtectedRoute from "@/modules/auth/ProtectedRoute";
+import AdminRoute from "@/modules/auth/AdminRoute";
+import Layout from "@/shared/layout/layout";
 
-function IndexRoute() {
-	const { user } = useAuth();
-	if (user?.role === "mitra") {
-		return <Navigate to="/partner-request" replace />;
-	}
-	return <DashboardPage />;
-}
+import DashboardPage from "@/modules/dashboard/page";
+import BarangMasukPage from "@/modules/barang-masuk/page";
+import BarangKeluarPage from "@/modules/barang-keluar/page";
+import DataBarangPage from "@/modules/data-barang/page";
+import TransaksiPage from "@/modules/transaksi/pages/page";
+import PreparePage from "@/modules/transaksi/pages/prepare-page";
+import LokasiBarangPage from "@/modules/lokasi-barang/page";
+import StatistikTab from "@/modules/lokasi-barang/tabs/StatistikTab";
+import ManajemenLokasiTab from "@/modules/lokasi-barang/tabs/ManajemenLokasiTab";
+import ManajemenDataPage from "@/modules/manajemen-data/page";
+import KategoriBarangPage from "@/modules/kategori-barang/page";
+import TipeMaterialPage from "@/modules/tipe-material/page";
+import MerekBarangPage from "@/modules/merek-barang/page";
+import LoginPage from "@/modules/auth/LoginPage";
+import GoogleCallbackPage from "@/modules/auth/GoogleCallbackPage";
+import PengaturanPage from "@/modules/pengaturan/page";
+import ManajemenUserPage from "@/modules/manajemen-user/page";
 
 export function AppRoutes() {
 	return (
 		<Routes>
 			<Route path="/login" element={<LoginPage />} />
-			<Route path="/oauth/google/callback" element={<GoogleOAuthCallbackPage />} />
-			<Route path="/mobile-sign/:sessionId" element={<MobileSignPage />} />
+			<Route path="/oauth/google/callback" element={<GoogleCallbackPage />} />
 			<Route
 				path="/"
 				element={
@@ -40,68 +33,44 @@ export function AppRoutes() {
 						<Layout />
 					</ProtectedRoute>
 				}>
-				<Route index element={<IndexRoute />} />
+				<Route index element={<DashboardPage />} />
 				<Route path="barang-masuk" element={<BarangMasukPage />} />
 				<Route path="barang-keluar" element={<BarangKeluarPage />} />
-				<Route path="request" element={<DataTransaksiPage />} />
-				<Route
-					path="request/:id/prepare"
-					element={
-						<ProtectedRoute adminOnly>
-							<PreparePage />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="partner-request"
-					element={
-						<ProtectedRoute mitraOnly>
-							<PartnerRequestPage />
-						</ProtectedRoute>
-					}
-				/>
+				<Route path="request" element={<TransaksiPage />} />
+				<Route path="request/:id/prepare" element={<PreparePage />} />
 				<Route path="data-barang" element={<DataBarangPage />} />
+				<Route path="lokasi-barang" element={<LokasiBarangPage />}>
+					<Route index element={<Navigate to="/lokasi-barang/statistik" replace />} />
+					<Route path="statistik" element={<StatistikTab />} />
+					<Route path="lokasi" element={<ManajemenLokasiTab />} />
+				</Route>
+				<Route path="manajemen-data" element={<ManajemenDataPage />}>
+					<Route index element={<Navigate to="/manajemen-data/kategori" replace />} />
+					<Route path="kategori" element={<KategoriBarangPage />} />
+					<Route path="model" element={<TipeMaterialPage />} />
+					<Route path="merek" element={<MerekBarangPage />} />
+				</Route>
 				<Route
-					path="lokasi-barang"
-					element={
-						<ProtectedRoute adminOnly>
-							<LokasiBarangPage />
-						</ProtectedRoute>
-					}
+					path="tipe-material"
+					element={<Navigate to="/manajemen-data/model" replace />}
 				/>
 				<Route
 					path="kategori-barang"
-					element={
-						<ProtectedRoute adminOnly>
-							<KategoriBarangPage />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="tipe-material"
-					element={
-						<ProtectedRoute adminOnly>
-							<TipeMaterialPage />
-						</ProtectedRoute>
-					}
+					element={<Navigate to="/manajemen-data/kategori" replace />}
 				/>
 				<Route
 					path="merek-barang"
-					element={
-						<ProtectedRoute adminOnly>
-							<MerekBarangPage />
-						</ProtectedRoute>
-					}
-				/>
-				<Route
-					path="mitra"
-					element={
-						<ProtectedRoute adminOnly>
-							<MitraPage />
-						</ProtectedRoute>
-					}
+					element={<Navigate to="/manajemen-data/merek" replace />}
 				/>
 				<Route path="pengaturan" element={<PengaturanPage />} />
+				<Route
+					path="manajemen-user"
+					element={
+						<AdminRoute>
+							<ManajemenUserPage />
+						</AdminRoute>
+					}
+				/>
 			</Route>
 			<Route path="*" element={<Navigate to="/" replace />} />
 		</Routes>

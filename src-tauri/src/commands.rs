@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use tauri::Manager;
 
 #[tauri::command]
@@ -22,15 +21,4 @@ pub fn save_arxiva_file(
         .map_err(|e| format!("Gagal menyimpan file: {}", e))?;
 
     Ok(file_path.to_string_lossy().to_string())
-}
-
-#[tauri::command]
-pub fn save_export_file(path: String, contents: String) -> Result<(), String> {
-    let export_path = PathBuf::from(path);
-
-    if let Some(parent) = export_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-
-    std::fs::write(export_path, contents.as_bytes()).map_err(|error| error.to_string())
 }

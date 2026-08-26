@@ -1,13 +1,13 @@
 import "./App.css";
 import { HashRouter as Router } from "react-router-dom";
-import { ThemeProvider } from "@/components/shared/themeProvider";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/shared/theme/themeProvider";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 import { AppRoutes } from "@/routes/AppRoutes";
-import { Toaster } from "@/components/ui/sonner";
-import { AuthProvider } from "@/lib/auth";
-import { useDisableContextMenu } from "@/lib/useDisableContextMenu";
+import { Toaster } from "@/shared/ui/sonner";
+import { AuthProvider } from "@/modules/auth/auth";
+import { useDisableContextMenu } from "@/shared/lib/useDisableContextMenu";
 
-import { UpdateModal } from "@/components/ui/update-modal";
+import { UpdateModal } from "@/shared/ui/update-modal";
 
 function App() {
 	useDisableContextMenu();
