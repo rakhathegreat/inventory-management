@@ -45,7 +45,7 @@ export function useDataBarang() {
 	const [searchTerm, setSearchTerm] = useState(
 		searchParams.get("search") || "",
 	);
-	const [filterStatus, setFilterStatus] = useState("all");
+	const [filterStatus, setFilterStatus] = useState("Terdistribusi");
 	const [filterCategory, setFilterCategory] = useState("all");
 	const [filterBrand, setFilterBrand] = useState("all");
 	const [filterLocation, setFilterLocation] = useState("all");

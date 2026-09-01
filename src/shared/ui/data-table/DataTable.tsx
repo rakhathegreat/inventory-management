@@ -351,28 +351,30 @@ export function DataTable<TData>({
 		const selectColumn: ColumnDef<TData, any> = {
 			id: "__select",
 			header: ({ table: tbl }) => (
-				<Checkbox
-					checked={
-						tbl.getIsAllPageRowsSelected() ||
-						(tbl.getIsSomePageRowsSelected() && "indeterminate")
-					}
-					onCheckedChange={(v) => tbl.toggleAllPageRowsSelected(v === true)}
-					aria-label="Pilih semua"
-					className="mx-auto block"
-				/>
+				<div className="flex justify-center">
+					<Checkbox
+						checked={
+							tbl.getIsAllPageRowsSelected() ||
+							(tbl.getIsSomePageRowsSelected() && "indeterminate")
+						}
+						onCheckedChange={(v) => tbl.toggleAllPageRowsSelected(v === true)}
+						aria-label="Pilih semua"
+					/>
+				</div>
 			),
 			cell: ({ row }) => (
-				<div onClick={(e) => e.stopPropagation()}>
+				<div
+					className="flex justify-center"
+					onClick={(e) => e.stopPropagation()}>
 					<Checkbox
 						checked={row.getIsSelected()}
 						onCheckedChange={(v) => row.toggleSelected(v === true)}
 						aria-label="Pilih baris"
-						className="mx-auto block"
 					/>
 				</div>
 			),
 			enableSorting: false,
-			meta: { className: "flex justify-center w-10" },
+			meta: { className: "w-10 text-center" },
 		};
 		return [selectColumn, ...columns];
 	}, [columns, enableSelection]);

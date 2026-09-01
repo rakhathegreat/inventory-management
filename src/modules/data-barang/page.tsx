@@ -9,6 +9,7 @@ import {
 	Boxes,
 	Loader2,
 	Download,
+	ExternalLink,
 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useNavigate } from "react-router-dom";
@@ -155,29 +156,52 @@ export default function DataBarangPage() {
 					</span>
 				),
 			},
-			{
-				id: "lastReconDate",
-				header: () => <span className="flex justify-center">Rekon Terakhir</span>,
-				meta: { className: "text-center" },
-				cell: ({ row }) => {
-					const item = row.original;
-					const telat = isReconTelat(item);
-					return (
-						<div className="flex flex-col items-center gap-1">
-							<span className={item.lastReconDate ? "" : "text-muted-foreground"}>
-								{item.lastReconDate ? formatTanggal(item.lastReconDate) : "-"}
-							</span>
-							{telat && (
-								<Badge
-									variant="destructive"
-									className="gap-1 px-1.5 py-0 text-[10px] font-medium">
-									Telat
-								</Badge>
-							)}
-						</div>
-					);
-				},
-			},
+			...(filterStatus === "Terdistribusi"
+				? [
+						{
+							id: "lastReconDate",
+							header: () => (
+								<span className="flex justify-center">Rekon Terakhir</span>
+							),
+							meta: { className: "text-center" },
+							cell: ({ row }: { row: any }) => {
+								const item: BarangUnit = row.original;
+								const telat = isReconTelat(item);
+								return (
+									<div className="flex flex-col items-center gap-1">
+										<span
+											className={
+												item.lastReconDate
+													? ""
+													: "text-muted-foreground"
+											}>
+											{item.lastReconDate
+												? formatTanggal(item.lastReconDate)
+												: "-"}
+										</span>
+										{item.lastPhotoUrl ? (
+											<a
+												href={item.lastPhotoUrl}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="inline-flex items-center gap-1 text-[11px] text-primary underline underline-offset-4 hover:text-primary/80">
+												<ExternalLink className="size-3" />
+												Lihat Foto
+											</a>
+										) : null}
+										{telat && (
+											<Badge
+												variant="destructive"
+												className="gap-1 px-1.5 py-0 text-[10px] font-medium">
+												Telat
+											</Badge>
+										)}
+									</div>
+								);
+							},
+						},
+					]
+				: []),
 			createRowActionsColumn<BarangUnit>((item) => [
 				{ label: "Edit Material", icon: Edit, onClick: () => handleOpenEdit(item) },
 				{
@@ -188,7 +212,7 @@ export default function DataBarangPage() {
 				},
 			]),
 		],
-		[currentPage, pageSize, handleOpenEdit, handleDelete],
+		[currentPage, pageSize, handleOpenEdit, handleDelete, filterStatus],
 	);
 
 	return (
@@ -274,7 +298,6 @@ export default function DataBarangPage() {
 				onValueChange={setFilterStatus}
 				className="w-full">
 				<TabsList variant="line" className="w-fit">
-					<TabsTrigger value="all">Semua</TabsTrigger>
 					{STATUS_OPTIONS.map((status) => (
 						<TabsTrigger key={status} value={status}>
 							{status}
