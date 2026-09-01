@@ -20,7 +20,7 @@ interface PengambilanQrModalProps {
   onSuccess?: () => void;
 }
 
-const SESSION_TIMEOUT_SECONDS = 180; // 3 menit timeout
+const SESSION_TIMEOUT_SECONDS = 900; // 15 menit — sesuai expiry backend
 
 export function PengambilanQrModal({
   isOpen,
@@ -36,14 +36,68 @@ export function PengambilanQrModal({
 
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
+  // Refs agar initSession/refreshQr stabil — tidak ikut berubah saat parent re-render,
+  // sehingga useEffect tidak memicu regenerasi QR berulang (kedip/ganti cepat).
+  const requestRef = useRef(request);
+  requestRef.current = request;
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+  const initLockRef = useRef(false);
+
+  const clearTimers = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback((sessId: string, onComplete: () => void) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(async () => {
+      try {
+        const pollRes = await api.get(`/signature-session/${sessId}`);
+        if (pollRes.data.status === "COMPLETED") {
+          clearTimers();
+          toast.success("Pengambilan material berhasil! BAST telah diselesaikan.");
+          onComplete();
+        }
+      } catch (err: any) {
+        if (err.response?.status === 400 && err.response?.data?.message === "Session expired") {
+          void initSession();
+        }
+      }
+    }, 2000);
+  }, [clearTimers]);
+
+  const startCountdown = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
   const initSession = useCallback(async () => {
-    if (!request) return;
+    const req = requestRef.current;
+    if (!req || initLockRef.current) return;
+    initLockRef.current = true;
     setIsLoading(true);
     setQrCodeDataUrl("");
     setTimeLeft(SESSION_TIMEOUT_SECONDS);
 
     try {
-      const res = await api.post("/signature-session", { requestId: request.id });
+      const res = await api.post("/signature-session", { requestId: req.id });
       const sessId = res.data.id;
 
       const backendBaseUrl = getBaseUrl();
@@ -53,50 +107,27 @@ export function PengambilanQrModal({
       setQrCodeDataUrl(qrData);
       setIsLoading(false);
 
-      // Reset polling interval
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      pollingRef.current = setInterval(async () => {
-        try {
-          const pollRes = await api.get(`/signature-session/${sessId}`);
-          if (pollRes.data.status === "COMPLETED") {
-            if (pollingRef.current) clearInterval(pollingRef.current);
-            if (timerRef.current) clearInterval(timerRef.current);
-            toast.success("Pengambilan material berhasil! BAST telah diselesaikan.");
-            onSuccess?.();
-            onOpenChange(false);
-          }
-        } catch (err: any) {
-          if (err.response?.status === 400 && err.response?.data?.message === "Session expired") {
-            void initSession();
-          }
-        }
-      }, 2000);
-
-      // Reset countdown timer
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            if (timerRef.current) clearInterval(timerRef.current);
-            void initSession();
-            return SESSION_TIMEOUT_SECONDS;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+      startPolling(sessId, () => {
+        onSuccessRef.current?.();
+        onOpenChangeRef.current(false);
+      });
+      startCountdown();
     } catch (err: any) {
       toast.error("Gagal membuat sesi QR Code Pengambilan");
       setIsLoading(false);
+    } finally {
+      initLockRef.current = false;
     }
-  }, [request, onSuccess, onOpenChange]);
+  }, [startPolling, startCountdown]);
 
   // Refresh hanya QR — tanpa loading overlay penuh
   const refreshQr = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!request || isRefreshing) return;
+    const req = requestRef.current;
+    if (!req || isRefreshing) return;
     setIsRefreshing(true);
     try {
-      const res = await api.post("/signature-session", { requestId: request.id });
+      const res = await api.post("/signature-session", { requestId: req.id });
       const sessId = res.data.id;
       const backendBaseUrl = getBaseUrl();
       const mobileUrl = `${backendBaseUrl}/signature-session/${sessId}/mobile`;
@@ -104,57 +135,30 @@ export function PengambilanQrModal({
       setQrCodeDataUrl(qrData);
       setTimeLeft(SESSION_TIMEOUT_SECONDS);
 
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      pollingRef.current = setInterval(async () => {
-        try {
-          const pollRes = await api.get(`/signature-session/${sessId}`);
-          if (pollRes.data.status === "COMPLETED") {
-            if (pollingRef.current) clearInterval(pollingRef.current);
-            if (timerRef.current) clearInterval(timerRef.current);
-            toast.success("Pengambilan material berhasil! BAST telah diselesaikan.");
-            onSuccess?.();
-            onOpenChange(false);
-          }
-        } catch { /* ignore */ }
-      }, 2000);
-
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            if (timerRef.current) clearInterval(timerRef.current);
-            void initSession();
-            return SESSION_TIMEOUT_SECONDS;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+      startPolling(sessId, () => {
+        onSuccessRef.current?.();
+        onOpenChangeRef.current(false);
+      });
+      startCountdown();
     } catch {
       toast.error("Gagal memperbarui QR Code.");
     } finally {
       setIsRefreshing(false);
     }
-  }, [request, isRefreshing, onSuccess, onOpenChange, initSession]);
+  }, [isRefreshing, startPolling, startCountdown]);
 
+  const requestId = request?.id;
   useEffect(() => {
-    if (isOpen && request) {
+    if (isOpen && requestId) {
       void initSession();
     } else {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
+      clearTimers();
     }
 
     return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      if (timerRef.current) clearInterval(timerRef.current);
+      clearTimers();
     };
-  }, [isOpen, request, initSession]);
+  }, [isOpen, requestId, initSession, clearTimers]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);

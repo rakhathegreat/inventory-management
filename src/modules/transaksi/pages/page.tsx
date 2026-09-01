@@ -116,7 +116,8 @@ export default function DataTransaksiPage() {
 
   useEffect(() => {
     fetchRequests();
-  })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const filteredData = useMemo(() => {
     let data = localRequests;
