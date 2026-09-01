@@ -32,7 +32,9 @@ import {
 	SelectValue,
 } from "@/shared/ui/select";
 import { StatusBadge } from "@/shared/ui/status-badge";
+import { Badge } from "@/shared/ui/badge";
 import { DataTable, createRowActionsColumn } from "@/shared/ui/data-table/DataTable";
+import { Tabs, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
 import { BarangDetailDrawer } from "@/modules/data-barang/components/BarangDetailDrawer";
 import { BarangFormModal } from "@/modules/data-barang/components/BarangFormModal";
@@ -40,7 +42,7 @@ import { ExportExcelModal } from "@/modules/data-barang/components/ExportExcelMo
 import { formatItemLocation } from "@/shared/lib/status-helper";
 
 import { useDataBarang } from "./hooks/useDataBarang";
-import { STATUS_OPTIONS, formatTanggal } from "./utils/barang";
+import { STATUS_OPTIONS, formatTanggal, isReconTelat } from "./utils/barang";
 import { ADMIN_LOCATION, getBaseUrl, getHeaders } from "./api/barangApi";
 import type { BarangUnit } from "@/shared/types/inventory";
 
@@ -153,6 +155,29 @@ export default function DataBarangPage() {
 					</span>
 				),
 			},
+			{
+				id: "lastReconDate",
+				header: () => <span className="flex justify-center">Rekon Terakhir</span>,
+				meta: { className: "text-center" },
+				cell: ({ row }) => {
+					const item = row.original;
+					const telat = isReconTelat(item);
+					return (
+						<div className="flex flex-col items-center gap-1">
+							<span className={item.lastReconDate ? "" : "text-muted-foreground"}>
+								{item.lastReconDate ? formatTanggal(item.lastReconDate) : "-"}
+							</span>
+							{telat && (
+								<Badge
+									variant="destructive"
+									className="gap-1 px-1.5 py-0 text-[10px] font-medium">
+									Telat
+								</Badge>
+							)}
+						</div>
+					);
+				},
+			},
 			createRowActionsColumn<BarangUnit>((item) => [
 				{ label: "Edit Material", icon: Edit, onClick: () => handleOpenEdit(item) },
 				{
@@ -181,20 +206,6 @@ export default function DataBarangPage() {
 						/>
 					</div>
 					<div className="flex flex-wrap gap-2">
-						<Select value={filterStatus} onValueChange={setFilterStatus}>
-							<SelectTrigger
-								className={`w-32 rounded-sm bg-card border-border text-foreground ${filterStatus === "all" ? "border-dashed text-muted-foreground" : ""}`}>
-								<SelectValue placeholder="Status" />
-							</SelectTrigger>
-							<SelectContent className="bg-card border-border text-foreground">
-								<SelectItem value="all">Status</SelectItem>
-								{STATUS_OPTIONS.map((status) => (
-									<SelectItem key={status} value={status}>
-										{status}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
 						<Select value={filterCategory} onValueChange={setFilterCategory}>
 							<SelectTrigger
 								className={`w-32 rounded-sm bg-card border-border text-foreground ${filterCategory === "all" ? "border-dashed text-muted-foreground" : ""}`}>
@@ -257,6 +268,20 @@ export default function DataBarangPage() {
 					)}
 				</div>
 			</div>
+
+			<Tabs
+				value={filterStatus}
+				onValueChange={setFilterStatus}
+				className="w-full">
+				<TabsList variant="line" className="w-fit">
+					<TabsTrigger value="all">Semua</TabsTrigger>
+					{STATUS_OPTIONS.map((status) => (
+						<TabsTrigger key={status} value={status}>
+							{status}
+						</TabsTrigger>
+					))}
+				</TabsList>
+			</Tabs>
 
 			<DataTable<BarangUnit>
 				data={barangList}

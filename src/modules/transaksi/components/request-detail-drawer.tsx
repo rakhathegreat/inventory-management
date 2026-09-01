@@ -102,7 +102,7 @@ export function RequestDetailDrawer({
   item: DashboardRequest | null
   open: boolean
   onClose: () => void
-  onStatusChange?: (id: string, newStatus: string) => void
+  onStatusChange?: (id: string, newStatus: string, rejectionNotes?: string) => void
 }) {
   const {} = useAuth()
   const navigate = useNavigate()
@@ -145,7 +145,7 @@ export function RequestDetailDrawer({
               materialNumber: alloc.item?.model?.code || "-",
               materialCategory: ri.materialCategory?.nama,
               brand: alloc.item?.brand?.nama || ri.brand?.nama,
-              materialName: alloc.item?.model?.nama || ri.model?.nama || "-",
+              materialName: alloc.item?.model?.deskripsi || alloc.item?.model?.nama || ri.model?.nama || "-",
               serialNumber: alloc.item?.serialNumber,
               quantity: 1,
               unit: getUnitByCategory(ri.materialCategory?.nama)
@@ -289,7 +289,7 @@ export function RequestDetailDrawer({
                         {displayItem.requestItems.map((ri, idx) => (
                           <TableRow key={ri.id}>
                             <TableCell className="text-muted-foreground px-4">{idx + 1}</TableCell>
-                            <TableCell className="font-medium">{ri.category}</TableCell>
+                            <TableCell className="font-medium">{getCleanCategoryName(ri.category)}</TableCell>
                             <TableCell>{ri.brand}</TableCell>
                             <TableCell className="text-right font-medium">{ri.quantity}</TableCell>
                             <TableCell className="text-right font-medium px-4">Unit</TableCell>

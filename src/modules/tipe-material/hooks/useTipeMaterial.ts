@@ -36,6 +36,7 @@ export function useTipeMaterial() {
 
 	const [name, setName] = useState("");
 	const [code, setCode] = useState("");
+	const [deskripsi, setDeskripsi] = useState("");
 	const [brandId, setBrandId] = useState("");
 	const [materialCategoryId, setMaterialCategoryId] = useState("");
 
@@ -75,6 +76,7 @@ export function useTipeMaterial() {
 			if (t) {
 				setName(t.nama || "");
 				setCode(t.code || "");
+				setDeskripsi(t.deskripsi || "");
 				setBrandId(t.brandId ? String(t.brandId) : "");
 				setMaterialCategoryId(t.materialCategoryId ? String(t.materialCategoryId) : "");
 				setEditId(id);
@@ -82,6 +84,7 @@ export function useTipeMaterial() {
 		} else {
 			setName("");
 			setCode("");
+			setDeskripsi("");
 			setBrandId("");
 			setMaterialCategoryId("");
 			setEditId(null);
@@ -102,6 +105,7 @@ export function useTipeMaterial() {
 			await saveModel(editId, {
 				nama: name.trim(),
 				code: code.trim() || undefined,
+				deskripsi: deskripsi.trim() || undefined,
 				brandId: parseInt(brandId),
 				materialCategoryId: parseInt(materialCategoryId),
 			});
@@ -172,6 +176,8 @@ export function useTipeMaterial() {
 		setName,
 		code,
 		setCode,
+		deskripsi,
+		setDeskripsi,
 		brandId,
 		setBrandId,
 		materialCategoryId,

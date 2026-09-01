@@ -45,6 +45,25 @@ export function formatTanggal(tgl: string): string {
 	});
 }
 
+/**
+ * Status distribusi yang menerapkan rekon harian dari mitra.
+ */
+export const RECON_STATUSES: StatusUnit[] = ["Terdistribusi", "Digunakan"];
+
+/**
+ * True jika unit berstatus terdistribusi/digunakan dan belum ada rekon
+ * pada hari ini (rekon terakhir harus dilakukan tiap hari). PURE.
+ */
+export function isReconTelat(item: Pick<BarangUnit, "status" | "lastReconDate">): boolean {
+	if (!RECON_STATUSES.includes(item.status)) return false;
+	const last = item.lastReconDate ? new Date(item.lastReconDate) : null;
+	const today = new Date();
+	today.setHours(0, 0, 0, 0);
+	if (!last) return true;
+	last.setHours(0, 0, 0, 0);
+	return last.getTime() < today.getTime();
+}
+
 const EXPORT_COLUMN_LABELS: Record<string, (item: BarangUnit) => any> = {
 	serialNumber: (item) => ["Serial Number (SN)", item.serialNumber],
 	kategori: (item) => ["Kategori Material", item.kategori],
@@ -56,6 +75,10 @@ const EXPORT_COLUMN_LABELS: Record<string, (item: BarangUnit) => any> = {
 	tanggalKeluar: (item) => [
 		"Tanggal Keluar",
 		item.tanggalKeluar ? formatTanggal(item.tanggalKeluar) : "-",
+	],
+	lastReconDate: (item) => [
+		"Rekon Terakhir",
+		item.lastReconDate ? formatTanggal(item.lastReconDate) : "-",
 	],
 };
 

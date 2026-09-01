@@ -29,6 +29,7 @@ export const EXPORT_COLUMNS: ExportColumnDef[] = [
   { key: "lokasiPenyimpanan", label: "Lokasi Penyimpanan", defaultChecked: true },
   { key: "tanggalMasuk", label: "Tanggal Masuk", defaultChecked: true },
   { key: "tanggalKeluar", label: "Tanggal Keluar", defaultChecked: false },
+  { key: "lastReconDate", label: "Rekon Terakhir", defaultChecked: false },
   { key: "paNumber", label: "Property Asset (PA)", defaultChecked: false },
   { key: "createdBy", label: "Pembuat / Owner", defaultChecked: false },
 ]

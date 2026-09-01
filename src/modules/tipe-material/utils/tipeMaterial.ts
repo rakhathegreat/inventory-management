@@ -2,6 +2,7 @@ export interface ModelRow {
 	id: any;
 	nama: string;
 	code?: string;
+	deskripsi?: string | null;
 	brand?: { nama?: string } | null;
 	materialCategory?: { nama?: string } | null;
 	[key: string]: any;
@@ -14,7 +15,8 @@ export function filterModels(models: ModelRow[], searchQuery: string): ModelRow[
 			t.nama?.toLowerCase().includes(q) ||
 			t.code?.toLowerCase().includes(q) ||
 			t.brand?.nama?.toLowerCase().includes(q) ||
-			t.materialCategory?.nama?.toLowerCase().includes(q),
+			t.materialCategory?.nama?.toLowerCase().includes(q) ||
+			t.deskripsi?.toLowerCase().includes(q),
 	);
 }
 

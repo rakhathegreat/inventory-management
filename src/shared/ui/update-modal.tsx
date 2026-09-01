@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useUpdater } from '@/shared/hooks/useUpdater';
 import {
   Dialog,
@@ -9,7 +9,6 @@ import {
   DialogTitle,
 } from '@/shared/ui/dialog';
 import { Button } from '@/shared/ui/button';
-import { Progress } from '@/shared/ui/progress'; // need to check if progress component exists or use simple div
 import { Download, AlertCircle, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/shared/ui/alert';
 
@@ -131,7 +130,6 @@ export function UpdateModal() {
             <Button
               type="button"
               onClick={downloadAndInstall}
-              disabled={status === 'downloading' || status === 'ready'}
             >
               Unduh & Pasang
             </Button>

@@ -19,6 +19,8 @@ export interface InventoryItem {
   tanggalMasuk: string;
   tanggalKeluar?: string;
   mitra?: string | null;
+  lastReconDate?: string;
+  lastPhotoUrl?: string | null;
 }
 
 export interface BarangUnit {
@@ -33,6 +35,8 @@ export interface BarangUnit {
   tanggalMasuk: string;
   tanggalKeluar?: string;
   mitra?: string | null;
+  lastReconDate?: string;
+  lastPhotoUrl?: string | null;
 }
 
 export interface RiwayatUnit {

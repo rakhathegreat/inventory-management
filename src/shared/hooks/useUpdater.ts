@@ -10,7 +10,7 @@ export function useUpdater() {
   const [progress, setProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
 
-  const checkForUpdates = useCallback(async (manual = false) => {
+  const checkForUpdates = useCallback(async (_manual = false) => {
     try {
       setStatus('checking');
       setError(null);
@@ -49,8 +49,9 @@ export function useUpdater() {
             break;
           case 'Progress':
             downloadedBytes += event.data.chunkLength;
-            if (event.data.contentLength) {
-              const percent = (downloadedBytes / event.data.contentLength) * 100;
+            const totalBytes = (event.data as { contentLength?: number }).contentLength;
+            if (totalBytes) {
+              const percent = (downloadedBytes / totalBytes) * 100;
               setProgress(Math.min(percent, 100));
             }
             break;

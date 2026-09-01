@@ -74,6 +74,8 @@ export default function TipeMaterialPage() {
 		setName,
 		code,
 		setCode,
+		deskripsi,
+		setDeskripsi,
 		brandId,
 		setBrandId,
 		materialCategoryId,
@@ -118,6 +120,17 @@ export default function TipeMaterialPage() {
 				header: "Nama Model",
 				cell: ({ row }) => (
 					<span className="text-foreground">{row.original.nama}</span>
+				),
+			},
+			{
+				id: "deskripsi",
+				header: "Deskripsi",
+				cell: ({ row }) => (
+					<span
+						className="block max-w-48 truncate text-muted-foreground"
+						title={row.original.deskripsi || undefined}>
+						{row.original.deskripsi || "-"}
+					</span>
 				),
 			},
 			{
@@ -384,6 +397,20 @@ export default function TipeMaterialPage() {
 								{nameError && (
 									<p className="text-xs text-destructive">{nameError}</p>
 								)}
+							</div>
+
+							<div className="space-y-2">
+								<Label>
+									Deskripsi{" "}
+									<span className="text-xs font-normal text-muted-foreground">(opsional)</span>
+								</Label>
+								<textarea
+									value={deskripsi}
+									onChange={(e) => setDeskripsi(e.target.value)}
+									placeholder="Keterangan singkat tentang model material ini"
+									rows={3}
+									className="flex w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+								/>
 							</div>
 
 							<div className="space-y-2">
