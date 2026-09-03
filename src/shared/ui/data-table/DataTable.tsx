@@ -86,11 +86,12 @@ function AdaptiveRowActions<TData>({
 	items: RowAction<TData>[];
 	row: TData;
 }) {
+	const moreThan3 = items.length > 3;
 	const bp = getInlineBreakpoint(items.length);
 
 	return (
 		<>
-			<div className={cn("hidden items-center justify-center gap-1", bp.show)}>
+			<div className={cn("hidden items-center justify-center gap-1", moreThan3 ? "hidden" : bp.show)}>
 				{items.map((action) => (
 					<Button
 						key={action.label}
@@ -108,7 +109,7 @@ function AdaptiveRowActions<TData>({
 				))}
 			</div>
 
-			<div className={cn("flex items-center justify-center", bp.hide)}>
+			<div className={cn("flex items-center justify-center", moreThan3 ? "flex" : bp.hide)}>
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
 						<Button

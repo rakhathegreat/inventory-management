@@ -137,6 +137,7 @@ export function useDashboard() {
                     ...counts,
                     total: counts.tersedia + counts.terpakai
                 }))
+                .filter((d) => d.mitra !== "KP Tasikmalaya")
                 .sort((a, b) => b.total - a.total);
             setMitraDistribution(distribution);
 

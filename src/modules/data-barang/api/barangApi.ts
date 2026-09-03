@@ -31,14 +31,24 @@ export interface AuxiliaryData {
 	locations: StorageLocationOption[];
 }
 
-const parseList = (raw: any): any[] => raw?.data || (Array.isArray(raw) ? raw : []);
+const parseList = (raw: any): any[] =>
+	raw?.data || (Array.isArray(raw) ? raw : []);
 
 export const fetchAuxiliary = async (): Promise<AuxiliaryData> => {
 	const [resCat, resLoc, resBrand, resModels] = await Promise.all([
-		fetch(`${getBaseUrl()}/categories`, { method: "GET", headers: getHeaders() }),
-		fetch(`${getBaseUrl()}/locations`, { method: "GET", headers: getHeaders() }),
+		fetch(`${getBaseUrl()}/categories`, {
+			method: "GET",
+			headers: getHeaders(),
+		}),
+		fetch(`${getBaseUrl()}/locations`, {
+			method: "GET",
+			headers: getHeaders(),
+		}),
 		fetch(`${getBaseUrl()}/brands`, { method: "GET", headers: getHeaders() }),
-		fetch(`${getBaseUrl()}/material-models`, { method: "GET", headers: getHeaders() }),
+		fetch(`${getBaseUrl()}/material-models`, {
+			method: "GET",
+			headers: getHeaders(),
+		}),
 	]);
 
 	const result: AuxiliaryData = {
@@ -125,9 +135,11 @@ export const fetchItems = async (query: ItemsQuery) => {
 	params.append("limit", query.pageSize.toString());
 	if (query.searchTerm.trim()) params.append("search", query.searchTerm.trim());
 	if (query.filterStatus !== "all") params.append("status", query.filterStatus);
-	if (query.filterCategory !== "all") params.append("kategori", query.filterCategory);
+	if (query.filterCategory !== "all")
+		params.append("kategori", query.filterCategory);
 	if (query.filterBrand !== "all") params.append("merek", query.filterBrand);
-	if (query.filterLocation !== "all") params.append("lokasi", query.filterLocation);
+	if (query.filterLocation !== "all")
+		params.append("lokasi", query.filterLocation);
 
 	const res = await fetch(`${getBaseUrl()}/items?${params.toString()}`, {
 		method: "GET",
@@ -147,8 +159,9 @@ export interface BarangPayload {
 	kondisi: string;
 	lokasiPenyimpanan: string;
 	mitra: string;
+	ticket?: string | null;
+	catatan?: string | null;
 }
-
 export const createItem = async (payload: BarangPayload): Promise<void> => {
 	const resAdd = await fetch(`${getBaseUrl()}/items`, {
 		method: "POST",

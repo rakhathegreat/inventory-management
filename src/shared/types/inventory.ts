@@ -31,6 +31,8 @@ export interface BarangUnit {
   tipe?: string;
   status: StatusUnit;
   kondisi?: string;
+  ticket?: string | null;
+  catatan?: string | null;
   lokasiPenyimpanan: string;
   tanggalMasuk: string;
   tanggalKeluar?: string;

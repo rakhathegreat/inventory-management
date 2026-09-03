@@ -17,7 +17,16 @@ import { Button } from "@/shared/ui/button";
 
 import { Card } from "@/shared/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/shared/ui/tabs";
-import { Edit, Loader2, History, Info, Copy, Check, X, ExternalLink } from "lucide-react";
+import {
+	Edit,
+	Loader2,
+	History,
+	Info,
+	Copy,
+	Check,
+	X,
+	ExternalLink,
+} from "lucide-react";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import type { BarangUnit, RiwayatUnit } from "@/shared/types/inventory";
 import { toast } from "sonner";
@@ -269,6 +278,25 @@ export function BarangDetailDrawer({
 										</div>
 									</div>
 								</div>
+								{(detailBarang.kondisi || "").toLowerCase() === "rusak" && (
+									<div className="mt-2">
+										<div className="grid grid-cols-2 gap-2 text-sm">
+											<div>
+												<p className="text-muted-foreground">Asal Material</p>
+												<p className="text-foreground mt-0.5 font-medium">
+													{detailBarang.ticket || "-"}
+												</p>
+											</div>
+										</div>
+										<div className="mt-2">
+											<p className="text-muted-foreground">Catatan Kerusakan</p>
+											<p className="text-foreground mt-0.5 text-sm">
+												{detailBarang.catatan || "-"}
+											</p>
+										</div>
+									</div>
+								)}
+
 								<div className="mt-4">
 									<p className="text-muted-foreground">Rekon Terakhir</p>
 									<p className="text-foreground mt-0.5">
@@ -448,45 +476,62 @@ export function BarangDetailDrawer({
 											<StatusBadge status={detailBarang.status} />
 										</div>
 									</div>
-									<div>
+								</div>
+								{(detailBarang.kondisi || "").toLowerCase() === "rusak" && (
+									<div className="mt-2">
 										<p className="text-muted-foreground font-medium">
-											Rekon Terakhir
+											Asal Material
 										</p>
 										<p className="font-medium text-foreground mt-0.5">
-											{detailBarang.lastReconDate
-												? formatTanggal(detailBarang.lastReconDate)
-												: "-"}
+											{detailBarang.ticket || "-"}
 										</p>
-										{detailBarang.lastPhotoUrl ? (
-											<a
-												href={detailBarang.lastPhotoUrl}
-												target="_blank"
-												rel="noopener noreferrer"
-												className="mt-1 inline-flex items-center gap-1 text-xs text-primary underline underline-offset-4 hover:text-primary/80">
-												<ExternalLink className="size-3" />
-												Lihat Foto Rekon
-											</a>
-										) : null}
-									</div>
-									<div>
-										<p className="text-muted-foreground font-medium">
-											Lokasi Storage
+										<p className="text-muted-foreground font-medium mt-2">
+											Catatan Kerusakan
 										</p>
-										<p className="font-medium text-foreground mt-0.5">
-											{formatItemLocation(
-												detailBarang.lokasiPenyimpanan,
-												detailBarang.mitra,
-											)}
+										<p className="font-medium text-foreground mt-0.5 text-xs">
+											{detailBarang.catatan || "-"}
 										</p>
 									</div>
-									<div>
-										<p className="text-muted-foreground font-medium">
-											Pemilik / Tempat
-										</p>
-										<p className="font-medium text-foreground mt-0.5">
-											{detailBarang.mitra || ADMIN_LOCATION}
-										</p>
-									</div>
+								)}
+
+								<div className="mt-4">
+									<p className="text-muted-foreground font-medium">
+										Rekon Terakhir
+									</p>
+									<p className="font-medium text-foreground mt-0.5">
+										{detailBarang.lastReconDate
+											? formatTanggal(detailBarang.lastReconDate)
+											: "-"}
+									</p>
+									{detailBarang.lastPhotoUrl ? (
+										<a
+											href={detailBarang.lastPhotoUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											className="mt-1 inline-flex items-center gap-1 text-xs text-primary underline underline-offset-4 hover:text-primary/80">
+											<ExternalLink className="size-3" />
+											Lihat Foto Rekon
+										</a>
+									) : null}
+								</div>
+								<div className="mt-4">
+									<p className="text-muted-foreground font-medium">
+										Lokasi Storage
+									</p>
+									<p className="font-medium text-foreground mt-0.5">
+										{formatItemLocation(
+											detailBarang.lokasiPenyimpanan,
+											detailBarang.mitra,
+										)}
+									</p>
+								</div>
+								<div className="mt-4">
+									<p className="text-muted-foreground font-medium">
+										Pemilik / Tempat
+									</p>
+									<p className="font-medium text-foreground mt-0.5">
+										{detailBarang.mitra || ADMIN_LOCATION}
+									</p>
 								</div>
 							</Card>
 						</TabsContent>

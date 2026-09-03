@@ -16,6 +16,8 @@ export interface BarangFormData {
 	status: StatusUnit;
 	kondisi: string;
 	lokasiPenyimpanan: string;
+	ticket?: string;
+	catatan?: string;
 }
 
 /**

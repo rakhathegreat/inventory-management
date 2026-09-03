@@ -38,6 +38,8 @@ interface BarangFormModalProps {
 		status: StatusUnit;
 		kondisi: string;
 		lokasiPenyimpanan: string;
+		ticket?: string;
+		catatan?: string;
 	};
 	setFormData: React.Dispatch<
 		React.SetStateAction<{
@@ -48,6 +50,8 @@ interface BarangFormModalProps {
 			status: StatusUnit;
 			kondisi: string;
 			lokasiPenyimpanan: string;
+			ticket?: string;
+			catatan?: string;
 		}>
 	>;
 	formErrors: Record<string, string>;
@@ -281,6 +285,39 @@ export function BarangFormModal({
 										</SelectContent>
 									</Select>
 								</Field>
+
+								{(formData.kondisi || "").toLowerCase() === "rusak" && (
+									<>
+										<Field label="Asal Material" hint="Referensi asal material (contoh: nomor tiket)">
+
+											<Input
+												placeholder="TKT-XXXX atau Nama Asal"
+												value={formData.ticket || ""}
+												onChange={(e) =>
+													setFormData((prev) => ({
+														...prev,
+														ticket: e.target.value,
+													}))
+												}
+												className="h-8 text-sm"
+											/>
+										</Field>
+
+										<Field label="Catatan Kerusakan">
+											<Input
+												placeholder="Deskripsi kerusakan material..."
+												value={formData.catatan || ""}
+												onChange={(e) =>
+													setFormData((prev) => ({
+														...prev,
+														catatan: e.target.value,
+													}))
+												}
+												className="h-8 text-sm"
+											/>
+										</Field>
+									</>
+								)}
 
 								<Field
 									label="Lokasi Penyimpanan"

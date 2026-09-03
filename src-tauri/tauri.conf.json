@@ -1,43 +1,43 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Taslim",
-  "version": "1.0.6",
-  "identifier": "com.taslim.app",
-  "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
-  },
-  "app": {
-    "windows": [
-      {
-        "title": "Taslim",
-        "width": 800,
-        "height": 600
-      }
-    ],
-    "security": {
-      "csp": null
-    }
-  },
-  "bundle": {
-    "active": true,
-    "targets": "all",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ]
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZCREFBNEI3RUM2QzQwNDEKUldSQlFHenN0NlRhYS9IK1prd2p0eldvSUNqMGlhU2xtSW9vUjlUc2Jkbkc0QzMyM0hkeFpMeXMK",
-      "endpoints": [
-        "https://github.com/rakhathegreat/inventory-management/releases/latest/download/latest.json"
-      ]
-    }
-  }
+	"$schema": "https://schema.tauri.app/config/2",
+	"productName": "Taslim",
+	"version": "1.0.6",
+	"identifier": "com.taslim.app",
+	"build": {
+		"beforeDevCommand": "npm run dev",
+		"devUrl": "http://localhost:1420",
+		"beforeBuildCommand": "npm run build",
+		"frontendDist": "../dist"
+	},
+	"app": {
+		"windows": [
+			{
+				"title": "Taslim",
+				"width": 800,
+				"height": 600
+			}
+		],
+		"security": {
+			"csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:3000 http://172.168.9.240:3000 http://172.168.9.139:3000 https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://sheets.googleapis.com https://drive.googleapis.com; font-src 'self' data:"
+		}
+	},
+	"bundle": {
+		"active": true,
+		"targets": "all",
+		"icon": [
+			"icons/32x32.png",
+			"icons/128x128.png",
+			"icons/128x128@2x.png",
+			"icons/icon.icns",
+			"icons/icon.ico"
+		]
+	},
+	"plugins": {
+		"updater": {
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZCREFBNEI3RUM2QzQwNDEKUldSQlFHenN0NlRhYS9IK1prd2p0eldvSUNqMGlhU2xtSW9vUjlUc2Jkbkc0QzMyM0hkeFpMeXMK",
+			"endpoints": [
+				"https://github.com/rakhathegreat/inventory-management/releases/latest/download/latest.json"
+			]
+		}
+	}
 }

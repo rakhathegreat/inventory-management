@@ -32,6 +32,8 @@ const EMPTY_FORM: BarangFormData = {
 	status: "Tersedia",
 	kondisi: "Baru",
 	lokasiPenyimpanan: "",
+	ticket: "",
+	catatan: "",
 };
 
 export function useDataBarang() {
@@ -81,9 +83,7 @@ export function useDataBarang() {
 		fetchAuxiliary()
 			.then(({ categories, brands, models, locations }) => {
 				setCategories(categories);
-				setBrands((prev) =>
-					Array.from(new Set([...prev, ...brands])),
-				);
+				setBrands((prev) => Array.from(new Set([...prev, ...brands])));
 				setModels(models);
 				setDbLocations(locations);
 			})
@@ -174,6 +174,8 @@ export function useDataBarang() {
 			status: barang.status,
 			kondisi: barang.kondisi || "Baru",
 			lokasiPenyimpanan: barang.lokasiPenyimpanan.trim(),
+			ticket: barang.ticket || "",
+			catatan: barang.catatan || "",
 		});
 		setFormErrors({});
 		setIsFormOpen(true);
@@ -207,7 +209,8 @@ export function useDataBarang() {
 					filterLocation,
 				});
 
-				if (!result || !Array.isArray(result.data) || result.data.length === 0) break;
+				if (!result || !Array.isArray(result.data) || result.data.length === 0)
+					break;
 
 				allItems.push(...result.data);
 				exportTotalPages = result.pagination?.totalPages || 1;
@@ -242,7 +245,9 @@ export function useDataBarang() {
 
 			if (res.saved) {
 				if (res.path) {
-					toast.success(`Berhasil mengekspor ${dataToExport.length} unit ke ${res.path}`);
+					toast.success(
+						`Berhasil mengekspor ${dataToExport.length} unit ke ${res.path}`,
+					);
 				} else {
 					toast.success(`Berhasil mengekspor ${dataToExport.length} unit.`);
 				}
@@ -310,6 +315,12 @@ export function useDataBarang() {
 				kondisi: formData.kondisi,
 				lokasiPenyimpanan: formData.lokasiPenyimpanan.trim(),
 				mitra: ADMIN_LOCATION,
+				ticket:
+					formData.kondisi === "Rusak" ? formData.ticket?.trim() || null : null,
+				catatan:
+					formData.kondisi === "Rusak"
+						? formData.catatan?.trim() || null
+						: null,
 			};
 
 			if (formMode === "add") {
