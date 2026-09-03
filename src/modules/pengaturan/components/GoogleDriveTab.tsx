@@ -157,7 +157,19 @@ export function GoogleDriveTab() {
 			if (!res.ok)
 				throw new Error(data.message || "Gagal menyimpan Folder ID.");
 			setRootFolderId(data.rootFolderId || folderIdInput.trim());
-			toast.success("Drive Folder ID berhasil disimpan");
+			const sync = data.sync;
+			if (sync) {
+				let msg = "Drive Folder ID berhasil disimpan";
+				const parts: string[] = [];
+				if (sync.created) parts.push(`${sync.created} dibuat`);
+				if (sync.updated) parts.push(`${sync.updated} diupdate`);
+				if (parts.length) msg += ` · ${parts.join(", ")} spreadsheet lokasi`;
+				if (Array.isArray(sync.failed) && sync.failed.length)
+					msg += ` · ${sync.failed.length} gagal`;
+				toast.success(msg);
+			} else {
+				toast.success("Drive Folder ID berhasil disimpan");
+			}
 		} catch (err: any) {
 			toast.error(err.message || "Gagal menyimpan Folder ID.");
 		} finally {
@@ -335,8 +347,9 @@ export function GoogleDriveTab() {
 							cukup satu kali.
 						</li>
 						<li>
-							Spreadsheet lokasi dibuat saat lokasi ditambahkan; QR code-nya
-							berisi link spreadsheet tersebut.
+							Spreadsheet lokasi dibuat saat lokasi ditambahkan, atau saat
+							menyimpan Folder ID baru — otomatis diisi data barang dari
+							lokasi tersebut.
 						</li>
 						<li>Melepas koneksi tidak menghapus spreadsheet yang sudah ada.</li>
 						<li>
