@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
-import type {
-	InventoryItem,
-	KodeBarangUpdate,
-} from "@/shared/types/inventory";
+import type { InventoryItem, KodeBarangUpdate } from "@/shared/types/inventory";
 import type { BarangKeluarItem } from "@/modules/transaksi/types";
 import {
 	fetchActivePartners,
@@ -34,7 +31,9 @@ export function useBarangKeluar() {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const kodeBarangRef = useRef("");
 	const [dbItems, setDbItems] = useState<InventoryItem[]>([]);
-	const [dbPartners, setDbPartners] = useState<ReturnType<typeof Object>[]>([] as any);
+	const [dbPartners, setDbPartners] = useState<ReturnType<typeof Object>[]>(
+		[] as any,
+	);
 	const [selectedPartnerId, setSelectedPartnerId] = useState("");
 	const [keterangan, setKeterangan] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
@@ -100,7 +99,9 @@ export function useBarangKeluar() {
 					normalizeKodeBarang(item.nomor) === normalizeKodeBarang(trimmedKode),
 			);
 			if (isDuplicate) {
-				toast.error("Serial number sudah ada di sesi ini.", { description: trimmedKode });
+				toast.error("Serial number sudah ada di sesi ini.", {
+					description: trimmedKode,
+				});
 				focusKodeBarangInput();
 				return;
 			}
@@ -111,7 +112,9 @@ export function useBarangKeluar() {
 					normalizeKodeBarang(trimmedKode),
 			);
 			if (!matchedItem) {
-				toast.error("Data serial number tidak ditemukan.", { description: trimmedKode });
+				toast.error("Data serial number tidak ditemukan.", {
+					description: trimmedKode,
+				});
 				focusKodeBarangInput();
 				return;
 			}
@@ -126,11 +129,18 @@ export function useBarangKeluar() {
 			}
 
 			const queuedSerialNumbers = getQueuedSerialNumbers(barangKeluar);
-			const olderFifoItem = findOlderFifoItem(dbItems, matchedItem, queuedSerialNumbers);
+			const olderFifoItem = findOlderFifoItem(
+				dbItems,
+				matchedItem,
+				queuedSerialNumbers,
+			);
 			if (olderFifoItem) {
-				toast.error("FIFO aktif: keluarkan barang yang lebih lama terlebih dahulu.", {
-					description: getFifoToastDescription(olderFifoItem),
-				});
+				toast.error(
+					"FIFO aktif: keluarkan barang yang lebih lama terlebih dahulu.",
+					{
+						description: getFifoToastDescription(olderFifoItem),
+					},
+				);
 				focusKodeBarangInput();
 				return;
 			}
@@ -177,7 +187,9 @@ export function useBarangKeluar() {
 			}
 
 			const isSupportedKey =
-				event.key.length === 1 || event.key === "Backspace" || event.key === "Enter";
+				event.key.length === 1 ||
+				event.key === "Backspace" ||
+				event.key === "Enter";
 			if (!isSupportedKey || isTextInputTarget(event.target)) {
 				return;
 			}
@@ -260,21 +272,34 @@ export function useBarangKeluar() {
 			const fifoInvalidItem = barangKeluar.find((item) => {
 				const latestItem = findLatestSessionItem(item.nomor);
 				return latestItem
-					? Boolean(findOlderFifoItem(latestVisibleItems, latestItem, queuedSerialNumbers))
+					? Boolean(
+							findOlderFifoItem(
+								latestVisibleItems,
+								latestItem,
+								queuedSerialNumbers,
+							),
+						)
 					: false;
 			});
 
 			if (fifoInvalidItem) {
 				const latestItem = findLatestSessionItem(fifoInvalidItem.nomor);
 				const olderFifoItem = latestItem
-					? findOlderFifoItem(latestVisibleItems, latestItem, queuedSerialNumbers)
+					? findOlderFifoItem(
+							latestVisibleItems,
+							latestItem,
+							queuedSerialNumbers,
+						)
 					: undefined;
 
-				toast.error("FIFO aktif: masih ada barang lama yang harus keluar lebih dulu.", {
-					description: olderFifoItem
-						? getFifoToastDescription(olderFifoItem)
-						: fifoInvalidItem.nomor,
-				});
+				toast.error(
+					"FIFO aktif: masih ada barang lama yang harus keluar lebih dulu.",
+					{
+						description: olderFifoItem
+							? getFifoToastDescription(olderFifoItem)
+							: fifoInvalidItem.nomor,
+					},
+				);
 				setDbItems(latestVisibleItems);
 				return;
 			}
@@ -291,10 +316,8 @@ export function useBarangKeluar() {
 				const originalLoc = originalItem.lokasiPenyimpanan || "-";
 				const updatedItem: InventoryItem & { paNumber?: string } = {
 					...originalItem,
-					status: "Keluar",
-					lokasiPenyimpanan: "Keluar",
-					tanggalKeluar: sessionDate,
-					mitra: item.mitra,
+					status: "Terdistribusi",
+					lokasiPenyimpanan: "Terdistribusi",
 					paNumber: undefined,
 				};
 				await updateItemOutboundStatus(updatedItem.id, updatedItem, item.nomor);

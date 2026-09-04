@@ -36,6 +36,8 @@ interface UserFormModalProps {
 	onOpenChange: (open: boolean) => void;
 	/** Null = mode tambah. */
 	user: ManagedUser | null;
+	/** Role default untuk modal tambah (biasanya dari tab aktif). */
+	defaultRole?: BackendRole | null;
 	currentUserId: string | null;
 	isSaving: boolean;
 	onSubmit: (payload: Omit<UserPayload, "username" | "password">) => Promise<void>;
@@ -59,21 +61,25 @@ const EMPTY_FORM: FormState = {
 	partnerType: "AKTIVASI",
 };
 
-function toFormState(user: ManagedUser | null): FormState {
-	if (!user) return { ...EMPTY_FORM };
-	return {
-		role: (user.role as BackendRole) ?? "MITRA",
-		nama: user.profile?.nama || "",
-		email: user.profile?.email && user.profile.email !== "-" ? user.profile.email : "",
-		telepon: user.profile?.telepon && user.profile.telepon !== "-" ? user.profile.telepon : "",
-		code: user.profile?.code && user.profile.code !== "-" ? user.profile.code : "",
-		partnerType:
-			user.profile?.partnerType === "GANGGUAN"
-				? "GANGGUAN"
-				: user.profile?.partnerType === "Supplier"
-					? "AKTIVASI"
-					: "AKTIVASI",
-	};
+function toFormState(user: ManagedUser | null, defaultRole?: BackendRole | null): FormState {
+	if (user) {
+		return {
+			role: (user.role as BackendRole) ?? "MITRA",
+			nama: user.profile?.nama || "",
+			email: user.profile?.email && user.profile.email !== "-" ? user.profile.email : "",
+			telepon: user.profile?.telepon && user.profile.telepon !== "-" ? user.profile.telepon : "",
+			code: user.profile?.code && user.profile.code !== "-" ? user.profile.code : "",
+			partnerType:
+				user.profile?.partnerType === "GANGGUAN"
+					? "GANGGUAN"
+					: user.profile?.partnerType === "Supplier"
+						? "AKTIVASI"
+						: "AKTIVASI",
+		};
+	}
+	const base: FormState = { ...EMPTY_FORM };
+	if (defaultRole) base.role = defaultRole;
+	return base;
 }
 
 /** Modal tambah/edit akun user. Username & password dibuat otomatis oleh sistem. */
@@ -81,21 +87,22 @@ export function UserFormModal({
 	isOpen,
 	onOpenChange,
 	user,
+	defaultRole,
 	currentUserId,
 	isSaving,
 	onSubmit,
 }: UserFormModalProps) {
 	const isEdit = user !== null;
 	const isSelf = isEdit && user.id === currentUserId;
-	const [form, setForm] = React.useState<FormState>(() => toFormState(user));
+	const [form, setForm] = React.useState<FormState>(() => toFormState(user, defaultRole));
 	const [errors, setErrors] = React.useState<Partial<Record<keyof FormState, string>>>({});
 
 	React.useEffect(() => {
 		if (isOpen) {
-			setForm(toFormState(user));
+			setForm(toFormState(user, defaultRole));
 			setErrors({});
 		}
-	}, [isOpen, user]);
+	}, [isOpen, user, defaultRole]);
 
 	const setField = <K extends keyof FormState>(field: K, value: FormState[K]) => {
 		setForm((f) => ({ ...f, [field]: value }));

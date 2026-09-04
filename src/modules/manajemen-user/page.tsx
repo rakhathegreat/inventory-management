@@ -7,21 +7,24 @@ import { Button } from "@/shared/ui/button";
 import { DataTable, createRowActionsColumn, type RowAction } from "@/shared/ui/data-table/DataTable";
 import { Input } from "@/shared/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import type { ColumnDef } from "@tanstack/react-table";
 import { cn } from "@/shared/lib/utils";
 import { useManajemenUser } from "./hooks/useManajemenUser";
 import type { ManagedUser, UserPayload } from "./api/userApi";
 import { DEFAULT_PASSWORD, suggestUsername } from "./utils/credentials";
-import { ROLE_META, toBackendRole } from "./components/role-meta";
+import { ROLE_META, toBackendRole, type BackendRole } from "./components/role-meta";
 import { UserFormModal } from "./components/UserFormModal";
 import { UserSuccessModal } from "./components/UserSuccessModal";
 
-const ROLE_FILTERS = [
+export const ROLE_TABS = [
 	{ key: "all", label: "Semua" },
 	{ key: "ADMIN", label: "Admin" },
 	{ key: "INTERNAL", label: "Internal" },
 	{ key: "MITRA", label: "Mitra" },
 ] as const;
+
+export type RoleTabKey = (typeof ROLE_TABS)[number]["key"];
 
 const STATUS_FILTERS = [
 	{ key: "all", label: "Semua" },
@@ -36,6 +39,10 @@ function RoleBadge({ role }: { role: ManagedUser["role"] }) {
 			{meta.label}
 		</Badge>
 	);
+}
+
+function activePalette(meta: { badge: string }): string {
+	return meta.badge;
 }
 
 /** Halaman Manajemen User (admin-only): daftar akun + tambah/edit/reset/hapus. */
@@ -58,13 +65,22 @@ export default function ManajemenUserPage() {
 	} = useManajemenUser();
 
 	const [searchQuery, setSearchQuery] = React.useState("");
-	const [roleFilter, setRoleFilter] = React.useState<(typeof ROLE_FILTERS)[number]["key"]>("all");
+	const [roleTab, setRoleTab] = React.useState<RoleTabKey>("all");
 	const [statusFilter, setStatusFilter] = React.useState<(typeof STATUS_FILTERS)[number]["key"]>("all");
 	const [formOpen, setFormOpen] = React.useState(false);
 	const [editingUser, setEditingUser] = React.useState<ManagedUser | null>(null);
 	const [resetTarget, setResetTarget] = React.useState<ManagedUser | null>(null);
 	const [deleteTarget, setDeleteTarget] = React.useState<ManagedUser | null>(null);
 	const [bulkDeleteIds, setBulkDeleteIds] = React.useState<string[] | null>(null);
+
+	const counts = React.useMemo(() => {
+		const acc: Record<RoleTabKey, number> = { all: users.length, ADMIN: 0, INTERNAL: 0, MITRA: 0 };
+		for (const u of users) {
+			const role = toBackendRole(u.role);
+			if (role in acc) acc[role] += 1;
+		}
+		return acc;
+	}, [users]);
 
 	const filteredUsers = React.useMemo(() => {
 		const q = searchQuery.trim().toLowerCase();
@@ -73,12 +89,12 @@ export default function ManajemenUserPage() {
 				q === "" ||
 				u.username.toLowerCase().includes(q) ||
 				(u.profile?.nama || "").toLowerCase().includes(q);
-			const matchesRole = roleFilter === "all" || u.role === roleFilter;
+			const matchesRole = roleTab === "all" || u.role === roleTab;
 			const matchesStatus =
 				statusFilter === "all" || (statusFilter === "active") === u.isAktif;
 			return matchesSearch && matchesRole && matchesStatus;
 		});
-	}, [users, searchQuery, roleFilter, statusFilter]);
+	}, [users, searchQuery, roleTab, statusFilter]);
 
 	const openAdd = () => {
 		setEditingUser(null);
@@ -191,7 +207,7 @@ export default function ManajemenUserPage() {
 		[currentUserId],
 	);
 
-	const hasActiveFilter = searchQuery !== "" || roleFilter !== "all" || statusFilter !== "all";
+	const hasActiveFilter = searchQuery !== "" || roleTab !== "all" || statusFilter !== "all";
 
 	if (error && !isLoading) {
 		return (
@@ -221,7 +237,34 @@ export default function ManajemenUserPage() {
 				</Button>
 			</header>
 
-			{/* Toolbar: pencarian + filter */}
+			{/* Tipe user: tabs */}
+			<div className="flex flex-col gap-3">
+				<Tabs value={roleTab} onValueChange={(val) => setRoleTab(val as RoleTabKey)}>
+					<TabsList variant="line" className="w-full">
+						{ROLE_TABS.map(({ key, label }) => {
+							const count = counts[key];
+							return (
+								<TabsTrigger key={key} value={key} className="gap-1.5">
+									{label}
+									{count > 0 && (
+										<span
+											className={cn(
+												"inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums",
+												key === "all"
+													? "bg-muted text-muted-foreground"
+													: activePalette(ROLE_META[key as BackendRole]),
+											)}>
+											{count}
+										</span>
+									)}
+								</TabsTrigger>
+							);
+						})}
+					</TabsList>
+				</Tabs>
+			</div>
+
+			{/* Toolbar: pencarian + status filter */}
 			<div className="flex flex-col gap-3 rounded-xl border bg-card p-3 lg:flex-row lg:items-center">
 				<div className="relative w-full lg:max-w-sm lg:flex-1">
 					<Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -244,25 +287,6 @@ export default function ManajemenUserPage() {
 				</div>
 
 				<div className="flex flex-wrap items-center gap-2 lg:ml-auto">
-					<Select value={roleFilter} onValueChange={(val) => setRoleFilter(val as typeof roleFilter)}>
-						<SelectTrigger
-							aria-label="Filter role"
-							className={cn(
-								"w-36 cursor-pointer text-xs",
-								roleFilter === "all" && "text-muted-foreground",
-							)}>
-							<UserPen className="size-3.5 shrink-0 text-muted-foreground" />
-							<SelectValue placeholder="Semua role" />
-						</SelectTrigger>
-						<SelectContent className="text-xs">
-							{ROLE_FILTERS.map(({ key, label }) => (
-								<SelectItem key={key} value={key} className="cursor-pointer text-xs">
-									{label === "Semua" ? "Semua role" : label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-
 					<Select
 						value={statusFilter}
 						onValueChange={(val) => setStatusFilter(val as typeof statusFilter)}>
@@ -291,7 +315,7 @@ export default function ManajemenUserPage() {
 							className="h-9 cursor-pointer gap-1.5 px-2.5 text-xs text-muted-foreground"
 							onClick={() => {
 								setSearchQuery("");
-								setRoleFilter("all");
+								setRoleTab("all");
 								setStatusFilter("all");
 							}}>
 							<RotateCcw className="size-3.5" /> Reset
@@ -333,11 +357,11 @@ export default function ManajemenUserPage() {
 							variant="outline"
 							size="sm"
 							className="cursor-pointer text-xs"
-							onClick={() => {
-								setSearchQuery("");
-								setRoleFilter("all");
-								setStatusFilter("all");
-							}}>
+onClick={() => {
+							setSearchQuery("");
+							setRoleTab("all");
+							setStatusFilter("all");
+						}}>
 							Bersihkan filter
 						</Button>
 					) : (
@@ -355,6 +379,7 @@ export default function ManajemenUserPage() {
 					if (!open) setEditingUser(null);
 				}}
 				user={editingUser}
+				defaultRole={roleTab === "all" ? null : (roleTab as BackendRole)}
 				currentUserId={currentUserId}
 				isSaving={isLoading}
 				onSubmit={handleFormSubmit}
