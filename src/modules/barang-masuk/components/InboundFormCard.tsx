@@ -3,15 +3,10 @@ import { Card, CardContent } from "@/shared/ui/card";
 import { Label } from "@/shared/ui/label";
 import { Input } from "@/shared/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/shared/ui/select";
+import { Combobox } from "@/shared/ui/combobox";
 import { detectMitraFromSN } from "../utils/brandDetector";
 import { ModelSelectPopover } from "./ModelSelectPopover";
+import { searchAsalMaterial, searchMaterialModels } from "../api/barangMasukApi";
 import type { Partner } from "@/shared/types/partner";
 import { Textarea } from "@/shared/ui/textarea";
 import {
@@ -28,7 +23,6 @@ interface InboundFormCardProps {
 	asalBarangManual: boolean;
 	setAsalBarangManual: (val: boolean) => void;
 	dbPartners: Partner[];
-	dbModels: any[];
 	kodeBarang: string;
 	updateKodeBarang: (val: string) => void;
 	inputRef: React.RefObject<HTMLInputElement>;
@@ -59,7 +53,6 @@ export function InboundFormCard({
 	asalBarangManual,
 	setAsalBarangManual,
 	dbPartners,
-	dbModels,
 	kodeBarang,
 	updateKodeBarang,
 	inputRef,
@@ -124,29 +117,21 @@ export function InboundFormCard({
 							{/* Kolom Kiri */}
 							<div className="flex flex-col gap-4">
 								<div className="flex flex-col gap-3">
-									<Label htmlFor="asal-barang">Asal Material</Label>
-									<Select
+									<Label htmlFor="asal-material">Asal Material</Label>
+									<Combobox
 										value={asalBarang}
-										onValueChange={(value) => {
+										onChange={(value) => {
 											setAsalBarang(value);
 											setAsalBarangManual(true);
 											focusKodeBarangInput();
-										}}>
-										<SelectTrigger id="asal-barang" className="w-full">
-											<SelectValue placeholder="Pilih asal material..." />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="Kantor Pusat">Kantor Pusat</SelectItem>
-											<SelectItem value="SBU Regional Jawa Barat">
-												SBU Regional Jawa Barat
-											</SelectItem>
-											{dbPartners.map((partner) => (
-												<SelectItem key={partner.id} value={partner.name}>
-													{partner.name}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
+										}}
+										onSearch={searchAsalMaterial}
+										placeholder="Pilih asal material..."
+										searchPlaceholder="Cari asal material..."
+										emptyText="Asal material tidak ditemukan"
+										recentKey="asal"
+										className="rounded-sm!"
+									/>
 									{asalBarangManual ? (
 										<div className="flex items-center justify-between gap-2 -mt-1"></div>
 									) : (
@@ -161,10 +146,10 @@ export function InboundFormCard({
 								<div className="space-y-1.5">
 									<Label htmlFor="tipe-barang">Model</Label>
 									<ModelSelectPopover
-										models={dbModels}
 										value={tipeBarang}
 										onChange={setTipeBarang}
 										onCloseFocus={focusKodeBarangInput}
+										onSearch={searchMaterialModels}
 										placeholder="Pilih Model (wajib jika SN belum terdaftar)"
 									/>
 								</div>

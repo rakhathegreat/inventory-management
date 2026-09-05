@@ -2,6 +2,7 @@ import type {
 	StorageLocationOption,
 	MaterialModel,
 } from "@/shared/types/inventory";
+import type { ComboboxItem } from "@/shared/ui/combobox";
 
 export const ADMIN_LOCATION = "KP Tasikmalaya";
 
@@ -33,6 +34,70 @@ export interface AuxiliaryData {
 
 const parseList = (raw: any): any[] =>
 	raw?.data || (Array.isArray(raw) ? raw : []);
+
+const SEARCH_LIMIT = 20;
+
+const searchMasterData = async (
+	path: string,
+	query: string,
+	params: Record<string, string> = {},
+): Promise<any[]> => {
+	const url = new URL(`${getBaseUrl()}/${path}`);
+	url.searchParams.set("search", query);
+	url.searchParams.set("limit", String(SEARCH_LIMIT));
+	Object.entries(params).forEach(([key, value]) => {
+		if (value) url.searchParams.set(key, value);
+	});
+	const res = await fetch(url.toString(), { method: "GET", headers: getHeaders() });
+	if (!res.ok) throw new Error(`Gagal memuat ${path}`);
+	return parseList(await res.json());
+};
+
+export const searchCategories = async (query: string): Promise<ComboboxItem[]> => {
+	const rows = await searchMasterData("categories", query);
+	return Array.from(
+		new Set(rows.map((c: any) => c.nama || c.name || "").filter(Boolean)),
+	)
+		.sort((a, b) => a.localeCompare(b))
+		.map((nama) => ({ value: nama, label: nama }));
+};
+
+export const searchBrands = async (query: string): Promise<ComboboxItem[]> => {
+	const rows = await searchMasterData("brands", query);
+	return Array.from(
+		new Set(rows.map((b: any) => b.nama || b.name || "").filter(Boolean)),
+	)
+		.sort((a, b) => a.localeCompare(b))
+		.map((nama) => ({ value: nama, label: nama }));
+};
+
+export const searchModels = async (
+	query: string,
+	brand = "",
+): Promise<ComboboxItem[]> => {
+	const rows = await searchMasterData("material-models", query, { brand });
+	const seen = new Set<string>();
+	const list: ComboboxItem[] = [];
+	rows.forEach((m: any) => {
+		const nama = m.nama;
+		if (!nama || seen.has(nama)) return;
+		seen.add(nama);
+		list.push({
+			value: nama,
+			label: nama,
+			description: m.brand?.nama || m.brand?.name || undefined,
+		});
+	});
+	return list.sort((a, b) => a.label.localeCompare(b.label));
+};
+
+export const searchLocations = async (query: string): Promise<ComboboxItem[]> => {
+	const rows = await searchMasterData("locations", query);
+	return flattenLocations(rows).map((loc) => ({
+		value: loc.name,
+		label: loc.name,
+	}));
+};
 
 export const fetchAuxiliary = async (): Promise<AuxiliaryData> => {
 	const [resCat, resLoc, resBrand, resModels] = await Promise.all([

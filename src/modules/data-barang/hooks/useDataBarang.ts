@@ -2,18 +2,13 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
-import type {
-	BarangUnit,
-	StorageLocationOption,
-	MaterialModel,
-} from "@/shared/types/inventory";
+import type { BarangUnit } from "@/shared/types/inventory";
 import type { DeleteDialogState } from "@/shared/types/ui";
 import { saveExportFile } from "@/shared/lib/export-file";
 import {
 	ADMIN_LOCATION,
 	createItem,
 	deleteItemsByIds,
-	fetchAuxiliary,
 	fetchItems,
 	updateItem,
 } from "../api/barangApi";
@@ -51,13 +46,8 @@ export function useDataBarang() {
 	const [filterCategory, setFilterCategory] = useState("all");
 	const [filterBrand, setFilterBrand] = useState("all");
 	const [filterLocation, setFilterLocation] = useState("all");
-	const [categories, setCategories] = useState<string[]>([]);
-	const [brands, setBrands] = useState<string[]>([]);
-	const [models, setModels] = useState<MaterialModel[]>([]);
 	const [currentPage, setCurrentPage] = useState(1);
 	const [pageSize, setPageSize] = useState(10);
-
-	const [dbLocations, setDbLocations] = useState<StorageLocationOption[]>([]);
 
 	const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(
 		null,
@@ -78,20 +68,6 @@ export function useDataBarang() {
 	const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 	const [formData, setFormData] = useState<BarangFormData>({ ...EMPTY_FORM });
 
-	// Load auxiliary data (Categories & Locations) once
-	useEffect(() => {
-		fetchAuxiliary()
-			.then(({ categories, brands, models, locations }) => {
-				setCategories(categories);
-				setBrands((prev) => Array.from(new Set([...prev, ...brands])));
-				setModels(models);
-				setDbLocations(locations);
-			})
-			.catch((err) => {
-				console.error("Gagal memuat kategori/lokasi:", err);
-			});
-	}, []);
-
 	// Load main paginated items list
 	const loadItems = async () => {
 		setIsLoading(true);
@@ -110,17 +86,6 @@ export function useDataBarang() {
 				setBarangList(result.data);
 				setTotalItems(result.pagination?.totalItems || result.data.length);
 				setTotalPages(result.pagination?.totalPages || 1);
-
-				const extractedBrands = Array.from(
-					new Set(
-						result.data.map((item: BarangUnit) => item.merek).filter(Boolean),
-					),
-				) as string[];
-				if (extractedBrands.length > 0) {
-					setBrands((prev) =>
-						Array.from(new Set([...prev, ...extractedBrands])),
-					);
-				}
 			} else {
 				setBarangList(Array.isArray(result) ? result : []);
 				setTotalItems(Array.isArray(result) ? result.length : 0);
@@ -366,10 +331,6 @@ export function useDataBarang() {
 		setFilterBrand,
 		filterLocation,
 		setFilterLocation,
-		categories,
-		brands,
-		models,
-		dbLocations,
 		isDetailOpen,
 		setIsDetailOpen,
 		detailBarang,

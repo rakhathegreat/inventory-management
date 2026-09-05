@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import {
 	AlertDialog,
 	AlertDialogContent,
@@ -18,13 +18,10 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/shared/ui/select";
+import { Combobox, type ComboboxItem } from "@/shared/ui/combobox";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
-import type {
-	StatusUnit,
-	StorageLocationOption,
-	MaterialModel,
-} from "@/shared/types/inventory";
+import type { StatusUnit } from "@/shared/types/inventory";
 
 interface BarangFormModalProps {
 	isOpen: boolean;
@@ -57,10 +54,10 @@ interface BarangFormModalProps {
 	formErrors: Record<string, string>;
 	isSaving: boolean;
 	onSubmit: (e: React.FormEvent) => void;
-	categories: string[];
-	brands: string[];
-	models: MaterialModel[];
-	availableFormLocations: StorageLocationOption[];
+	searchKategori: (query: string) => Promise<ComboboxItem[]>;
+	searchMerek: (query: string) => Promise<ComboboxItem[]>;
+	searchModel: (query: string, brand: string) => Promise<ComboboxItem[]>;
+	searchLokasi: (query: string) => Promise<ComboboxItem[]>;
 	STATUS_OPTIONS: StatusUnit[];
 }
 
@@ -106,32 +103,12 @@ export function BarangFormModal({
 	formErrors,
 	isSaving,
 	onSubmit,
-	categories,
-	brands,
-	models,
-	availableFormLocations,
+	searchKategori,
+	searchMerek,
+	searchModel,
+	searchLokasi,
 	STATUS_OPTIONS,
 }: BarangFormModalProps) {
-	const brandOptions = useMemo(() => {
-		const set = new Set(brands.filter(Boolean));
-		if (formData.merek) set.add(formData.merek);
-		return Array.from(set).sort((a, b) => a.localeCompare(b));
-	}, [brands, formData.merek]);
-
-	const modelOptions = useMemo(() => {
-		const brand = formData.merek.trim().toLowerCase();
-		const set = new Set(
-			models
-				.filter(
-					(m) => !brand || (m.brand?.nama || "").trim().toLowerCase() === brand,
-				)
-				.map((m) => m.nama)
-				.filter(Boolean),
-		);
-		if (formData.tipe) set.add(formData.tipe);
-		return Array.from(set).sort((a, b) => a.localeCompare(b));
-	}, [models, formData.merek, formData.tipe]);
-
 	return (
 		<AlertDialog open={isOpen} onOpenChange={onOpenChange}>
 			<AlertDialogContent className="max-w-5xl! w-[calc(100%-2rem)] sm:w-full max-h-[90vh] flex flex-col overflow-hidden">
@@ -176,64 +153,47 @@ export function BarangFormModal({
 								</Field>
 
 								<Field label="Kategori" required error={formErrors.kategori}>
-									<Select
+									<Combobox
 										value={formData.kategori}
-										onValueChange={(val) =>
+										onChange={(val) =>
 											setFormData((prev) => ({ ...prev, kategori: val }))
-										}>
-										<SelectTrigger
-											className="h-8 text-sm rounded-sm!"
-											aria-invalid={!!formErrors.kategori}>
-											<SelectValue placeholder="Pilih Kategori" />
-										</SelectTrigger>
-										<SelectContent>
-											{categories.map((cat) => (
-												<SelectItem key={cat} value={cat}>
-													{cat}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
+										}
+										onSearch={searchKategori}
+										placeholder="Pilih Kategori"
+										searchPlaceholder="Cari kategori..."
+										recentKey="kategori"
+										className="rounded-sm!"
+									/>
 								</Field>
 
 								<Field label="Merek" required error={formErrors.merek}>
-									<Select
+									<Combobox
 										value={formData.merek}
-										onValueChange={(val) =>
+										onChange={(val) =>
 											setFormData((prev) => ({ ...prev, merek: val }))
-										}>
-										<SelectTrigger
-											className="h-8 text-sm rounded-sm!"
-											aria-invalid={!!formErrors.merek}>
-											<SelectValue placeholder="Pilih Merek" />
-										</SelectTrigger>
-										<SelectContent>
-											{brandOptions.map((b) => (
-												<SelectItem key={b} value={b}>
-													{b}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
+										}
+										onSearch={searchMerek}
+										placeholder="Pilih Merek"
+										searchPlaceholder="Cari merek..."
+										emptyText="Merek tidak ditemukan"
+										recentKey="merek"
+										className="rounded-sm!"
+									/>
 								</Field>
 
 								<Field label="Tipe / Model" hint="Opsional">
-									<Select
+									<Combobox
 										value={formData.tipe}
-										onValueChange={(val) =>
+										onChange={(val) =>
 											setFormData((prev) => ({ ...prev, tipe: val }))
-										}>
-										<SelectTrigger className="h-8 text-sm rounded-sm!">
-											<SelectValue placeholder="Pilih Model" />
-										</SelectTrigger>
-										<SelectContent>
-											{modelOptions.map((m) => (
-												<SelectItem key={m} value={m}>
-													{m}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
+										}
+										onSearch={(query) => searchModel(query, formData.merek)}
+										placeholder="Pilih Model"
+										searchPlaceholder="Cari model..."
+										emptyText="Model tidak ditemukan"
+										recentKey="model"
+										className="rounded-sm!"
+									/>
 								</Field>
 							</div>
 						</section>
@@ -328,28 +288,22 @@ export function BarangFormModal({
 											? "Unit sudah terdistribusi, lokasi tidak dipilih."
 											: undefined
 									}>
-									<Select
+									<Combobox
 										value={formData.lokasiPenyimpanan}
-										onValueChange={(val) =>
+										onChange={(val) =>
 											setFormData((prev) => ({
 												...prev,
 												lokasiPenyimpanan: val,
 											}))
 										}
-										disabled={formData.status === "Terdistribusi"}>
-										<SelectTrigger
-											className="h-8 text-sm rounded-sm!"
-											aria-invalid={!!formErrors.lokasiPenyimpanan}>
-											<SelectValue placeholder="Pilih Lokasi" />
-										</SelectTrigger>
-										<SelectContent>
-											{availableFormLocations.map((loc) => (
-												<SelectItem key={loc.name} value={loc.name}>
-													{loc.name}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
+										onSearch={searchLokasi}
+										placeholder="Pilih Lokasi"
+										searchPlaceholder="Cari lokasi..."
+										emptyText="Lokasi tidak ditemukan"
+										recentKey="lokasi"
+										disabled={formData.status === "Terdistribusi"}
+										className="rounded-sm!"
+									/>
 								</Field>
 							</div>
 						</section>

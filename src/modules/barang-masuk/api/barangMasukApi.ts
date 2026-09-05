@@ -1,5 +1,6 @@
 import type { InventoryItem, BrandDefinition } from "@/shared/types/inventory";
 import type { Partner } from "@/shared/types/partner";
+import type { ComboboxItem } from "@/shared/ui/combobox";
 import type { BarangMasukItem } from "@/modules/transaksi/types";
 import { toIntakePayload } from "../utils/inboundDecision";
 
@@ -38,6 +39,71 @@ export const fetchInventoryItems = async (): Promise<InventoryItem[]> => {
     console.error("Gagal memperbarui data barang dari server:", error);
     throw new Error("Gagal memperbarui data barang dari server.");
   }
+};
+
+const ASAL_FIXED_SOURCES = ["Kantor Pusat", "SBU Regional Jawa Barat"];
+
+/**
+ * Cari daftar "asal material" (sumber tetap + mitra aktif) dari backend.
+ * Dipakai combobox lazy pencarian asal material di halaman barang masuk.
+ */
+export const searchAsalMaterial = async (query: string): Promise<ComboboxItem[]> => {
+  const q = query.trim().toLowerCase();
+  const items: ComboboxItem[] = [];
+  const seen = new Set<string>();
+  ASAL_FIXED_SOURCES.filter((name) => name.toLowerCase().includes(q)).forEach((name) => {
+    seen.add(name);
+    items.push({ value: name, label: name });
+  });
+  try {
+    const res = await fetch(
+      `${getBaseUrl()}/users?search=${encodeURIComponent(query)}&limit=20`,
+      { method: "GET", headers: getHeaders() },
+    );
+    if (res.ok) {
+      const raw = await res.json();
+      const users = Array.isArray(raw.data || raw.users || raw)
+        ? (raw.data || raw.users || raw)
+        : [];
+      users.forEach((u: any) => {
+        if (u.role !== "MITRA" || u.isAktif === false) return;
+        const name = u.profile?.nama || u.profile?.name || u.name || u.username || "";
+        if (!name || seen.has(name)) return;
+        seen.add(name);
+        items.push({ value: name, label: name });
+      });
+    }
+  } catch {
+    // Hasil dari sumber tetap tetap ditampilkan meski request gagal.
+  }
+  return items.sort((a, b) => a.label.localeCompare(b.label));
+};
+
+/**
+ * Cari material-model (nama / merek / kategori) dari backend untuk combobox
+ * pemilihan model yang lazy — tidak memuat seluruh master model di halaman.
+ */
+export const searchMaterialModels = async (query: string): Promise<ComboboxItem[]> => {
+  const res = await fetch(
+    `${getBaseUrl()}/material-models?search=${encodeURIComponent(query)}&limit=20`,
+    { method: "GET", headers: getHeaders() },
+  );
+  if (!res.ok) throw new Error("Gagal memuat model");
+  const raw = await res.json();
+  const rows = Array.isArray(raw.data || raw) ? (raw.data || raw) : [];
+  const seen = new Set<string>();
+  const list: ComboboxItem[] = [];
+  rows.forEach((m: any) => {
+    const nama = m.nama;
+    if (!nama || seen.has(nama)) return;
+    seen.add(nama);
+    list.push({
+      value: nama,
+      label: nama,
+      description: m.brand?.nama || m.brand?.name || undefined,
+    });
+  });
+  return list.sort((a, b) => a.label.localeCompare(b.label));
 };
 
 export interface IntakeItemResult {

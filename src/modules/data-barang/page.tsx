@@ -25,13 +25,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/shared/ui/alert-dialog";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/shared/ui/select";
+import { Combobox } from "@/shared/ui/combobox";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { Badge } from "@/shared/ui/badge";
 import { DataTable, createRowActionsColumn } from "@/shared/ui/data-table/DataTable";
@@ -44,7 +38,15 @@ import { formatItemLocation } from "@/shared/lib/status-helper";
 
 import { useDataBarang } from "./hooks/useDataBarang";
 import { STATUS_OPTIONS, formatTanggal, isReconTelat } from "./utils/barang";
-import { ADMIN_LOCATION, getBaseUrl, getHeaders } from "./api/barangApi";
+import {
+	ADMIN_LOCATION,
+	getBaseUrl,
+	getHeaders,
+	searchBrands,
+	searchCategories,
+	searchLocations,
+	searchModels,
+} from "./api/barangApi";
 import type { BarangUnit } from "@/shared/types/inventory";
 
 export default function DataBarangPage() {
@@ -66,10 +68,6 @@ export default function DataBarangPage() {
 		setFilterBrand,
 		filterLocation,
 		setFilterLocation,
-		categories,
-		brands,
-		models,
-		dbLocations,
 		isDetailOpen,
 		setIsDetailOpen,
 		detailBarang,
@@ -229,50 +227,38 @@ export default function DataBarangPage() {
 							onChange={(e) => setSearchTerm(e.target.value)}
 						/>
 					</div>
-					<div className="flex flex-wrap gap-2">
-						<Select value={filterCategory} onValueChange={setFilterCategory}>
-							<SelectTrigger
-								className={`w-32 rounded-sm bg-card border-border text-foreground ${filterCategory === "all" ? "border-dashed text-muted-foreground" : ""}`}>
-								<SelectValue placeholder="Kategori" />
-							</SelectTrigger>
-							<SelectContent className="bg-card border-border text-foreground">
-								<SelectItem value="all">Kategori</SelectItem>
-								{categories.map((c) => (
-									<SelectItem key={c} value={c}>
-										{c}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-						<Select value={filterBrand} onValueChange={setFilterBrand}>
-							<SelectTrigger
-								className={`w-32 rounded-sm bg-card border-border text-foreground ${filterBrand === "all" ? "border-dashed text-muted-foreground" : ""}`}>
-								<SelectValue placeholder="Merek" />
-							</SelectTrigger>
-							<SelectContent className="bg-card border-border text-foreground">
-								<SelectItem value="all">Merek</SelectItem>
-								{brands.map((b) => (
-									<SelectItem key={b} value={b}>
-										{b}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-						<Select value={filterLocation} onValueChange={setFilterLocation}>
-							<SelectTrigger
-								className={`w-40 rounded-sm bg-card border-border text-foreground ${filterLocation === "all" ? "border-dashed text-muted-foreground" : ""}`}>
-								<SelectValue placeholder="Shelf" />
-							</SelectTrigger>
-							<SelectContent className="bg-card border-border text-foreground">
-								<SelectItem value="all">Shelf</SelectItem>
-								{dbLocations.map((loc) => (
-									<SelectItem key={loc.name} value={loc.name}>
-										{loc.name}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					</div>
+<div className="flex flex-wrap gap-2">
+							<Combobox
+								value={filterCategory === "all" ? "" : filterCategory}
+								onChange={(val) => setFilterCategory(val || "all")}
+								onSearch={searchCategories}
+								placeholder="Kategori"
+								searchPlaceholder="Cari kategori..."
+								emptyText="Tidak ditemukan"
+								recentKey="kategori"
+								className="w-32"
+							/>
+							<Combobox
+								value={filterBrand === "all" ? "" : filterBrand}
+								onChange={(val) => setFilterBrand(val || "all")}
+								onSearch={searchBrands}
+								placeholder="Merek"
+								searchPlaceholder="Cari merek..."
+								emptyText="Tidak ditemukan"
+								recentKey="merek"
+								className="w-32"
+							/>
+							<Combobox
+								value={filterLocation === "all" ? "" : filterLocation}
+								onChange={(val) => setFilterLocation(val || "all")}
+								onSearch={searchLocations}
+								placeholder="Shelf"
+								searchPlaceholder="Cari shelf..."
+								emptyText="Tidak ditemukan"
+								recentKey="lokasi"
+								className="w-40"
+							/>
+						</div>
 				</div>
 				<div className="flex justify-end gap-2 w-full lg:w-auto">
 					{(
@@ -364,10 +350,10 @@ export default function DataBarangPage() {
 				formErrors={formErrors}
 				isSaving={isSaving}
 				onSubmit={handleSubmitForm}
-				categories={categories}
-				brands={brands}
-				models={models}
-				availableFormLocations={dbLocations}
+				searchKategori={searchCategories}
+				searchMerek={searchBrands}
+				searchModel={searchModels}
+				searchLokasi={searchLocations}
 				STATUS_OPTIONS={STATUS_OPTIONS}
 			/>
 

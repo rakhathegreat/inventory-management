@@ -23,7 +23,6 @@ export default function BarangMasukPage() {
           asalBarangManual={logic.asalBarangManual}
           setAsalBarangManual={logic.setAsalBarangManual}
           dbPartners={logic.dbPartners}
-          dbModels={logic.dbModels}
           kodeBarang={logic.kodeBarang}
           updateKodeBarang={logic.updateKodeBarang}
           inputRef={logic.inputRef}
