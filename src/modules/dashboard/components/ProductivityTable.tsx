@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/shared/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table";
 import { Badge } from "@/shared/ui/badge";
@@ -21,19 +21,19 @@ type SortOrder = "asc" | "desc";
 const getBadgeStyle = (status: MitraPerformanceMetrics["status"]) => {
   switch (status) {
     case "Fast":
-      return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30";
+      return "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400";
     case "Steady":
-      return "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30";
+      return "bg-blue-500/10 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400";
     case "Slow":
-      return "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
+      return "bg-amber-500/10 text-amber-700 dark:bg-amber-950/40 dark:text-amber-500";
     case "Idle":
-      return "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30 font-semibold";
+      return "bg-rose-500/10 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400";
     default:
-      return "bg-muted text-muted-foreground border-border";
+      return "bg-zinc-500/10 text-zinc-600 dark:bg-zinc-800/40 dark:text-zinc-400";
   }
 };
 
-export function ProductivityTable({
+function ProductivityTableBase({
   metrics,
   isLoading,
   className,
@@ -268,7 +268,7 @@ export function ProductivityTable({
                       </TableCell>
 
                       <TableCell className="text-center">
-                        <Badge variant="outline" className={`text-[11px] font-normal px-2 py-0.5 border ${getBadgeStyle(mitra.status)}`}>
+                        <Badge variant="secondary" size="sm" className={getBadgeStyle(mitra.status)}>
                           {mitra.status}
                         </Badge>
                       </TableCell>
@@ -283,3 +283,5 @@ export function ProductivityTable({
     </Card>
   );
 }
+
+export const ProductivityTable = memo(ProductivityTableBase);

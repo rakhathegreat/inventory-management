@@ -51,7 +51,7 @@ interface ChartInboundOutboundProps {
     className?: string;
 }
 
-export function ChartInboundOutbound({
+function ChartInboundOutboundBase({
     data,
     timeRange,
     onTimeRangeChange,
@@ -178,7 +178,7 @@ export function ChartInboundOutbound({
                                 stroke="var(--color-keluar)"
                                 strokeWidth={2}
                                 stackId="1"
-                                isAnimationActive={true}
+                                isAnimationActive={false}
                             />
                             <Area
                                 dataKey="masuk"
@@ -188,7 +188,7 @@ export function ChartInboundOutbound({
                                 stroke="var(--color-masuk)"
                                 strokeWidth={2}
                                 stackId="2"
-                                isAnimationActive={true}
+                                isAnimationActive={false}
                             />
                         </AreaChart>
                     </ChartContainer>
@@ -197,3 +197,5 @@ export function ChartInboundOutbound({
         </Card>
     )
 }
+
+export const ChartInboundOutbound = React.memo(ChartInboundOutboundBase)

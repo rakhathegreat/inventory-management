@@ -35,7 +35,7 @@ const STATUS_FILTERS = [
 function RoleBadge({ role }: { role: ManagedUser["role"] }) {
 	const meta = ROLE_META[toBackendRole(role)];
 	return (
-		<Badge variant="secondary" className={cn("px-2 py-0.5 text-[11px] font-medium", meta.badge)}>
+		<Badge variant="secondary" size="sm" className={cn(meta.badge)}>
 			{meta.label}
 		</Badge>
 	);
@@ -175,11 +175,11 @@ export default function ManajemenUserPage() {
 				meta: { className: "w-24 text-center" },
 				cell: ({ row }) =>
 					row.original.isAktif ? (
-						<Badge variant="secondary" className="bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+						<Badge variant="secondary" size="sm" className="bg-emerald-500/10 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
 							Aktif
 						</Badge>
 					) : (
-						<Badge variant="outline" className="px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+						<Badge variant="secondary" size="sm" className="text-muted-foreground">
 							Nonaktif
 						</Badge>
 					),

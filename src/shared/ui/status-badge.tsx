@@ -165,6 +165,25 @@ const STATUS_CONFIG: Record<
 		className:
 			"bg-rose-500/10 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400",
 	},
+	disetujui: {
+		label: "Disetujui",
+		icon: CheckCircle2,
+		className:
+			"bg-emerald-500/10 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400",
+	},
+	serah: {
+		label: "Serah",
+		icon: Navigation,
+		className:
+			"bg-purple-500/10 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400",
+	},
+	// Kunci memakai format hasil `normalize()` (spasi) agar lookup tidak gagal
+	"menunggu scan penerima": {
+		label: "Menunggu Scan Penerima",
+		icon: Clock,
+		className:
+			"bg-purple-500/10 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400",
+	},
 	tolak: {
 		label: "Ditolak",
 		icon: XCircle,

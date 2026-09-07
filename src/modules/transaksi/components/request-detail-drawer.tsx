@@ -34,6 +34,14 @@ const getCleanCategoryName = (categoryName?: string) => {
   return categoryName;
 };
 
+const normalizeKey = (value?: string | null) =>
+  (value || "").trim().toUpperCase().replace(/-/g, "_");
+
+const isRusakRequest = (request?: DashboardRequest | null, detail?: DashboardRequest | null) => {
+  const type = detail?.type || request?.type;
+  return normalizeKey(type) === "RETURN_RUSAK";
+};
+
 /**
  * Wrapper for tables to add dynamic top and bottom scroll shadows
  */
@@ -127,6 +135,7 @@ export function RequestDetailDrawer({
           requesterName: data.requester?.profile?.nama || data.requester?.username,
           partnerCategory: data.requester?.profile?.partnerType || "Mitra",
           status: data.status,
+          type: data.type,
           notes: data.notes || "-",
           requestedAt: data.requestedAt,
           itemsCount: data.requestItems?.reduce((acc: number, ri: any) => acc + ri.quantity, 0),
@@ -137,6 +146,7 @@ export function RequestDetailDrawer({
             brand: ri.brand?.nama,
             model: ri.model?.nama || ri.model?.name || "-",
             quantity: ri.quantity,
+            serialNumber: ri.serialNumber || null,
             unit: getUnitByCategory(ri.materialCategory?.nama)
           })),
           requestAllocations: data.requestItems?.flatMap((ri: any) =>
@@ -200,6 +210,7 @@ export function RequestDetailDrawer({
   };
 
   const isSelesai = displayItem.status?.toUpperCase() === 'SELESAI';
+  const rusak = isRusakRequest(item, detailData);
 
   return (
     <>
@@ -281,6 +292,7 @@ export function RequestDetailDrawer({
                           <TableHead className="w-12 px-4">No</TableHead>
                           <TableHead>Kategori</TableHead>
                           <TableHead>Merek</TableHead>
+                          {rusak && <TableHead>Serial No</TableHead>}
                           <TableHead className="text-right">Jumlah</TableHead>
                           <TableHead className="text-right px-4">Satuan</TableHead>
                         </TableRow>
@@ -291,6 +303,9 @@ export function RequestDetailDrawer({
                             <TableCell className="text-muted-foreground px-4">{idx + 1}</TableCell>
                             <TableCell className="font-medium">{getCleanCategoryName(ri.category)}</TableCell>
                             <TableCell>{ri.brand}</TableCell>
+                            {rusak && (
+                              <TableCell className="text-muted-foreground">{ri.serialNumber || "-"}</TableCell>
+                            )}
                             <TableCell className="text-right font-medium">{ri.quantity}</TableCell>
                             <TableCell className="text-right font-medium px-4">Unit</TableCell>
                           </TableRow>
@@ -314,7 +329,11 @@ export function RequestDetailDrawer({
           <div className="flex w-full gap-2">
             {['MENUNGGU'].includes(displayItem.status?.toUpperCase() || "") && (
               <>
-                <Button variant="default" className="flex-1 cursor-pointer" onClick={() => navigate(`/request/${displayItem.id}/prepare`)}>Siapkan Material</Button>
+                {rusak ? (
+                  <Button variant="default" className="flex-1 cursor-pointer" onClick={() => handleAction("DISETUJUI")}>Setujui Pengajuan</Button>
+                ) : (
+                  <Button variant="default" className="flex-1 cursor-pointer" onClick={() => navigate(`/request/${displayItem.id}/prepare`)}>Siapkan Material</Button>
+                )}
                 <Button variant="destructive" className="flex-1 cursor-pointer" onClick={() => handleAction("Ditolak")}>Tolak Permintaan</Button>
               </>
             )}
@@ -324,6 +343,11 @@ export function RequestDetailDrawer({
                   <Button variant="default" className="flex-1 cursor-pointer" onClick={() => navigate(`/request/${displayItem.id}/prepare`)}>Edit</Button>
                   <Button variant="destructive" className="flex-1 cursor-pointer" onClick={() => handleAction("Dibatalkan")}>Batalkan</Button>
                 </>
+              )
+            }
+            {
+              rusak && ['SERAH'].includes(displayItem.status?.toUpperCase() || "") && (
+                <Button variant="default" className="flex-1 cursor-pointer" onClick={() => handleAction("SELESAI")}>Selesaikan Pengajuan</Button>
               )
             }
             <DrawerClose asChild>

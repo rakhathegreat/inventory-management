@@ -1,17 +1,13 @@
-import { useState } from "react";
 import { SectionCards } from "@/modules/dashboard/components/section-cards";
 import { ChartBarMixed } from "@/modules/dashboard/components/bar-chart";
 import { ChartInboundOutbound } from "@/modules/dashboard/components/chart-inbound-outbound";
 import { RequestSection } from "@/modules/dashboard/components/RequestSection";
 import { ActivityFeedCard } from "@/modules/dashboard/components/ActivityFeedCard";
-import { LeaderboardCard } from "@/modules/dashboard/components/LeaderboardCard";
+import { MitraPerformanceSection } from "@/modules/dashboard/components/MitraPerformanceSection";
 import { IdleStockAlert } from "@/modules/dashboard/components/IdleStockAlert";
-import { ProductivityTable } from "@/modules/dashboard/components/ProductivityTable";
 import { useDashboard } from "./use-dashboard";
 
 export default function DashboardPage() {
-	const [hoveredMitraId, setHoveredMitraId] = useState<string | null>(null);
-
 	const {
 		inventoryStats,
 		mitraDistribution,
@@ -44,22 +40,10 @@ export default function DashboardPage() {
 			</div>
 
 			{/* Mitra Performance */}
-			<div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-4 lg:px-6">
-				<LeaderboardCard
-					metrics={mitraPerformanceMetrics}
-					isLoading={isLoading}
-					activeHoverId={hoveredMitraId}
-					onHoverMitra={setHoveredMitraId}
-					className="lg:col-span-1"
-				/>
-				<ProductivityTable
-					metrics={mitraPerformanceMetrics}
-					isLoading={isLoading}
-					activeHoverId={hoveredMitraId}
-					onHoverMitra={setHoveredMitraId}
-					className="lg:col-span-2"
-				/>
-			</div>
+			<MitraPerformanceSection
+				metrics={mitraPerformanceMetrics}
+				isLoading={isLoading}
+			/>
 
 			{/* Row 2: Charts (50/50) */}
 			<div className="grid grid-cols-1 lg:grid-cols-2 gap-4 px-4 lg:px-6">

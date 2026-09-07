@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
@@ -18,6 +18,15 @@ import {
 	validateBarangForm,
 	type BarangFormData,
 } from "../utils/barang";
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+	const [debounced, setDebounced] = useState(value);
+	useEffect(() => {
+		const id = setTimeout(() => setDebounced(value), delayMs);
+		return () => clearTimeout(id);
+	}, [value, delayMs]);
+	return debounced;
+}
 
 const EMPTY_FORM: BarangFormData = {
 	serialNumber: "",
@@ -42,12 +51,32 @@ export function useDataBarang() {
 	const [searchTerm, setSearchTerm] = useState(
 		searchParams.get("search") || "",
 	);
+	const debouncedSearch = useDebouncedValue(searchTerm, 300);
 	const [filterStatus, setFilterStatus] = useState("Terdistribusi");
 	const [filterCategory, setFilterCategory] = useState("all");
 	const [filterBrand, setFilterBrand] = useState("all");
 	const [filterLocation, setFilterLocation] = useState("all");
 	const [currentPage, setCurrentPage] = useState(1);
 	const [pageSize, setPageSize] = useState(10);
+
+	const prevFiltersRef = useRef({
+		status: filterStatus,
+		category: filterCategory,
+		brand: filterBrand,
+		location: filterLocation,
+		pageSize,
+		search: debouncedSearch,
+	});
+	const lastRequestRef = useRef<{
+		page: number;
+		size: number;
+		search: string;
+		status: string;
+		category: string;
+		brand: string;
+		location: string;
+	} | null>(null);
+	const fetchSeqRef = useRef(0);
 
 	const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(
 		null,
@@ -69,18 +98,30 @@ export function useDataBarang() {
 	const [formData, setFormData] = useState<BarangFormData>({ ...EMPTY_FORM });
 
 	// Load main paginated items list
-	const loadItems = async () => {
+	const loadItems = async (
+		page: number,
+		size: number,
+		search: string,
+		status: string,
+		category: string,
+		brand: string,
+		location: string,
+	) => {
+		const seq = ++fetchSeqRef.current;
 		setIsLoading(true);
 		try {
 			const result = await fetchItems({
-				page: currentPage,
-				pageSize,
-				searchTerm,
-				filterStatus,
-				filterCategory,
-				filterBrand,
-				filterLocation,
+				page,
+				pageSize: size,
+				searchTerm: search,
+				filterStatus: status,
+				filterCategory: category,
+				filterBrand: brand,
+				filterLocation: location,
 			});
+
+			// Abaikan respons basi (out-of-order) jika ada permintaan baru.
+			if (seq !== fetchSeqRef.current) return;
 
 			if (result && Array.isArray(result.data)) {
 				setBarangList(result.data);
@@ -95,32 +136,78 @@ export function useDataBarang() {
 			console.error("Gagal memuat data:", error);
 			toast.error("Gagal memuat data barang");
 		} finally {
-			setIsLoading(false);
+			if (seq === fetchSeqRef.current) setIsLoading(false);
 		}
 	};
 
+	// Single effect: reset page ke 1 saat filter berubah, lalu fetch sekali.
+	// Guard lastRequestRef mencegah fetch ganda akibat reset currentPage.
 	useEffect(() => {
-		loadItems();
+		const prev = prevFiltersRef.current;
+		const filtersChanged =
+			prev.status !== filterStatus ||
+			prev.category !== filterCategory ||
+			prev.brand !== filterBrand ||
+			prev.location !== filterLocation ||
+			prev.pageSize !== pageSize ||
+			prev.search !== debouncedSearch;
+
+		if (filtersChanged) {
+			prevFiltersRef.current = {
+				status: filterStatus,
+				category: filterCategory,
+				brand: filterBrand,
+				location: filterLocation,
+				pageSize,
+				search: debouncedSearch,
+			};
+		}
+
+		const targetPage = filtersChanged ? 1 : currentPage;
+		const request = {
+			page: targetPage,
+			size: pageSize,
+			search: debouncedSearch,
+			status: filterStatus,
+			category: filterCategory,
+			brand: filterBrand,
+			location: filterLocation,
+		};
+
+		// Fetch ganda yang identik (mis. reset page memicu re-render) → skip.
+		if (
+			lastRequestRef.current &&
+			lastRequestRef.current.page === request.page &&
+			lastRequestRef.current.size === request.size &&
+			lastRequestRef.current.search === request.search &&
+			lastRequestRef.current.status === request.status &&
+			lastRequestRef.current.category === request.category &&
+			lastRequestRef.current.brand === request.brand &&
+			lastRequestRef.current.location === request.location
+		) {
+			if (filtersChanged && currentPage !== 1) setCurrentPage(1);
+			return;
+		}
+
+		lastRequestRef.current = request;
+		if (filtersChanged && currentPage !== 1) setCurrentPage(1);
+		loadItems(
+			targetPage,
+			request.size,
+			request.search,
+			request.status,
+			request.category,
+			request.brand,
+			request.location,
+		);
 	}, [
 		currentPage,
 		pageSize,
-		searchTerm,
+		debouncedSearch,
 		filterStatus,
 		filterCategory,
 		filterBrand,
 		filterLocation,
-	]);
-
-	// Reset page to 1 when filters change
-	useEffect(() => {
-		setCurrentPage(1);
-	}, [
-		searchTerm,
-		filterStatus,
-		filterCategory,
-		filterBrand,
-		filterLocation,
-		pageSize,
 	]);
 
 	const handleOpenDetail = (barang: BarangUnit) => {
@@ -156,8 +243,6 @@ export function useDataBarang() {
 	const handleExportExcel = async (selectedColumns: string[]) => {
 		setIsExporting(true);
 		try {
-			// Ekspor SELURUH data yang cocok dengan filter aktif —
-			// paginasi tabel diabaikan; semua halaman diambil berurutan.
 			const exportPageSize = 1000;
 			let exportPage = 1;
 			let exportTotalPages = 1;
@@ -167,7 +252,7 @@ export function useDataBarang() {
 				const result = await fetchItems({
 					page: exportPage,
 					pageSize: exportPageSize,
-					searchTerm,
+					searchTerm: debouncedSearch,
 					filterStatus,
 					filterCategory,
 					filterBrand,
@@ -250,7 +335,7 @@ export function useDataBarang() {
 			await deleteItemsByIds(idsToDelete);
 			setDeleteDialog(null);
 			toast.success("Unit berhasil dihapus.");
-			loadItems();
+			loadItems(currentPage, pageSize, debouncedSearch, filterStatus, filterCategory, filterBrand, filterLocation);
 		} catch (err) {
 			toast.error("Gagal menghapus unit.");
 		} finally {
@@ -297,7 +382,7 @@ export function useDataBarang() {
 			}
 
 			setIsFormOpen(false);
-			loadItems();
+			loadItems(currentPage, pageSize, debouncedSearch, filterStatus, filterCategory, filterBrand, filterLocation);
 		} catch (error: any) {
 			toast.error(error.message || "Gagal menyimpan unit.");
 		} finally {

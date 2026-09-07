@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { AlertTriangle } from "lucide-react";
 import type { MitraPerformanceMetrics } from "@/modules/dashboard/types";
@@ -8,7 +9,7 @@ interface IdleStockAlertProps {
   className?: string;
 }
 
-export function IdleStockAlert({ metrics, isLoading, className }: IdleStockAlertProps) {
+function IdleStockAlertBase({ metrics, isLoading, className }: IdleStockAlertProps) {
   if (isLoading) return null;
 
   const idleMitras = metrics.filter(m => m.isIdleStock);
@@ -25,3 +26,5 @@ export function IdleStockAlert({ metrics, isLoading, className }: IdleStockAlert
     </Alert>
   );
 }
+
+export const IdleStockAlert = memo(IdleStockAlertBase);

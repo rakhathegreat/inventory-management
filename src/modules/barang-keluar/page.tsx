@@ -119,7 +119,7 @@ export default function BarangKeluarPage() {
 				<div className="flex items-center justify-between gap-4">
 					<div className="flex items-center gap-3">
 						<h2 className="text-base font-medium">Daftar Distribusi Material</h2>
-						<Badge variant="outline">{barangKeluar.length} Item</Badge>
+						<Badge variant="secondary">{barangKeluar.length} Item</Badge>
 					</div>
 					<Button
 						className="shrink-0 gap-2 cursor-pointer"
@@ -170,7 +170,7 @@ export default function BarangKeluarPage() {
 										<TableCell>
 											<Badge
 												variant="secondary"
-												className="font-normal px-2.5 py-0.5">
+												size="sm">
 												{item.kategori}
 											</Badge>
 										</TableCell>

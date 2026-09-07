@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/shared/ui/card";
 import { Badge } from "@/shared/ui/badge";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -13,22 +14,29 @@ interface LeaderboardCardProps {
   onHoverMitra?: (id: string | null) => void;
 }
 
-export function LeaderboardCard({
+function LeaderboardCardBase({
   metrics,
   isLoading,
   className,
   activeHoverId,
   onHoverMitra,
 }: LeaderboardCardProps) {
-  // Sort by averageLifespanDays ascending, keeping only those with valid data
-  const topPerformers = metrics
-    .filter((m) => m.averageLifespanDays !== null && m.averageLifespanDays > 0)
-    .sort((a, b) => (a.averageLifespanDays as number) - (b.averageLifespanDays as number))
-    .slice(0, 5);
+  const topPerformers = useMemo(
+    () =>
+      metrics
+        .filter((m) => m.averageLifespanDays !== null && m.averageLifespanDays > 0)
+        .sort((a, b) => (a.averageLifespanDays as number) - (b.averageLifespanDays as number))
+        .slice(0, 5),
+    [metrics],
+  );
 
-  const maxLifespan = topPerformers.length > 0
-    ? Math.max(...topPerformers.map((m) => m.averageLifespanDays as number))
-    : 1;
+  const maxLifespan = useMemo(
+    () =>
+      topPerformers.length > 0
+        ? Math.max(...topPerformers.map((m) => m.averageLifespanDays as number))
+        : 1,
+    [topPerformers],
+  );
 
   if (isLoading) {
     return (
@@ -90,7 +98,7 @@ export function LeaderboardCard({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CardTitle className="text-base font-semibold">Top Velocity Mitra</CardTitle>
-            <Badge variant="outline" className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-normal px-2 py-0.5">
+            <Badge variant="secondary" size="sm" className="bg-emerald-500/10 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
               <Zap className="h-3 w-3 fill-emerald-500/20" /> Tercepat
             </Badge>
           </div>
@@ -136,7 +144,8 @@ export function LeaderboardCard({
                       <div className="flex flex-col items-end gap-0.5">
                         <Badge
                           variant="secondary"
-                          className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 font-semibold text-xs px-2 py-0.5">
+                          size="sm"
+                          className="bg-emerald-500/10 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
                           {mitra.averageLifespanDays} Hari
                         </Badge>
                         <Tooltip>
@@ -169,3 +178,5 @@ export function LeaderboardCard({
     </Card>
   );
 }
+
+export const LeaderboardCard = memo(LeaderboardCardBase);

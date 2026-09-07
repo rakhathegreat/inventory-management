@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom"
+import { memo } from "react"
 import { ArrowUpRight, InboxIcon, Clock,  Package } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card"
 import { Skeleton } from "@/shared/ui/skeleton"
@@ -43,12 +44,12 @@ function getStatusBadgeClass(status: string): string {
     }
 }
 
-// Komponen StatusBadge dengan variant outline dan dot warna
+// Komponen StatusBadge dengan dot warna, tanpa border
 function StatusBadge({ status }: { status: string }) {
     const colorClass = getStatusBadgeClass(status)
     const label = getStatusLabel(status)
     return (
-        <Badge variant={"outline"}>
+        <Badge variant="secondary" size="sm">
             <span className={cn("size-2 rounded-full mr-1", colorClass.split(' ')[0])} />
             {label}
         </Badge>
@@ -80,7 +81,7 @@ function formatDate(dateStr: string): string {
     }
 }
 
-export function RequestSection({ requests, counts, isLoading, className }: RequestSectionProps) {
+function RequestSectionBase({ requests, counts, isLoading, className }: RequestSectionProps) {
     const navigate = useNavigate()
     const requestTarget = "/request"
     const displayedRequests = requests.filter(req => req.status.toUpperCase() === "MENUNGGU")
@@ -192,3 +193,5 @@ export function RequestSection({ requests, counts, isLoading, className }: Reque
         </Card>
     )
 }
+
+export const RequestSection = memo(RequestSectionBase)

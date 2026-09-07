@@ -94,9 +94,9 @@ export function LokasiCard({
 					<CardTitle className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
 						<span className="truncate">{loc.name}</span>
 						{!loc.isActive && (
-							<Badge variant="outline" className="px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
-								Nonaktif
-							</Badge>
+<Badge variant="secondary" className="text-muted-foreground">
+							Nonaktif
+						</Badge>
 						)}
 					</CardTitle>
 					<CardDescription className="mt-0.5 text-[11px]">

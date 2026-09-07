@@ -9,16 +9,24 @@ import {
 	IconX,
 	IconBan,
 	IconFileText,
+	IconCircleCheck,
 } from "@tabler/icons-react";
 import { Button } from "@/shared/ui/button";
 import { toast } from "sonner";
-import { getBaseUrl } from "@/shared/lib/api";
+import { api, getBaseUrl } from "@/shared/lib/api";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useNavigate } from "react-router-dom";
 import type { DashboardRequest } from "@/modules/transaksi/types";
-import { PackageCheck, ArrowUpDown, Edit } from "lucide-react";
+import {
+	PackageCheck,
+	ArrowUpDown,
+	Edit,
+	Pencil,
+	Send,
+} from "lucide-react";
 import { PengambilanQrModal } from "./PengambilanQrModal";
 import { RejectRequestModal } from "./RejectRequestModal";
+import { DigitalSignatureDialog } from "./DigitalSignatureDialog";
 import {
 	DataTable,
 	type DataTableEmptyState,
@@ -37,6 +45,9 @@ export type TableMeta = {
 		status: "Ditolak" | "Dibatalkan",
 	) => void;
 	onPengambilan?: (row: DashboardRequest) => void;
+	onApprove?: (row: DashboardRequest) => void;
+	onSign?: (row: DashboardRequest) => void;
+	onSelesai?: (row: DashboardRequest) => void;
 };
 
 export type DataTableProps = {
@@ -51,7 +62,21 @@ export type DataTableProps = {
 	hiddenColumns?: string[];
 	/** Kolom Jumlah: 'allocated' = jumlah alokasi, 'requested' = jumlah permintaan */
 	countMode?: "requested" | "allocated";
+	/** Dipanggil setelah tindakan yang tidak mengubah status (mis. tanda tangan) untuk merefresh data. */
+	onRefetch?: () => void;
 };
+
+// ─────────────────────────────────────────────
+// Helper — normalisasi tombol huruf besar dari kolom `type` untuk
+// membedakan alur OUTGOING (permintaan material) vs RETURN_RUSAK (pengajuan
+// material rusak).
+// ─────────────────────────────────────────────
+
+const normalizeKey = (value?: string | null) =>
+	(value || "").trim().toUpperCase().replace(/-/g, "_");
+
+const isRusak = (row: DashboardRequest) =>
+	normalizeKey(row.type) === "RETURN_RUSAK";
 
 // ─────────────────────────────────────────────
 // Constants
@@ -83,6 +108,7 @@ function BastActions({
 }) {
 	const status = row.original.status?.toUpperCase()?.trim();
 	const meta = table.options.meta as TableMeta | undefined;
+	const rusak = isRusak(row.original);
 
 	const handleOpenDraftPDF = React.useCallback(
 		async (e: React.MouseEvent) => {
@@ -111,6 +137,69 @@ function BastActions({
 		},
 		[row.original.id],
 	);
+
+	// BAST untuk RETURN_RUSAK dibuat saat DISETUJUI; final saat SERAH/SELESAI.
+	if (rusak) {
+		if (!["DISETUJUI", "SERAH", "SELESAI"].includes(status)) return null;
+		const isSigned = !!row.original.deliveryDocument?.kpSignedById;
+		const canSign = !isSigned;
+		const isSerah = status === "SERAH";
+		const isSelesai = status === "SELESAI";
+
+		return (
+			<div className="flex items-center justify-center gap-2">
+				<Button
+					variant="outline"
+					size="sm"
+					className="h-8 text-xs font-medium cursor-pointer gap-1.5 text-muted-foreground"
+					title="Buka PDF BAST"
+					onClick={isSigned ? handleOpenSignedPDF : handleOpenDraftPDF}>
+					<IconFileText size={16} />
+					{isSigned ? "Lihat BAST" : "BAST"}
+				</Button>
+
+				{canSign && (
+					<Button
+						variant="outline"
+						size="sm"
+						className="h-8 text-xs font-medium cursor-pointer gap-1.5"
+						title="Tanda tangani BAST sebagai Pihak Pertama (KP)"
+						onClick={(e) => {
+							e.stopPropagation();
+							meta?.onSign?.(row.original);
+						}}>
+						<Pencil size={16} />
+						Tanda Tangan
+					</Button>
+				)}
+
+				{isSigned && !isSelesai && (
+					<Badge
+						variant="secondary"
+						size="sm"
+						className="bg-emerald-500/10 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+						<Pencil />
+						Signed
+					</Badge>
+				)}
+
+				{isSerah && (
+					<Button
+						variant="outline"
+						size="sm"
+						className="h-8 text-xs font-medium cursor-pointer gap-1.5"
+						title="Selesaikan pengajuan material rusak (setelah intake terikat)"
+						onClick={(e) => {
+							e.stopPropagation();
+							meta?.onSelesai?.(row.original);
+						}}>
+						<Send size={16} />
+						Selesaikan
+					</Button>
+				)}
+			</div>
+		);
+	}
 
 	const showBastActions = ["SIAP", "SELESAI", "DITERIMA"].includes(
 		status || "",
@@ -173,6 +262,7 @@ function ActionMenu({
 }) {
 	const status = row.original.status?.toUpperCase()?.trim();
 	const meta = table.options.meta as TableMeta | undefined;
+	const rusak = isRusak(row.original);
 
 	const navigate = useNavigate();
 
@@ -188,14 +278,28 @@ function ActionMenu({
 		<div className="flex items-center gap-1 justify-center">
 			{status === "MENUNGGU" && (
 				<>
-					<Button
-						variant="ghost"
-						size="icon-lg"
-						className="text-xs font-medium text-muted-foreground hover:text-amber-600 cursor-pointer"
-						onClick={handleNavigateToPrepare}
-						title="Siapkan Material">
-						<IconPackage size={18} />
-					</Button>
+					{rusak ? (
+						<Button
+							variant="ghost"
+							size="icon-lg"
+							className="text-xs font-medium text-muted-foreground hover:text-emerald-600 cursor-pointer"
+							onClick={(e) => {
+								e.stopPropagation();
+								meta?.onApprove?.(row.original);
+							}}
+							title="Setujui Pengajuan Material Rusak">
+							<IconCircleCheck size={18} />
+						</Button>
+					) : (
+						<Button
+							variant="ghost"
+							size="icon-lg"
+							className="text-xs font-medium text-muted-foreground hover:text-amber-600 cursor-pointer"
+							onClick={handleNavigateToPrepare}
+							title="Siapkan Material">
+							<IconPackage size={18} />
+						</Button>
+					)}
 					<Button
 						variant="ghost"
 						size="icon-lg"
@@ -263,6 +367,27 @@ function createColumns(
 			),
 		},
 		{
+			id: "jenis",
+			header: () => <div className="text-center">Jenis</div>,
+			cell: ({ row }) => {
+				const rusak = isRusak(row.original);
+				return (
+					<div className="flex items-center justify-center">
+						<Badge
+							variant="secondary"
+							size="sm"
+							className={
+								rusak
+									? "bg-rose-500/10 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
+									: "bg-sky-500/10 text-sky-700 dark:bg-sky-950/40 dark:text-sky-400"
+							}>
+							{rusak ? "Material Rusak" : "Permintaan"}
+						</Badge>
+					</div>
+				);
+			},
+		},
+		{
 			accessorKey: "requestedAt",
 			header: ({ column }) => {
 				return (
@@ -298,8 +423,9 @@ function createColumns(
 			header: "Kategori",
 			cell: ({ row }) => (
 				<Badge
-					variant="outline"
-					className="flex items-center text-muted-foreground whitespace-nowrap px-2 py-2.5 capitalize">
+					variant="secondary"
+					size="sm"
+					className="text-muted-foreground capitalize">
 					{row.original.partnerCategory?.toLocaleLowerCase()}
 				</Badge>
 			),
@@ -373,6 +499,7 @@ export function RequestTable({
 	onStatusChange,
 	hiddenColumns = [],
 	countMode = "requested",
+	onRefetch,
 }: DataTableProps) {
 	const [rejectTarget, setRejectTarget] = React.useState<{
 		row: DashboardRequest;
@@ -382,6 +509,44 @@ export function RequestTable({
 	const [pengambilanTarget, setPengambilanTarget] = React.useState<
 		DashboardRequest | null
 	>(null);
+
+	const [signDialog, setSignDialog] = React.useState<{
+		open: boolean;
+		request: DashboardRequest | null;
+	}>({ open: false, request: null });
+
+	// Approve: MENUNGGU → DISETUJUI (hanya RETURN_RUSAK).
+	const handleApprove = React.useCallback(
+		(row: DashboardRequest) => {
+			onStatusChange?.(row.id, "DISETUJUI");
+		},
+		[onStatusChange],
+	);
+
+	// Selesaikan: SERAH → SELESAI.
+	const handleSelesai = React.useCallback(
+		(row: DashboardRequest) => {
+			onStatusChange?.(row.id, "SELESAI");
+		},
+		[onStatusChange],
+	);
+
+	// Tanda tangan Pihak Pertama (KP/admin): dialog menyimpan TTD ke profil,
+	// lalu POST /sign-bast dengan identitas admin (kpSignedAt/kpSignedById).
+	const handleSignComplete = React.useCallback(async () => {
+		const request = signDialog.request;
+		if (!request) return;
+		try {
+			await api.post(`/requests/${request.id}/sign-bast`);
+			toast.success("Dokumen BAST berhasil ditandatangani (Pihak Pertama)");
+			setSignDialog({ open: false, request: null });
+			onRefetch?.();
+		} catch (err: unknown) {
+			const msg =
+				err instanceof Error ? err.message : "Gagal menandatangani dokumen BAST";
+			toast.error(msg);
+		}
+	}, [signDialog.request, onRefetch]);
 
 	const handleRejectConfirm = React.useCallback(
 		(note: string) => {
@@ -405,8 +570,11 @@ export function RequestTable({
 			onStatusChange,
 			onReject: (row, status) => setRejectTarget({ row, status }),
 			onPengambilan: (row) => setPengambilanTarget(row),
+			onApprove: (row) => handleApprove(row),
+			onSign: (row) => setSignDialog({ open: true, request: row }),
+			onSelesai: (row) => handleSelesai(row),
 		}),
-		[onRowClick, onStatusChange],
+		[onRowClick, onStatusChange, handleApprove, handleSelesai],
 	);
 
 	const columns = React.useMemo(() => createColumns(countMode), [countMode]);
@@ -469,6 +637,17 @@ export function RequestTable({
 					onSuccess={handlePengambilanConfirm}
 				/>
 			)}
+
+			{/* Tanda tangan BAST Pihak Pertama (RETURN_RUSAK) */}
+			<DigitalSignatureDialog
+				open={signDialog.open}
+				onOpenChange={(open) =>
+					setSignDialog((prev) => ({ open, request: open ? prev.request : null }))
+				}
+				title="Tanda Tangan Digital BAST"
+				description="Berikan tanda tangan Anda sebagai Pihak Pertama (KP) untuk dokumen BAST pengajuan material rusak."
+				onSignComplete={handleSignComplete}
+			/>
 		</>
 	);
 }

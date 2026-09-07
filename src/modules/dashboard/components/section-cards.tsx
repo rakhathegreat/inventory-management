@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import {
 	Archive,
 	ArchiveX,
@@ -18,57 +20,76 @@ import {
 
 import type { InventoryStats } from "@/modules/dashboard/types";
 
-export function SectionCards({
+type CardKey = "total" | "tersedia" | "diluar" | "rusak" | "hilang";
+
+const CARD_DEFS: {
+	key: CardKey;
+	label: string;
+	valueKey: keyof InventoryStats;
+	icon: typeof Boxes;
+	direction: "up" | "down";
+	percent: number;
+}[] = [
+	{
+		key: "total",
+		label: "Total Material",
+		valueKey: "totalItems",
+		icon: Boxes,
+		direction: "up",
+		percent: 12.5,
+	},
+	{
+		key: "tersedia",
+		label: "Tersedia",
+		valueKey: "tersedia",
+		icon: Archive,
+		direction: "up",
+		percent: 8.2,
+	},
+	{
+		key: "diluar",
+		label: "Diluar",
+		valueKey: "diluar",
+		icon: ArrowsUpFromLine,
+		direction: "down",
+		percent: 4.1,
+	},
+	{
+		key: "rusak",
+		label: "Rusak",
+		valueKey: "rusak",
+		icon: ArchiveX,
+		direction: "down",
+		percent: 1.2,
+	},
+	{
+		key: "hilang",
+		label: "Hilang",
+		valueKey: "hilang",
+		icon: HelpCircle,
+		direction: "down",
+		percent: 0.5,
+	},
+] as const;
+
+function SectionCardsBase({
 	stats,
 	totalLabel = "Total Material",
 }: {
 	stats: InventoryStats;
 	totalLabel?: string;
 }) {
-	const { totalItems, tersedia, diluar, rusak, hilang } = stats;
-
-	const cards = [
-		{
-			key: "total",
-			label: totalLabel,
-			value: totalItems,
-			icon: Boxes,
-			direction: "up" as const,
-			percent: 12.5,
-		},
-		{
-			key: "tersedia",
-			label: "Tersedia",
-			value: tersedia,
-			icon: Archive,
-			direction: "up" as const,
-			percent: 8.2,
-		},
-		{
-			key: "diluar",
-			label: "Diluar",
-			value: diluar,
-			icon: ArrowsUpFromLine,
-			direction: "down" as const,
-			percent: 4.1,
-		},
-		{
-			key: "rusak",
-			label: "Rusak",
-			value: rusak,
-			icon: ArchiveX,
-			direction: "down" as const,
-			percent: 1.2,
-		},
-		{
-			key: "hilang",
-			label: "Hilang",
-			value: hilang,
-			icon: HelpCircle,
-			direction: "down" as const,
-			percent: 0.5,
-		},
-	];
+	const cards = CARD_DEFS.map((def) => {
+		const Icon = def.icon;
+		return {
+			key: def.key,
+			label: def.key === "total" ? totalLabel : def.label,
+			value: stats[def.valueKey],
+			icon: Icon,
+			direction: def.direction,
+			percent: def.percent,
+		};
+	});
 
 	return (
 		<div className="grid grid-cols-1 gap-4 px-4 lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-5">
@@ -112,3 +133,5 @@ export function SectionCards({
 		</div>
 	);
 }
+
+export const SectionCards = memo(SectionCardsBase);

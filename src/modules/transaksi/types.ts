@@ -81,6 +81,7 @@ export type RequestItem = {
   model?: string
   quantity: number
   unit?: string
+  serialNumber?: string | null
 }
 
 export type RequestAllocation = {
@@ -105,6 +106,8 @@ export type DashboardRequest = {
   itemsDetail?: string
   adminRemarks?: string
   status: string
+  /** OUTGOING | RETURN_RUSAK */
+  type?: string
   notes: string
   rejectionNotes?: string
   requestedAt: string

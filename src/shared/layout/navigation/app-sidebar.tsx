@@ -24,6 +24,7 @@ import {
   Settings,
   Users,
   Zap,
+  ArrowLeftRight,
 } from "lucide-react"
 
 const data = {
@@ -44,6 +45,14 @@ const data = {
           url: "/request",
           icon: (
             <HistoryIcon />
+          ),
+          isActive: false,
+        },
+        {
+          title: "Peminjaman Antar Mitra",
+          url: "/peminjaman-mitra",
+          icon: (
+            <ArrowLeftRight />
           ),
           isActive: false,
         },

@@ -28,7 +28,10 @@ import {
 import { Combobox } from "@/shared/ui/combobox";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { Badge } from "@/shared/ui/badge";
-import { DataTable, createRowActionsColumn } from "@/shared/ui/data-table/DataTable";
+import {
+	DataTable,
+	createRowActionsColumn,
+} from "@/shared/ui/data-table/DataTable";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
 import { BarangDetailDrawer } from "@/modules/data-barang/components/BarangDetailDrawer";
@@ -114,14 +117,18 @@ export default function DataBarangPage() {
 				accessorKey: "merek",
 				header: "Merek",
 				cell: ({ row }) => (
-					<span className="text-muted-foreground">{row.original.merek || "-"}</span>
+					<span className="text-muted-foreground">
+						{row.original.merek || "-"}
+					</span>
 				),
 			},
 			{
 				accessorKey: "kategori",
 				header: "Kategori",
 				cell: ({ row }) => (
-					<span className="text-muted-foreground">{row.original.kategori || "-"}</span>
+					<span className="text-muted-foreground">
+						{row.original.kategori || "-"}
+					</span>
 				),
 			},
 			{
@@ -146,11 +153,16 @@ export default function DataBarangPage() {
 			},
 			{
 				accessorKey: "lokasiPenyimpanan",
-				header: () => <span className="flex justify-center">Lokasi Penyimpanan</span>,
-				meta: { className: "text-center text-muted-foreground" },
+				header: () => (
+					<span className="flex justify-center">Lokasi Penyimpanan</span>
+				),
+				meta: { className: "text-center" },
 				cell: ({ row }) => (
 					<span>
-						{formatItemLocation(row.original.lokasiPenyimpanan, row.original.mitra)}
+						{formatItemLocation(
+							row.original.lokasiPenyimpanan,
+							row.original.mitra,
+						)}
 					</span>
 				),
 			},
@@ -169,9 +181,7 @@ export default function DataBarangPage() {
 									<div className="flex flex-col items-center gap-1">
 										<span
 											className={
-												item.lastReconDate
-													? ""
-													: "text-muted-foreground"
+												item.lastReconDate ? "" : "text-muted-foreground"
 											}>
 											{item.lastReconDate
 												? formatTanggal(item.lastReconDate)
@@ -190,7 +200,7 @@ export default function DataBarangPage() {
 										{telat && (
 											<Badge
 												variant="destructive"
-												className="gap-1 px-1.5 py-0 text-[10px] font-medium">
+												size="sm">
 												Telat
 											</Badge>
 										)}
@@ -201,7 +211,11 @@ export default function DataBarangPage() {
 					]
 				: []),
 			createRowActionsColumn<BarangUnit>((item) => [
-				{ label: "Edit Material", icon: Edit, onClick: () => handleOpenEdit(item) },
+				{
+					label: "Edit Material",
+					icon: Edit,
+					onClick: () => handleOpenEdit(item),
+				},
 				{
 					label: "Hapus Material",
 					icon: Trash2,
@@ -227,41 +241,41 @@ export default function DataBarangPage() {
 							onChange={(e) => setSearchTerm(e.target.value)}
 						/>
 					</div>
-<div className="flex flex-wrap gap-2">
-							<Combobox
-								value={filterCategory === "all" ? "" : filterCategory}
-								onChange={(val) => setFilterCategory(val || "all")}
-								onSearch={searchCategories}
-								placeholder="Kategori"
-								searchPlaceholder="Cari kategori..."
-								emptyText="Tidak ditemukan"
-								recentKey="kategori"
-								className="w-32"
-							/>
-							<Combobox
-								value={filterBrand === "all" ? "" : filterBrand}
-								onChange={(val) => setFilterBrand(val || "all")}
-								onSearch={searchBrands}
-								placeholder="Merek"
-								searchPlaceholder="Cari merek..."
-								emptyText="Tidak ditemukan"
-								recentKey="merek"
-								className="w-32"
-							/>
-							<Combobox
-								value={filterLocation === "all" ? "" : filterLocation}
-								onChange={(val) => setFilterLocation(val || "all")}
-								onSearch={searchLocations}
-								placeholder="Shelf"
-								searchPlaceholder="Cari shelf..."
-								emptyText="Tidak ditemukan"
-								recentKey="lokasi"
-								className="w-40"
-							/>
-						</div>
+					<div className="flex flex-wrap gap-2">
+						<Combobox
+							value={filterCategory === "all" ? "" : filterCategory}
+							onChange={(val) => setFilterCategory(val || "all")}
+							onSearch={searchCategories}
+							placeholder="Kategori"
+							searchPlaceholder="Cari kategori..."
+							emptyText="Tidak ditemukan"
+							recentKey="kategori"
+							className="w-32"
+						/>
+						<Combobox
+							value={filterBrand === "all" ? "" : filterBrand}
+							onChange={(val) => setFilterBrand(val || "all")}
+							onSearch={searchBrands}
+							placeholder="Merek"
+							searchPlaceholder="Cari merek..."
+							emptyText="Tidak ditemukan"
+							recentKey="merek"
+							className="w-32"
+						/>
+						<Combobox
+							value={filterLocation === "all" ? "" : filterLocation}
+							onChange={(val) => setFilterLocation(val || "all")}
+							onSearch={searchLocations}
+							placeholder="Shelf"
+							searchPlaceholder="Cari shelf..."
+							emptyText="Tidak ditemukan"
+							recentKey="lokasi"
+							className="w-40"
+						/>
+					</div>
 				</div>
 				<div className="flex justify-end gap-2 w-full lg:w-auto">
-					{(
+					{
 						<>
 							<Button
 								variant="outline"
@@ -275,7 +289,7 @@ export default function DataBarangPage() {
 								<Plus className="w-4 h-4" /> Tambah Material
 							</Button>
 						</>
-					)}
+					}
 				</div>
 			</div>
 
@@ -316,16 +330,20 @@ export default function DataBarangPage() {
 				className="flex flex-col gap-4 w-full min-h-0"
 				emptyState={{
 					icon: Boxes,
-					title: isFiltered ? "Tidak ada unit yang cocok" : "Belum ada data material",
+					title: isFiltered
+						? "Tidak ada unit yang cocok"
+						: "Belum ada data material",
 					description: isFiltered
 						? undefined
 						: "Daftarkan unit material pertama ke dalam inventaris.",
-					action:
-						!isFiltered ? (
-							<Button size="sm" className="gap-1.5 cursor-pointer" onClick={() => navigate("/barang-masuk")}>
-								<Plus className="size-4" /> Tambah Material
-							</Button>
-						) : undefined,
+					action: !isFiltered ? (
+						<Button
+							size="sm"
+							className="gap-1.5 cursor-pointer"
+							onClick={() => navigate("/barang-masuk")}>
+							<Plus className="size-4" /> Tambah Material
+						</Button>
+					) : undefined,
 				}}
 			/>
 

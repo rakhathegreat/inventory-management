@@ -1,5 +1,6 @@
 "use client"
 
+import { memo, useMemo } from "react"
 import { ArrowUpRight } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts"
 
@@ -37,13 +38,14 @@ interface ChartBarMixedProps {
   isLoading?: boolean;
 }
 
-export function ChartBarMixed({ className, data, isLoading }: ChartBarMixedProps) {
+function ChartBarMixedBase({ className, data, isLoading }: ChartBarMixedProps) {
   // Urutkan mitra secara menaik (ascending) berdasarkan total aset (mitra kritis)
-  const sortedData = [...data].sort((a, b) => a.total - b.total);
-  const bottom5 = sortedData.slice(0, 5);
+  const displayData = useMemo(() => {
+    const sortedData = [...data].sort((a, b) => a.total - b.total);
+    return sortedData.slice(0, 5);
+  }, [data]);
   // const others = sortedData.slice(5);
 
-  const displayData = [...bottom5];
   // if (others.length > 0) {
   //   displayData.push({
   //     mitra: "Other",
@@ -168,3 +170,5 @@ export function ChartBarMixed({ className, data, isLoading }: ChartBarMixedProps
     </Card>
   )
 }
+
+export const ChartBarMixed = memo(ChartBarMixedBase)

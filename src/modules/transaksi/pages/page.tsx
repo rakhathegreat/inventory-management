@@ -83,6 +83,8 @@ export default function DataTransaksiPage() {
 
   const countMenunggu = localRequests.filter(req => req.status.toLowerCase() === "menunggu").length;
   const countSiap = localRequests.filter(req => req.status.toLowerCase() === "siap").length;
+  const countDisetujui = localRequests.filter(req => req.status.toLowerCase() === "disetujui").length;
+  const countSerah = localRequests.filter(req => req.status.toLowerCase() === "serah").length;
 
   const handleStatusChange = async (id: string, newStatus: string, rejectionNotes?: string) => {
     try {
@@ -161,7 +163,7 @@ export default function DataTransaksiPage() {
 
   // Pre-calculate tab data to prevent re-sorting on every render (e.g. when popover toggles)
   const tabData = useMemo(() => {
-    const tabs = ["Menunggu", "Siap", "Diterima", "Selesai", "Ditolak"];
+    const tabs = ["Menunggu", "Disetujui", "Serah", "Siap", "Diterima", "Selesai", "Ditolak"];
     const result: Record<string, typeof filteredData> = {};
     
     tabs.forEach(status => {
@@ -198,9 +200,15 @@ export default function DataTransaksiPage() {
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4">
           <div className="flex items-center w-full overflow-x-auto pb-1 scrollbar-hide">
-            <TabsList className="**:data-[slot=badge]:size-5 **:data-[slot=badge]:rounded-full **:data-[slot=badge]:bg-muted-foreground/30 **:data-[slot=badge]:px-1 inline-flex h-auto w-full lg:w-auto">
+            <TabsList className="inline-flex h-auto w-full lg:w-auto">
               <TabsTrigger value="Menunggu" className="cursor-pointer">
                 Menunggu {countMenunggu > 0 && <Badge variant="secondary">{countMenunggu}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="Disetujui" className="cursor-pointer">
+                Disetujui {countDisetujui > 0 && <Badge variant="secondary">{countDisetujui}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="Serah" className="cursor-pointer">
+                Serah {countSerah > 0 && <Badge variant="secondary">{countSerah}</Badge>}
               </TabsTrigger>
               <TabsTrigger value="Siap" className="cursor-pointer">
                 Siap {countSiap > 0 && <Badge variant="secondary">{countSiap}</Badge>}
@@ -234,7 +242,7 @@ export default function DataTransaksiPage() {
                   <ListFilter className="size-4" />
                   <span className="hidden sm:inline">Filter</span>
                   {(filterCategories.length > 0 || dateRange?.from || dateRange?.to) && (
-                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                    <Badge variant="secondary" className="ml-1">
                       {(filterCategories.length > 0 ? 1 : 0) + (dateRange?.from || dateRange?.to ? 1 : 0)}
                     </Badge>
                   )}
@@ -292,7 +300,7 @@ export default function DataTransaksiPage() {
           </div>
         </div>
 
-        {["Menunggu", "Siap", "Diterima", "Selesai", "Ditolak"].map(status => {
+        {["Menunggu", "Disetujui", "Serah", "Siap", "Diterima", "Selesai", "Ditolak"].map(status => {
           const tabLower = status.toLowerCase()
 
           // Tentukan kolom mana yang disembunyikan berdasarkan tab
@@ -303,7 +311,7 @@ export default function DataTransaksiPage() {
           if (["menunggu"].includes(tabLower)) {
             hiddenColumns.push("document")
           }
-          if (["selesai", "diterima", "ditolak"].includes(tabLower)) {
+          if (["selesai", "diterima", "ditolak", "disetujui", "serah"].includes(tabLower)) {
             hiddenColumns.push("actions")
           }
           if (["ditolak"].includes(tabLower)) {
@@ -316,6 +324,7 @@ export default function DataTransaksiPage() {
                 data={tabData[status] || []}
                 onRowClick={(item) => setSelectedRequest(item)}
                 onStatusChange={handleStatusChange}
+                onRefetch={fetchRequests}
                 hiddenColumns={hiddenColumns}
                 countMode={["siap", "selesai", "diterima"].includes(tabLower) ? "allocated" : "requested"}
               />

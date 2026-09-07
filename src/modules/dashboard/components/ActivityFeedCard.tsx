@@ -1,5 +1,5 @@
 import { ActivityIcon, ArrowUpRight } from "lucide-react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, memo } from "react"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card"
 import { Skeleton } from "@/shared/ui/skeleton"
 import { cn } from "@/shared/lib/utils"
@@ -43,7 +43,7 @@ function getActionDescription(type: string, sn: string): string {
   }
 }
 
-export function ActivityFeedCard({ activities, isLoading, className }: ActivityFeedCardProps) {
+function ActivityFeedCardBase({ activities, isLoading, className }: ActivityFeedCardProps) {
   const navigate = useNavigate()
   const [showTopGradient, setShowTopGradient] = useState(false)
   const [showBottomGradient, setShowBottomGradient] = useState(false)
@@ -159,3 +159,5 @@ export function ActivityFeedCard({ activities, isLoading, className }: ActivityF
     </Card>
   )
 }
+
+export const ActivityFeedCard = memo(ActivityFeedCardBase)

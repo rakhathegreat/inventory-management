@@ -65,6 +65,9 @@ export function SiteHeader({ className }: { className?: string }) {
     } else if (path === "/request") {
         parent = "Operasional"
         pageName = "Request"
+    } else if (path === "/peminjaman-mitra") {
+        parent = "Operasional"
+        pageName = "Peminjaman Antar Mitra"
     } else if (path.startsWith("/request/")) {
         grandparent = "Operasional"
         parent = "Request"

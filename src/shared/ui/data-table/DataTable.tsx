@@ -336,7 +336,6 @@ export function DataTable<TData>({
 	);
 
 	const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
-	const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 	const [isBulkRunning, setIsBulkRunning] = React.useState(false);
 
 	const resolvedGetRowId = React.useCallback(
@@ -387,7 +386,7 @@ export function DataTable<TData>({
 		getRowId: enableSelection ? resolvedGetRowId : undefined,
 		onRowSelectionChange: enableSelection ? setRowSelection : undefined,
 		getCoreRowModel: getCoreRowModel(),
-		getPaginationRowModel: getPaginationRowModel(),
+		...(isServer ? {} : { getPaginationRowModel: getPaginationRowModel() }),
 		getSortedRowModel: getSortedRowModel(),
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -403,14 +402,19 @@ export function DataTable<TData>({
 		meta,
 	});
 
+	// Hitung selected IDs dari data halaman saat ini secara ringan,
+	// menggantikan getSelectedRowModel() yang mengulang seluruh row model.
+	const selectedIds = React.useMemo(() => {
+		if (!enableSelection) return [];
+		return data
+			.filter((row) => rowSelection[resolvedGetRowId(row, 0)])
+			.map((row) => resolvedGetRowId(row, 0));
+	}, [data, rowSelection, enableSelection, resolvedGetRowId]);
+
 	React.useEffect(() => {
 		if (!enableSelection) return;
-		const ids = table
-			.getSelectedRowModel()
-			.rows.map((r) => resolvedGetRowId(r.original, r.index));
-		setSelectedIds(ids);
-		onSelectionChange?.(ids);
-	}, [rowSelection, enableSelection, onSelectionChange, resolvedGetRowId, table]);
+		onSelectionChange?.(selectedIds);
+	}, [selectedIds, enableSelection, onSelectionChange]);
 
 	const clearSelection = React.useCallback(() => setRowSelection({}), []);
 

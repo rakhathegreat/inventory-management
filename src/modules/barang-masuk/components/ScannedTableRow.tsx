@@ -61,7 +61,7 @@ export const ScannedTableRow = memo(({
             </SelectContent>
           </Select>
         ) : (
-          <Badge variant="secondary" className="font-normal px-2.5 py-0.5 flex w-fit items-center gap-1.5"><Lock className="size-3 text-muted-foreground" />{item.kategori}</Badge>
+          <Badge variant="secondary" size="sm"><Lock className="size-3 text-muted-foreground" />{item.kategori}</Badge>
         )}
       </TableCell>
       <TableCell>

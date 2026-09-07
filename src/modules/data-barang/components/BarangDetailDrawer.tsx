@@ -280,16 +280,10 @@ export function BarangDetailDrawer({
 								</div>
 								{(detailBarang.kondisi || "").toLowerCase() === "rusak" && (
 									<div className="mt-2">
-										<div className="grid grid-cols-2 gap-2 text-sm">
-											<div>
-												<p className="text-muted-foreground">Asal Material</p>
-												<p className="text-foreground mt-0.5 font-medium">
-													{detailBarang.ticket || "-"}
-												</p>
-											</div>
-										</div>
 										<div className="mt-2">
-											<p className="text-muted-foreground">Catatan Kerusakan</p>
+											<p className="text-muted-foreground text-sm">
+												Catatan Kerusakan
+											</p>
 											<p className="text-foreground mt-0.5 text-sm">
 												{detailBarang.catatan || "-"}
 											</p>
@@ -298,7 +292,9 @@ export function BarangDetailDrawer({
 								)}
 
 								<div className="mt-4">
-									<p className="text-muted-foreground">Rekon Terakhir</p>
+									<p className="text-muted-foreground text-sm">
+										Rekon Terakhir
+									</p>
 									<p className="text-foreground mt-0.5">
 										{detailBarang.lastReconDate
 											? formatTanggal(detailBarang.lastReconDate)

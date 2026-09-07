@@ -43,3 +43,27 @@ export type MitraPerformanceMetrics = {
   isIdleStock: boolean;
   status: 'Fast' | 'Steady' | 'Slow' | 'Idle' | 'Not Enough Data';
 };
+
+export type MitraDistributionItem = {
+  mitra: string;
+  tersedia: number;
+  terpakai: number;
+  total: number;
+};
+
+export type DailyTransactionPoint = {
+  date: string;
+  masuk: number;
+  keluar: number;
+};
+
+/** Payload tunggal dari GET /dashboard/stats/summary */
+export type DashboardSummary = {
+  inventoryStats: InventoryStats;
+  mitraDistribution: MitraDistributionItem[];
+  requestCounts: { menunggu: number; siap: number };
+  recentRequests: import("@/modules/transaksi/types").RequestSummary[];
+  recentActivity: import("@/modules/transaksi/types").ActivityItem[];
+  transactionSeries: DailyTransactionPoint[];
+  mitraPerformance: MitraPerformanceMetrics[];
+};

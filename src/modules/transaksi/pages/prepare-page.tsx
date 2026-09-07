@@ -150,7 +150,7 @@ function SortableRow({ item, onDelete }: SortableRowProps) {
         </div>
       </TableCell>
       <TableCell>
-        <Badge variant="secondary" className="font-normal px-2.5 py-0.5">
+        <Badge variant="secondary" size="sm">
           {item.inventoryItem.model?.materialCategory?.nama || "-"}
         </Badge>
       </TableCell>

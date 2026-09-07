@@ -208,8 +208,8 @@ export function useLokasiBarang() {
 			await loadLocations();
 			toast.success(`Berhasil menghapus ${type === "location" ? "lokasi" : "level"}`);
 			setDeleteAlertData({ isOpen: false, type: null, id: "", name: "" });
-		} catch {
-			toast.error("Gagal menghapus data");
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : "Gagal menghapus data");
 		} finally {
 			setIsDeleting(false);
 		}
